@@ -1,0 +1,14 @@
+single_quote = { "'" }
+bottom = {"!!"}
+hex_digit = @{ '0'..'9' | 'a'..'f' | 'A'..'F' }
+code = @{ "x" ~ hex_digit{2} }
+
+opening_brace = { "{" }
+closing_brace = { "}" }
+opening_paren = { "(" }
+closing_paren = { ")" }
+opening_brack = { "[" }
+closing_brack = { "]" }
+
+unicode = @{ "u" ~ opening_brace ~ hex_digit{2, 6} ~ closing_brace }
+escape = @{ "\\" ~ ("\"" | "\\" | "r" | "n" | "t" | "0" | "'" | code | unicode) }
