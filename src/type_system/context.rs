@@ -1,40 +1,12 @@
 use crate::type_system::Type;
 use crate::{Token, UniqueSymbol};
+use std::borrow::Cow;
 
 use std::collections::{HashMap, HashSet};
 
 pub struct Context<T: Token> {
     guarded: bool,
     gamma: HashMap<UniqueSymbol, Type<T>>,
-}
-
-pub enum TypeLookup<'a, T: Token> {
-    Original(&'a Type<T>),
-    Guarded(&'a Type<T>),
-}
-
-impl<'a, T: Token> TypeLookup<'a, T> {
-    pub fn guarded(&self) -> bool {
-        match self {
-            TypeLookup::Original(x) => x.guarded,
-            TypeLookup::Guarded(_) => true,
-        }
-    }
-    pub fn first(&self) -> &HashSet<T> {
-        match self {
-            TypeLookup::Original(x) | TypeLookup::Guarded(x) => &x.first,
-        }
-    }
-    pub fn follow(&self) -> &HashSet<T> {
-        match self {
-            TypeLookup::Original(x) | TypeLookup::Guarded(x) => &x.follow,
-        }
-    }
-    pub fn nullable(&self) -> bool {
-        match self {
-            TypeLookup::Original(x) | TypeLookup::Guarded(x) => x.nullable,
-        }
-    }
 }
 
 impl<T: Token> Context<T> {
@@ -44,12 +16,15 @@ impl<T: Token> Context<T> {
             gamma: HashMap::new(),
         }
     }
-    pub fn lookup(&self, sym: &UniqueSymbol) -> Option<TypeLookup<T>> {
+    pub fn lookup(&self, sym: &UniqueSymbol) -> Option<Cow<Type<T>>> {
         let target = self.gamma.get(sym)?;
         Some(if self.guarded {
-            TypeLookup::Guarded(target)
+            Cow::Owned(Type {
+                guarded: true,
+                ..target.clone()
+            })
         } else {
-            TypeLookup::Original(target)
+            Cow::Borrowed(target)
         })
     }
     pub fn guarded<F, R>(&mut self, f: F) -> R
