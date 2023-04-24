@@ -10,6 +10,12 @@ use type_system::Type;
 #[derive(Clone, Debug)]
 pub struct UniqueSymbol(Rc<String>);
 
+impl UniqueSymbol {
+    pub fn new<S : AsRef<str>>(s: S) -> Self {
+        Self(Rc::new(s.as_ref().to_string()))
+    }
+}
+
 impl Hash for UniqueSymbol {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.as_ptr().hash(state)
@@ -65,6 +71,38 @@ pub enum Term<T: Token> {
     Variable(UniqueSymbol),
     SrcPos(Rc<Term<T>>, Location),
     WellTyped(Rc<Term<T>>, Type<T>),
+}
+
+impl<T : Token> Display for Term<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Term::Epsilon => {write!(f, "ε")}
+            Term::Sequence(x, y) => {
+                write!(f, "({x} ~ {y})",)
+            }
+            Term::Token(x) => {
+                write!(f, "{x:?}")
+            }
+            Term::Bottom => {
+                write!(f, "⊥")
+            }
+            Term::Alternative(x, y) => {
+                write!(f, "({x} | {y})")
+            }
+            Term::Fix(x, y) => {
+                write!(f, "(μ {x} . {y})",)
+            }
+            Term::Variable(x) => {
+                write!(f, "{x}")
+            }
+            Term::SrcPos(x, y) => {
+                write!(f, "({x} @ {y})")
+            }
+            Term::WellTyped(x, y) => {
+                write!(f, "({x} : {y:?})")
+            }
+        }
+    }
 }
 
 pub(crate) fn unreachable_branch() -> ! {

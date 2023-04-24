@@ -31,8 +31,8 @@ pub struct Type<T: Token> {
 }
 
 impl<T> Type<T>
-where
-    T: Token,
+    where
+        T: Token,
 {
     pub fn sequential_uniqueness(&self, other: &Self) -> bool {
         !self.nullable && self.follow.is_disjoint(&other.first)
@@ -126,8 +126,8 @@ where
         }
     }
     pub fn fixpoint<E, F>(mut f: F) -> Result<Self, E>
-    where
-        F: FnMut(&Self) -> Result<Self, E>,
+        where
+            F: FnMut(&Self) -> Result<Self, E>,
     {
         let mut last = Self::minimum();
         loop {
@@ -139,6 +139,7 @@ where
         }
     }
 }
+
 pub fn well_typed<T: Token>(
     ctx: &mut Context<T>,
     term: Rc<Term<T>>,
@@ -212,4 +213,47 @@ pub fn well_typed<T: Token>(
             .map_err(|x| TypeError::Positioned(loc.clone(), Box::new(x)))?,
         Term::WellTyped(_, _) => term.clone(),
     })
+}
+
+#[cfg(test)]
+mod test {
+    use std::rc::Rc;
+    use crate::{Term, UniqueSymbol};
+    use crate::Term::Fix;
+
+    #[test]
+    fn sexpr_type_checked() {
+        use Term::*;
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        enum Token {
+            LPAREN,
+            RPAREN,
+            ATOM,
+        }
+        impl crate::Token for Token {}
+        let sexpr_sym = UniqueSymbol::new("sexpr");
+        let sexprs_sym = UniqueSymbol::new("sexprs");
+        let sexpr: Rc<Term<Token>> =
+            Rc::new(Fix(sexpr_sym.clone(), Rc::new(
+                Alternative(
+                    Rc::new(Sequence(
+                        Rc::new(Sequence(
+                            Rc::new(Token(Token::LPAREN)),
+                            Rc::new(Fix(sexprs_sym.clone(), Rc::new(
+                                Alternative(
+                                    Rc::new(Epsilon),
+                                    Rc::new(Sequence(
+                                        Rc::new(Variable(sexpr_sym.clone())),
+                                        Rc::new(Variable(sexprs_sym.clone())),
+                                    )),
+                                )
+                            ))))),
+                        Rc::new(Token(Token::RPAREN)),
+                    )),
+                    Rc::new(Token(Token::ATOM)),
+                ))));
+        println!("{}", sexpr);
+        let well_typed = super::well_typed(&mut super::Context::new(), sexpr.clone()).unwrap();
+        println!("{}", well_typed);
+    }
 }
