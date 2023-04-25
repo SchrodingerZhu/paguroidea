@@ -1,0 +1,25 @@
+
+lexer {
+    // definition in lexer is not a real token, it is just a way to define a set of characters
+    definition ALPHA     = 'a' .. 'z' | 'A' .. 'Z';
+    definition DIGIT     = '0' .. '9';
+
+    active token LPAREN     = '(';
+    active token RPAREN     = ')';
+    active token ATOM       = ALPHA ~ (ALPHA | DIGIT)+;
+    silent token WHITESPACE = (' ' | '\t' | '\n' | '\r')*;
+}
+
+// parser must have a entry point
+parser sexpr {
+    // definition in parser can be a real grammer rule.
+
+    silent definition compound
+        = LPAREN ~ sexprs ~ RPAREN;
+
+    silent fixpoint sexprs
+        = _ | sexpr ~ sexprs;
+
+    active fixpoint sexpr
+        = compound | ATOM;
+}

@@ -10,3 +10,6 @@ pest = { version = "2.5.7", features = [ "std", "memchr" ] }
 pest_derive = "2.5.7"
 smallvec = "1"
 thiserror = "1"
+lazy_static = "1"
+error-stack = "0.3"
+anyhow = { version = "1", features = [ "backtrace"] }

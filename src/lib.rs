@@ -4,6 +4,7 @@ use std::ops::{Deref, Range};
 use std::path::PathBuf;
 use std::rc::Rc;
 
+pub mod frontend;
 pub mod type_system;
 use type_system::Type;
 
@@ -11,7 +12,7 @@ use type_system::Type;
 pub struct UniqueSymbol(Rc<String>);
 
 impl UniqueSymbol {
-    pub fn new<S : AsRef<str>>(s: S) -> Self {
+    pub fn new<S: AsRef<str>>(s: S) -> Self {
         Self(Rc::new(s.as_ref().to_string()))
     }
 }
@@ -73,10 +74,12 @@ pub enum Term<T: Token> {
     WellTyped(Rc<Term<T>>, Type<T>),
 }
 
-impl<T : Token> Display for Term<T> {
+impl<T: Token> Display for Term<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Term::Epsilon => {write!(f, "ε")}
+            Term::Epsilon => {
+                write!(f, "ε")
+            }
             Term::Sequence(x, y) => {
                 write!(f, "({x} ~ {y})",)
             }

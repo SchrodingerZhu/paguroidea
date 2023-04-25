@@ -1,14 +1,88 @@
-single_quote = { "'" }
-bottom = {"!!"}
+bottom = { "!!" | "⊥" }
+silent = _{ "silent" }
+active = _{ "active" }
+token = _{ "token" }
+lexer = _{ "lexer" }
+parser = _{ "parser" }
+empty = { "_" }
+definition = _{ "definition" }
+fixpoint = _{ "fixpoint" }
+
+KEYWORD = { active | empty | bottom | silent | token | lexer | parser | definition | fixpoint }
+
+/// A newline character.
+newline = _{ "\n" | "\r\n" }
+/// A whitespace character.
+WHITESPACE = _{ " " | "\t" | newline }
+/// A single line comment.
+line_comment = _{ ("//" ~ !("/" | "!") ~ (!newline ~ ANY)*) }
+/// A multi-line comment.
+block_comment = _{ "/*" ~ (block_comment | !"*/" ~ ANY)* ~ "*/" }
+/// A grammar comment.
+COMMENT = _{ block_comment | line_comment }
+
+inner_chr = @{ escape | ANY }
+inner_str = @{ (!("\"" | "\\") ~ ANY)* ~ (escape ~ inner_str)? }
 hex_digit = @{ '0'..'9' | 'a'..'f' | 'A'..'F' }
 code = @{ "x" ~ hex_digit{2} }
-
-opening_brace = { "{" }
-closing_brace = { "}" }
-opening_paren = { "(" }
-closing_paren = { ")" }
-opening_brack = { "[" }
-closing_brack = { "]" }
-
-unicode = @{ "u" ~ opening_brace ~ hex_digit{2, 6} ~ closing_brace }
+uppercase = @{ 'A'..'Z' }
+lowercase = @{ 'a'..'z' }
+digit = @{ '0'..'9' }
+unicode = @{ "u" ~ "{" ~ hex_digit{2, 6} ~ "}" }
 escape = @{ "\\" ~ ("\"" | "\\" | "r" | "n" | "t" | "0" | "'" | code | unicode) }
+
+character = ${ "'" ~ inner_chr ~ "'" }
+string = ${ "\"" ~ inner_str ~ "\"" }
+range = { character ~ ".." ~ character }
+token_id = ${ !KEYWORD ~ uppercase ~ (uppercase | digit | "_")* }
+parser_id = ${ !KEYWORD ~ lowercase ~ (lowercase | digit | "_")* }
+
+// pratt parser for lexical expressions
+lexical_primary = _{ bottom | empty | range | character | string | token_id | "(" ~ lexical_expr ~ ")" }
+lexical_expr = { lexical_prefix* ~ lexical_primary ~ lexical_postfix* ~ (lexical_infix ~ lexical_prefix* ~ lexical_primary ~ lexical_postfix* )* }
+lexical_prefix = _{ lexical_not }
+lexical_not = { "!" }
+lexical_postfix = _{ lexical_optional | lexical_star | lexical_plus | lexical_repeat | lexical_repeat_range }
+lexical_repeat = { "{" ~ digit+ ~ "}" }
+lexical_repeat_range = { "{" ~ digit+ ~ "," ~ digit+ ~ "}" }
+lexical_optional = { "?" }
+lexical_star = { "*" }
+lexical_plus = { "+" }
+lexical_infix = _{ lexical_sequence | lexical_alternative }
+lexical_sequence = { "~" }
+lexical_alternative = { "|" }
+
+// pratt parser for parser expressions
+parser_primary = _{ bottom | empty | parser_id | token_id | "(" ~ parser_expr ~ ")" }
+parser_expr = { parser_prefix* ~ parser_primary ~ parser_postfix* ~ (parser_infix ~ parser_prefix* ~ parser_primary ~ parser_postfix* )* }
+parser_prefix = _{ parser_not }
+parser_not = { "!" }
+parser_postfix = _{ parser_optional | parser_star | parser_plus | parser_repeat | parser_repeat_range }
+parser_repeat = { "{" ~ digit+ ~ "}" }
+parser_repeat_range = { "{" ~ digit+ ~ "," ~ digit+ ~ "}" }
+parser_optional = { "?" }
+parser_star = { "*" }
+parser_plus = { "+" }
+parser_infix = _{ parser_sequence | parser_alternative }
+parser_sequence = { "~" }
+parser_alternative = { "|" }
+
+// lexer definition
+lexer_def = { lexer ~ "{" ~ lexer_rules ~ "}" }
+lexer_rules = { ( (token_rule | lexical_definition) ~ ";")+ }
+lexical_definition = { definition ~ token_id ~ "=" ~ lexical_expr }
+token_rule = _{ active_token | silent_token }
+active_token = { active ~ token ~ token_id ~ "=" ~ lexical_expr }
+silent_token = { silent ~ token ~ token_id ~ "=" ~ lexical_expr }
+
+// parser definition
+parser_def = { parser ~ parser_id ~ "{" ~ parser_rules ~ "}" }
+parser_rules = { ( (parser_fixpoint | parser_definition) ~ ";")+ }
+parser_definition = _{ active_parser_definition | silent_parser_definition }
+active_parser_definition = { active ~ definition ~ parser_id ~ "=" ~ parser_expr }
+silent_parser_definition = { silent ~ definition ~ parser_id ~ "=" ~ parser_expr }
+parser_fixpoint = _{ active_parser_fixpoint | silent_parser_fixpoint }
+active_parser_fixpoint = { active ~ fixpoint ~ parser_id ~ "=" ~ parser_expr }
+silent_parser_fixpoint = { silent ~ fixpoint ~ parser_id ~ "=" ~ parser_expr }
+
+grammar = { SOI ~ lexer_def ~ parser_def ~ EOI }
