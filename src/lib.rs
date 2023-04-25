@@ -6,6 +6,8 @@ use std::rc::Rc;
 
 pub mod frontend;
 pub mod type_system;
+pub mod core_syntax;
+pub mod utilities;
 use type_system::Type;
 
 #[derive(Clone, Debug)]

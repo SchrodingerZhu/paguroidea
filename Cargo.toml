@@ -13,3 +13,4 @@ thiserror = "1"
 lazy_static = "1"
 error-stack = "0.3"
 anyhow = { version = "1", features = [ "backtrace"] }
+memchr = "2"
