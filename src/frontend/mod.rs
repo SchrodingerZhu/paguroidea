@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Error};
 use lazy_static::lazy_static;
-use pest::iterators::{Pair, Pairs};
+use pest::iterators::{Pair};
 use pest::pratt_parser::{Op, PrattParser};
 use pest::Span;
 
@@ -12,13 +12,14 @@ mod grammar {
     pub struct Parser;
 }
 
+use crate::unreachable_branch;
 pub use grammar::Parser as GrammarParser;
 pub use grammar::Rule;
 
 lazy_static! {
     static ref PRATT_PARSER: PrattParser<Rule> = {
         use pest::pratt_parser::Assoc::*;
-        use Rule::*;
+        
         PrattParser::new()
             .op(Op::infix(Rule::lexical_alternative, Left))
             .op(Op::infix(Rule::lexical_sequence, Left))
@@ -190,9 +191,7 @@ pub enum SurfaceSyntaxTree<'a> {
         start: char,
         end: char,
     },
-    String {
-        value: WithSpan<'a, String>,
-    },
+    String(String),
     Bottom,
     Empty,
     Char {
@@ -230,7 +229,6 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                     let lexer = grammar.next().ok_or(anyhow!("expected lexer part"))?;
                     let parser = grammar.next().ok_or(anyhow!("expected parser part"))?;
                     let lexer = parse_surface_syntax([lexer].into_iter(), pratt, src)?;
-                    println!("{:#?}", lexer);
                     let parser = parse_surface_syntax([parser].into_iter(), pratt, src)?;
                     Ok(WithSpan {
                         span,
@@ -241,7 +239,7 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                     })
                 }
                 Rule::lexer_def => {
-                    let mut lexer_rules = primary
+                    let lexer_rules = primary
                         .into_inner()
                         .next()
                         .ok_or(anyhow!("expected lexer rules"))?;
@@ -299,6 +297,14 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                         node: SurfaceSyntaxTree::Range { start, end },
                     })
                 }
+                Rule::string => {
+                    let value = unescape_qouted(primary.as_str())
+                        .ok_or(anyhow!("invalid string literal"))?;
+                    Ok(WithSpan {
+                        span,
+                        node: SurfaceSyntaxTree::String(value),
+                    })
+                }
                 Rule::lexical_expr => parse_surface_syntax(primary.into_inner(), pratt, src),
                 Rule::active_token | Rule::silent_token => {
                     let active = matches!(primary.as_rule(), Rule::active_token);
@@ -347,8 +353,105 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                         },
                     })
                 }
+                Rule::parser_id => {
+                    // token ref
+                    Ok(WithSpan {
+                        span,
+                        node: SurfaceSyntaxTree::ParserRuleRef {
+                            name: WithSpan { span, node: () },
+                        },
+                    })
+                }
+                Rule::bottom => {
+                    // token ref
+                    Ok(WithSpan {
+                        span,
+                        node: SurfaceSyntaxTree::Bottom,
+                    })
+                }
+                Rule::empty => {
+                    // token ref
+                    Ok(WithSpan {
+                        span,
+                        node: SurfaceSyntaxTree::Empty,
+                    })
+                }
+                Rule::parser_def => {
+                    let mut parser_rules = primary.into_inner();
+                    let entrypoint = parser_rules
+                        .next()
+                        .ok_or(anyhow!("expected entrypoint for parser rules"))?;
+                    let entrypoint = WithSpan {
+                        span: entrypoint.as_span(),
+                        node: (),
+                    };
+                    let parser_rules = parser_rules
+                        .next()
+                        .ok_or(anyhow!("expected parser rules"))?;
+                    let rules = parser_rules
+                        .into_inner()
+                        .fold(Ok(Vec::new()), |acc, rule| {
+                            acc.and_then(|vec| {
+                                parse_surface_syntax([rule].into_iter(), pratt, src).map(|rule| {
+                                    let mut vec = vec;
+                                    vec.push(rule);
+                                    vec
+                                })
+                            })
+                        })?;
+                    Ok(WithSpan {
+                        span,
+                        node: SurfaceSyntaxTree::Parser { entrypoint, rules },
+                    })
+                }
+                Rule::active_parser_definition | Rule::silent_parser_definition => {
+                    let active = matches!(primary.as_rule(), Rule::active_parser_definition);
+                    let mut definition = primary.into_inner();
+                    let name = definition
+                        .next()
+                        .ok_or(anyhow!("expected name for token rule"))?;
+                    let expr = definition
+                        .next()
+                        .ok_or(anyhow!("expected expr for token rule"))?;
+                    let name = WithSpan {
+                        span: name.as_span(),
+                        node: (),
+                    };
+                    let expr = parse_surface_syntax(expr.into_inner(), pratt, src)?;
+                    Ok(WithSpan {
+                        span,
+                        node: SurfaceSyntaxTree::ParserDefinition {
+                            active,
+                            name,
+                            expr: Box::new(expr),
+                        },
+                    })
+                }
+                Rule::active_parser_fixpoint | Rule::silent_parser_fixpoint => {
+                    let active = matches!(primary.as_rule(), Rule::active_parser_fixpoint);
+                    let mut fixpoint = primary.into_inner();
+                    let name = fixpoint
+                        .next()
+                        .ok_or(anyhow!("expected name for token rule"))?;
+                    let expr = fixpoint
+                        .next()
+                        .ok_or(anyhow!("expected expr for token rule"))?;
+                    let name = WithSpan {
+                        span: name.as_span(),
+                        node: (),
+                    };
+                    let expr = parse_surface_syntax(expr.into_inner(), pratt, src)?;
+                    Ok(WithSpan {
+                        span,
+                        node: SurfaceSyntaxTree::ParserFixpoint {
+                            active,
+                            name,
+                            expr: Box::new(expr),
+                        },
+                    })
+                }
                 _ => {
-                    todo!("{primary:?}")
+                    todo!("{primary:?} is not yet implemented");
                 }
             }
         })
@@ -372,9 +475,22 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                         rhs: Box::new(rhs),
                     },
                 }),
-                _ => {
-                    todo!("{op:?}")
-                }
+                Rule::parser_alternative => Ok(WithSpan {
+                    span: total_span,
+                    node: SurfaceSyntaxTree::ParserAlternative {
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    },
+                }),
+                Rule::parser_sequence => Ok(WithSpan {
+                    span: total_span,
+                    node: SurfaceSyntaxTree::ParserSequence {
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    },
+                }),
+
+                _ => unreachable_branch(),
             }
         })
         .map_postfix(|expr, op| {
@@ -395,12 +511,54 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                         inner: Box::new(expr),
                     },
                 }),
-                _ => {
-                    todo!("{op:?}")
-                }
+                Rule::lexical_optional => Ok(WithSpan {
+                    span: total_span,
+                    node: SurfaceSyntaxTree::LexicalOptional {
+                        inner: Box::new(expr),
+                    },
+                }),
+                Rule::parser_plus => Ok(WithSpan {
+                    span: total_span,
+                    node: SurfaceSyntaxTree::ParserPlus {
+                        inner: Box::new(expr),
+                    },
+                }),
+                Rule::parser_star => Ok(WithSpan {
+                    span: total_span,
+                    node: SurfaceSyntaxTree::ParserStar {
+                        inner: Box::new(expr),
+                    },
+                }),
+                Rule::parser_optional => Ok(WithSpan {
+                    span: total_span,
+                    node: SurfaceSyntaxTree::ParserOptional {
+                        inner: Box::new(expr),
+                    },
+                }),
+                _ => unreachable_branch(),
             }
         })
-        .map_prefix(|op, expr| todo!("{op:?}"))
+        .map_prefix(|op, expr| {
+            let expr = expr?;
+            let op_span = op.as_span();
+            let total_span =
+                Span::new(src, expr.span.start(), op_span.end()).ok_or(anyhow!("invalid span"))?;
+            match op.as_rule() {
+                Rule::lexical_not => Ok(WithSpan {
+                    span: total_span,
+                    node: SurfaceSyntaxTree::LexicalNot {
+                        inner: Box::new(expr),
+                    },
+                }),
+                Rule::parser_not => Ok(WithSpan {
+                    span: total_span,
+                    node: SurfaceSyntaxTree::ParserNot {
+                        inner: Box::new(expr),
+                    },
+                }),
+                _ => unreachable_branch(),
+            }
+        })
         .parse(pairs)
 }
 

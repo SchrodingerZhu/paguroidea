@@ -1,4 +1,4 @@
-bottom = { "!!" | "⊥" }
+bottom = { "<bottom>" | "⊥" }
 silent = _{ "silent" }
 active = _{ "active" }
 token = _{ "token" }

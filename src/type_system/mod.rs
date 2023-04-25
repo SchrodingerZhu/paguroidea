@@ -217,7 +217,7 @@ pub fn well_typed<T: Token>(
 
 #[cfg(test)]
 mod test {
-    use crate::Term::Fix;
+    
     use crate::{Term, UniqueSymbol};
     use std::rc::Rc;
 
@@ -244,8 +244,8 @@ mod test {
                             Rc::new(Alternative(
                                 Rc::new(Epsilon),
                                 Rc::new(Sequence(
-                                    Rc::new(Variable(sexpr_sym.clone())),
-                                    Rc::new(Variable(sexprs_sym.clone())),
+                                    Rc::new(Variable(sexpr_sym)),
+                                    Rc::new(Variable(sexprs_sym)),
                                 )),
                             )),
                         )),
@@ -256,7 +256,7 @@ mod test {
             )),
         ));
         println!("{}", sexpr);
-        let well_typed = super::well_typed(&mut super::Context::new(), sexpr.clone()).unwrap();
+        let well_typed = super::well_typed(&mut super::Context::new(), sexpr).unwrap();
         println!("{}", well_typed);
     }
 }
