@@ -8,6 +8,7 @@ pub mod frontend;
 pub mod type_system;
 pub mod core_syntax;
 pub mod utilities;
+pub mod lexer;
 use type_system::Type;
 
 #[derive(Clone, Debug)]

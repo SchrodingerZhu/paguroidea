@@ -84,7 +84,6 @@ lazy_static! {
                 | Op::postfix(Rule::lexical_optional)
                 | Op::postfix(Rule::lexical_repeat)
                 | Op::postfix(Rule::lexical_repeat_range))
-            .op(Op::prefix(Rule::lexical_not))
             .op(Op::infix(Rule::parser_alternative, Left))
             .op(Op::infix(Rule::parser_sequence, Left))
             .op(Op::postfix(Rule::parser_star)
@@ -602,12 +601,6 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
             let total_span =
                 Span::new(src, expr.span.start(), op_span.end()).ok_or_else(||parser_logical_error!("invalid span"))?;
             match op.as_rule() {
-                Rule::lexical_not => Ok(WithSpan {
-                    span: total_span,
-                    node: SurfaceSyntaxTree::LexicalNot {
-                        inner: Box::new(expr),
-                    },
-                }),
                 Rule::parser_not => Ok(WithSpan {
                     span: total_span,
                     node: SurfaceSyntaxTree::ParserNot {
