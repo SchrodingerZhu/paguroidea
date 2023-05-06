@@ -39,7 +39,7 @@ impl ClosedInterval {
         if self.0 == self.1 {
             format!("C{:X}X", self.0)
         } else {
-            format!("R{:X}_{:X}X", self.0, self.1)
+            format!("R{:X}X{:X}X", self.0, self.1)
         }
     }
     // Check if two intervals overlap.
