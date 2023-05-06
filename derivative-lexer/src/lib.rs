@@ -1,16 +1,10 @@
 #![feature(let_chains)]
-
-use crate::intervals::{ClosedInterval, Intervals};
-use std::collections::BTreeSet;
-use std::fmt::{Display, Formatter};
-use std::ops::RangeInclusive;
-use std::rc::Rc;
-
 pub mod congruence;
 pub mod derivative;
 pub mod intervals;
 pub mod normalization;
 pub mod regex_tree;
+pub mod vector;
 
 #[cfg(test)]
 mod tests {
@@ -20,6 +14,7 @@ mod tests {
     use crate::regex_tree::*;
     use std::rc::Rc;
     use RegexTree::*;
+    use crate::vector::{build_dfa, print_dfa, Vector};
 
     #[test]
     fn it_prints_basic() {
@@ -28,7 +23,7 @@ mod tests {
         let ab = Rc::new(Concat(a.clone(), b.clone()));
         let alt = Rc::new(Union(ab.clone(), ab.clone()));
         println!("{}", alt);
-        let derivative = derivative(alt, 'a');
+        let derivative = derivative(alt, 'a' as u32);
         println!("{}", derivative);
         let normalized = normalize(Rc::new(derivative));
         println!("{}", normalized);
@@ -47,5 +42,8 @@ mod tests {
         println!("{}", normalized);
         let congruence = approximate_congruence_class(&normalized);
         println!("{:?}", congruence);
+        println!();
+        let vectorized = Vector::new([normalized.clone()].into_iter());
+        print_dfa(&build_dfa(vectorized));
     }
 }

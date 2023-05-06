@@ -61,6 +61,9 @@ impl ClosedInterval {
 pub struct Intervals(SmallVec<[ClosedInterval; 2]>);
 
 impl Intervals {
+    pub fn representative(&self) -> u32 {
+        self.0[0].0
+    }
     pub fn new<I>(mut data: I) -> Option<Self>
     where
         I: Iterator<Item = ClosedInterval>,
@@ -89,15 +92,15 @@ impl Intervals {
         Self(result)
     }
 
-    pub fn contains_char(&self, target: char) -> bool {
-        match self.0.binary_search_by_key(&(target as u32), |x| x.0) {
+    pub fn contains(&self, target: u32) -> bool {
+        match self.0.binary_search_by_key(&target, |x| x.0) {
             Ok(_) => true,
             Err(idx) => {
                 if idx == 0 {
                     false
                 } else {
                     let idx = idx - 1;
-                    self.0[idx].1 >= target as u32
+                    self.0[idx].1 >= target
                 }
             }
         }
