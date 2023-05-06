@@ -6,7 +6,6 @@ use std::fmt::{Display, Formatter};
 use std::ops::RangeInclusive;
 use std::rc::Rc;
 
-pub mod class;
 pub mod congruence;
 pub mod derivative;
 pub mod intervals;
