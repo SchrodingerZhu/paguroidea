@@ -58,7 +58,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
             }
 
             // will not fall in any of the above cases -- it is safe to return
-            if ordering.is_lt() {
+            if ordering.is_lt() || matches!(s.as_ref(), RegexTree::Intersection(..)) {
                 Rc::new(RegexTree::Intersection(r, s))
             } else {
                 Rc::new(RegexTree::Intersection(s, r))
@@ -139,7 +139,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
                 )));
             }
             // will not fall in any of the above cases -- it is safe to return
-            if ordering.is_lt() {
+            if ordering.is_lt() || matches!(s.as_ref(), RegexTree::Union(..)) {
                 Rc::new(RegexTree::Union(r, s))
             } else {
                 Rc::new(RegexTree::Union(s, r))
