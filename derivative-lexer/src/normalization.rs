@@ -6,6 +6,10 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
         RegexTree::Complement(r) => {
             let r = normalize(r.clone());
             match r.as_ref() {
+                RegexTree::Set(x) => match x.complement() {
+                    Some(y) => Rc::new(RegexTree::Set(y)),
+                    None => Rc::new(RegexTree::Bottom),
+                },
                 RegexTree::Complement(r) => r.clone(),
                 RegexTree::Top => Rc::new(RegexTree::Bottom),
                 RegexTree::Bottom => Rc::new(RegexTree::Top),

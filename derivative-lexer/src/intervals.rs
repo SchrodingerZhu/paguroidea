@@ -74,7 +74,7 @@ impl Intervals {
             }))
     }
     // it is okay is contains non-unicode code points; they will never be read anyway.
-    pub fn complement(&self) -> Self {
+    pub fn complement(&self) -> Option<Self> {
         let mut current = 0u32;
         let mut result = SmallVec::new();
         for i in self.0.iter() {
@@ -86,7 +86,11 @@ impl Intervals {
         if current <= 0x10FFFF {
             result.push(ClosedInterval::new(current, 0x10FFFF));
         }
-        Self(result)
+        if result.is_empty() {
+            None
+        } else {
+            Some(Self(result))
+        }
     }
 
     pub fn contains(&self, target: u32) -> bool {
@@ -101,10 +105,6 @@ impl Intervals {
                 }
             }
         }
-    }
-
-    pub fn is_complement(&self, other: &Self) -> bool {
-        self.complement() == *other
     }
 
     pub fn intersection(&self, other: &Self) -> Option<Self> {
@@ -214,18 +214,18 @@ mod test {
     fn complement() {
         let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
         let y = intervals!((0, 47), (58, 64), (91, 96), (123, 0x10FFFF)).unwrap();
-        assert_eq!(x.complement(), y);
+        assert_eq!(x.complement(), Some(y));
         let z = intervals!(('\0', '7')).unwrap();
-        assert_eq!(z.complement(), intervals!(('8', 0x10FFFF)).unwrap());
-        assert_eq!(x.complement().complement(), x);
-        assert_eq!(x.union(&x.complement()), intervals!((0, 0x10FFFF)).unwrap());
+        assert_eq!(z.complement().unwrap(), intervals!(('8', 0x10FFFF)).unwrap());
+        assert_eq!(x.complement().unwrap().complement().unwrap(), x);
+        assert_eq!(x.union(&x.complement().unwrap()), intervals!((0, 0x10FFFF)).unwrap());
     }
     #[test]
     fn intersection() {
         let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
         let z = intervals!(('\0', '7')).unwrap();
         assert_eq!(x.intersection(&z), Some(intervals!(('0', '7')).unwrap()));
-        assert!(x.intersection(&x.complement()).is_none());
+        assert!(x.intersection(&x.complement().unwrap()).is_none());
         assert_eq!(
             x.intersection(&intervals!((0, 0x10FFFF)).unwrap()).unwrap(),
             x
