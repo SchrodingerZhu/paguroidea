@@ -1,28 +1,30 @@
 use smallvec::SmallVec;
 use std::fmt::{Display, Formatter};
-use std::mem::swap;
 
 // A closed interval of u32s.
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Copy, Clone)]
-pub struct ClosedInterval(u32, u32);
+pub struct ClosedInterval(pub u32, pub u32);
 
 impl Display for ClosedInterval {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match (char::from_u32(self.0), char::from_u32(self.1)) {
+            (Some(start), Some(end)) if start == end => write!(f, "'{}'", start.escape_debug()),
             (Some(start), Some(end)) => {
                 write!(f, "'{}'..'{}'", start.escape_debug(), end.escape_debug())
             }
-            _ => write!(f, "'\\u{:6X}'-'\\u{:6X}'", self.0, self.1),
+            _ => write!(f, "'\\u{{{:6X}}}'-'\\u{{{:6X}}}'", self.0, self.1),
         }
     }
 }
 
+#[macro_export]
 macro_rules! interval {
     ($start:expr, $end:expr) => {
         $crate::intervals::ClosedInterval::new($start as u32, $end as u32)
     };
 }
 
+#[macro_export]
 macro_rules! intervals {
     ($(($start:expr, $end:expr)),*) => {
         $crate::intervals::Intervals::new(vec![$(interval!($start, $end)),*].into_iter())
@@ -45,6 +47,10 @@ impl ClosedInterval {
     pub fn merge(&self, other: &Self) -> Self {
         debug_assert!(self.overlaps(other) || self.is_consecutive(other));
         Self::new(self.0.min(other.0), self.1.max(other.1))
+    }
+    pub fn intersection(&self, other: &Self) -> Self {
+        debug_assert!(self.overlaps(other));
+        Self::new(self.0.max(other.0), self.1.min(other.1))
     }
     pub fn contains(&self, other: &Self) -> bool {
         self.0 <= other.0 && other.1 <= self.1
@@ -83,8 +89,44 @@ impl Intervals {
         Self(result)
     }
 
+    pub fn contains_char(&self, target: char) -> bool {
+        match self.0.binary_search_by_key(&(target as u32), |x|x.0) {
+            Ok(_) => true,
+            Err(idx) => {
+                if idx == 0 {
+                    false
+                } else {
+                    let idx = idx - 1;
+                    self.0[idx].1 >= target as u32
+                }
+            }
+        }
+    }
+
     pub fn is_complement(&self, other: &Self) -> bool {
         self.complement() == *other
+    }
+
+    pub fn intersection(&self, other: &Self) -> Option<Self> {
+        let mut result : Option<Self> = None;
+        for i in self.0.iter().copied() {
+            'inner: for j in other.0.iter().copied() {
+                if i.overlaps(&j) {
+                    let temp = i.intersection(&j);
+                    result = match result {
+                        None => Self::new([temp].into_iter()),
+                        Some(x) => unsafe {
+                            Some(x.union(&Self::new([temp].into_iter()).unwrap_unchecked()))
+                        }
+                    };
+                } else {
+                    if j.0 > i.1 {
+                        break 'inner;
+                    }
+                }
+            }
+        }
+        result
     }
 
     pub fn union(&self, other: &Self) -> Self {
@@ -167,6 +209,11 @@ mod test {
             intervals!(('!', '9'), ('A', 'Z'), ('a', 'z')).unwrap(),
             x.union(&y)
         );
+        let z = intervals!(('!', '7'), ('C', 'e')).unwrap();
+        assert_eq!(
+            intervals!(('!', '9'), ('A', 'z')).unwrap(),
+            x.union(&z)
+        );
     }
     #[test]
     fn complement() {
@@ -177,5 +224,15 @@ mod test {
         assert_eq!(z.complement(), intervals!(('8', 0x10FFFF)).unwrap());
         assert_eq!(x.complement().complement(), x);
         assert_eq!(x.union(&x.complement()), intervals!((0, 0x10FFFF)).unwrap());
+    }
+    #[test]
+    fn intersection() {
+        let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
+        let z = intervals!(('\0', '7')).unwrap();
+        assert_eq!(x.intersection(&z), Some(intervals!(('0', '7')).unwrap()));
+        assert!(x.intersection(&x.complement()).is_none());
+        assert_eq!(x.intersection(&intervals!((0, 0x10FFFF)).unwrap()).unwrap(), x);
+        let a = intervals!(('E', 'c')).unwrap();
+        assert_eq!(x.intersection(&a), Some(intervals!(('E', 'Z'), ('a', 'c')).unwrap()));
     }
 }
