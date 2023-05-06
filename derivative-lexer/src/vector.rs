@@ -30,6 +30,14 @@ impl Vector {
         let regex_trees = iter.collect();
         Self { regex_trees }
     }
+    pub fn mangle(&self) -> String {
+        let mut s = format!("V{}_", self.regex_trees.len());
+        for regex_tree in &self.regex_trees {
+            let mangled = regex_tree.mangle();
+            s.push_str(&format!("{}{}", mangled.len(), mangled));
+        }
+        s
+    }
     pub fn derivative(&self, x: u32) -> Self {
         Vector {
             regex_trees: self.regex_trees.iter().map(|t| Rc::new(derivative(t.clone(), x))).collect()
@@ -86,7 +94,7 @@ pub fn build_dfa(initial_state: Vector) -> HashMap<Vector, Vec<(Intervals, Vecto
 
 pub fn print_dfa(dfa: &HashMap<Vector, Vec<(Intervals, Vector)>>) {
     for (state, transitions) in dfa {
-        println!("State: {}", state);
+        println!("State: {} [{}]", state, state.mangle());
         for (transition, next_state) in transitions {
             println!("Transition: {} -> {}", transition, next_state);
         }

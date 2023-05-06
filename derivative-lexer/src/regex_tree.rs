@@ -68,6 +68,45 @@ impl RegexTree {
             )
         }
     }
+    pub fn mangle(&self)-> String {
+        match self {
+            RegexTree::Top => {
+                "T".to_string()
+            }
+            RegexTree::Bottom => {
+                "B".to_string()
+            }
+            RegexTree::Set(x) => {
+                x.mangle()
+            }
+            RegexTree::Epsilon => {
+                "E".to_string()
+            }
+            RegexTree::Concat(x, y) => {
+                let x = x.mangle();
+                let y = y.mangle();
+                format!("C{}{}{}{}", x.len(), x, y.len(), y)
+            }
+            RegexTree::KleeneClosure(x) => {
+                let x = x.mangle();
+                format!("K{}{}", x.len(), x)
+            }
+            RegexTree::Union(x, y) => {
+                let x = x.mangle();
+                let y = y.mangle();
+                format!("U{}{}{}{}", x.len(), x, y.len(), y)
+            }
+            RegexTree::Intersection(x, y) => {
+                let x = x.mangle();
+                let y = y.mangle();
+                format!("I{}{}{}{}", x.len(), x, y.len(), y)
+            }
+            RegexTree::Complement(x) => {
+                let x = x.mangle();
+                format!("N{}{}", x.len(), x)
+            }
+        }
+    }
     pub fn is_nullable(&self) -> bool {
         match self {
             RegexTree::Top => false,

@@ -35,6 +35,13 @@ impl ClosedInterval {
     pub fn new(start: u32, end: u32) -> Self {
         Self(start, end)
     }
+    pub fn mangle(&self) -> String {
+        if self.0 == self.1 {
+            format!("C{:X}X", self.0)
+        } else {
+            format!("R{:X}_{:X}X", self.0, self.1)
+        }
+    }
     // Check if two intervals overlap.
     pub fn overlaps(&self, other: &Self) -> bool {
         self.0 <= other.1 && other.0 <= self.1
@@ -63,6 +70,13 @@ pub struct Intervals(SmallVec<[ClosedInterval; 2]>);
 impl Intervals {
     pub fn representative(&self) -> u32 {
         self.0[0].0
+    }
+    pub fn mangle(&self) -> String {
+        let mut result = String::new();
+        for i in self.0.iter() {
+            result.push_str(&i.mangle());
+        }
+        format!("S{}{}", result.len(), result)
     }
     pub fn new<I>(mut data: I) -> Option<Self>
     where
