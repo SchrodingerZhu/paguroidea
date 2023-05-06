@@ -31,7 +31,7 @@ impl Vector {
         Self { regex_trees }
     }
     pub fn mangle(&self) -> String {
-        let mut s = format!("V{}_", self.regex_trees.len());
+        let mut s = "V".to_string();
         for regex_tree in &self.regex_trees {
             let mangled = regex_tree.mangle();
             s.push_str(&format!("{}{}", mangled.len(), mangled));
