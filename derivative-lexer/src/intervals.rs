@@ -37,7 +37,7 @@ impl ClosedInterval {
     }
     // Check if two intervals overlap.
     pub fn overlaps(&self, other: &Self) -> bool {
-        self.0 <= other.1 && other.0 <= self.1 || other.0 <= self.1 && self.0 <= other.1
+        self.0 <= other.1 && other.0 <= self.1
     }
     // Check if two intervals are consecutive.
     pub fn is_consecutive(&self, other: &Self) -> bool {
@@ -68,20 +68,17 @@ impl Intervals {
     where
         I: Iterator<Item = ClosedInterval>,
     {
-        match data.next() {
-            None => None,
-            Some(first) => Some(data.fold(Self([first].into_iter().collect()), |acc, x| {
+        data.next().map(|first| data.fold(Self([first].into_iter().collect()), |acc, x| {
                 let temp = Self([x].into_iter().collect());
                 acc.union(&temp)
-            })),
-        }
+            }))
     }
     // it is okay is contains non-unicode code points; they will never be read anyway.
     pub fn complement(&self) -> Self {
         let mut current = 0u32;
         let mut result = SmallVec::new();
         for i in self.0.iter() {
-            if current < i.0 as u32 {
+            if current < i.0 {
                 result.push(ClosedInterval::new(current, i.0 - 1));
             }
             current = i.1 + 1;
@@ -122,10 +119,8 @@ impl Intervals {
                             Some(x.union(&Self::new([temp].into_iter()).unwrap_unchecked()))
                         },
                     };
-                } else {
-                    if j.0 > i.1 {
-                        break 'inner;
-                    }
+                } else if j.0 > i.1 {
+                    break 'inner;
                 }
             }
         }
@@ -193,10 +188,10 @@ mod test {
         assert_eq!(format!("{}", interval), "'A'..'{'");
         // whitespace
         let interval = super::ClosedInterval::new('\t' as _, '\t' as _);
-        assert_eq!(format!("{}", interval), "'\\t'..'\\t'");
+        assert_eq!(format!("{}", interval), "'\\t'");
         // unicode
         let interval = super::ClosedInterval::new(0x1F600, 0x1F600);
-        assert_eq!(format!("{}", interval), "'😀'..'😀'");
+        assert_eq!(format!("{}", interval), "'😀'");
     }
     #[test]
     fn intervals_format() {

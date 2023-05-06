@@ -14,7 +14,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
         }
         RegexTree::Intersection(r, s) => {
             // referential equality
-            if Rc::ptr_eq(&r, &s) {
+            if Rc::ptr_eq(r, s) {
                 return normalize(r.clone());
             }
             let r = normalize(r.clone());
@@ -49,7 +49,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
             if let RegexTree::Intersection(r1, r2) = r.as_ref() {
                 return normalize(Rc::new(RegexTree::Intersection(
                     r1.clone(),
-                    Rc::new(RegexTree::Intersection(r2.clone(), s.clone())),
+                    Rc::new(RegexTree::Intersection(r2.clone(), s)),
                 )));
             }
 
@@ -83,7 +83,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
             if let RegexTree::Concat(r1, r2) = r.as_ref() {
                 return normalize(Rc::new(RegexTree::Concat(
                     r1.clone(),
-                    Rc::new(RegexTree::Concat(r2.clone(), s.clone())),
+                    Rc::new(RegexTree::Concat(r2.clone(), s)),
                 )));
             }
             Rc::new(RegexTree::Concat(r, s))
@@ -131,7 +131,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
             if let RegexTree::Union(r1, r2) = r.as_ref() {
                 return normalize(Rc::new(RegexTree::Union(
                     r1.clone(),
-                    Rc::new(RegexTree::Union(r2.clone(), s.clone())),
+                    Rc::new(RegexTree::Union(r2.clone(), s)),
                 )));
             }
             // will not fall in any of the above cases -- it is safe to return

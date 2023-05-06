@@ -48,11 +48,11 @@ impl Vector {
               .fold(None, |acc, x| match acc {
                 None => Some(x),
                 Some(acc) => Some(meet(acc.as_slice(), x.as_slice())),
-              }).unwrap_or_else(|| vec![])
+              }).unwrap_or_default()
     }
     pub fn normalize(self) -> Self {
         let regex_trees = self.regex_trees.into_iter()
-            .map(|x| normalize(x))
+            .map(normalize)
             .collect();
         Self { regex_trees }
     }
