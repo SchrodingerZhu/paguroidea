@@ -27,7 +27,7 @@ macro_rules! interval {
 #[macro_export]
 macro_rules! intervals {
     ($(($start:expr, $end:expr)),*) => {
-        $crate::intervals::Intervals::new(vec![$(interval!($start, $end)),*].into_iter())
+        $crate::intervals::Intervals::new(vec![$($crate::intervals::ClosedInterval::new($start as u32, $end as u32)),*].into_iter())
     };
 }
 
@@ -90,7 +90,7 @@ impl Intervals {
     }
 
     pub fn contains_char(&self, target: char) -> bool {
-        match self.0.binary_search_by_key(&(target as u32), |x|x.0) {
+        match self.0.binary_search_by_key(&(target as u32), |x| x.0) {
             Ok(_) => true,
             Err(idx) => {
                 if idx == 0 {
@@ -108,7 +108,7 @@ impl Intervals {
     }
 
     pub fn intersection(&self, other: &Self) -> Option<Self> {
-        let mut result : Option<Self> = None;
+        let mut result: Option<Self> = None;
         for i in self.0.iter().copied() {
             'inner: for j in other.0.iter().copied() {
                 if i.overlaps(&j) {
@@ -117,7 +117,7 @@ impl Intervals {
                         None => Self::new([temp].into_iter()),
                         Some(x) => unsafe {
                             Some(x.union(&Self::new([temp].into_iter()).unwrap_unchecked()))
-                        }
+                        },
                     };
                 } else {
                     if j.0 > i.1 {
@@ -210,10 +210,7 @@ mod test {
             x.union(&y)
         );
         let z = intervals!(('!', '7'), ('C', 'e')).unwrap();
-        assert_eq!(
-            intervals!(('!', '9'), ('A', 'z')).unwrap(),
-            x.union(&z)
-        );
+        assert_eq!(intervals!(('!', '9'), ('A', 'z')).unwrap(), x.union(&z));
     }
     #[test]
     fn complement() {
@@ -231,8 +228,14 @@ mod test {
         let z = intervals!(('\0', '7')).unwrap();
         assert_eq!(x.intersection(&z), Some(intervals!(('0', '7')).unwrap()));
         assert!(x.intersection(&x.complement()).is_none());
-        assert_eq!(x.intersection(&intervals!((0, 0x10FFFF)).unwrap()).unwrap(), x);
+        assert_eq!(
+            x.intersection(&intervals!((0, 0x10FFFF)).unwrap()).unwrap(),
+            x
+        );
         let a = intervals!(('E', 'c')).unwrap();
-        assert_eq!(x.intersection(&a), Some(intervals!(('E', 'Z'), ('a', 'c')).unwrap()));
+        assert_eq!(
+            x.intersection(&a),
+            Some(intervals!(('E', 'Z'), ('a', 'c')).unwrap())
+        );
     }
 }
