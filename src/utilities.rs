@@ -22,7 +22,7 @@ fn calculate_line_indices(src: &str) -> Vec<Range<usize>> {
         pest::Span::new(src, 0, src.len())
             .unwrap_unchecked()
             .lines_span()
-            .map(|x| x.start() .. x.end())
+            .map(|x| x.start()..x.end())
             .collect()
     }
 }
@@ -36,7 +36,7 @@ impl SourceCode {
             line_indices,
         }
     }
-    pub fn load_file<P : AsRef<Path>>(path: P) -> Result<Self, std::io::Error> {
+    pub fn load_file<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error> {
         let mut src = String::new();
         File::open(path.as_ref())?.read_to_string(&mut src)?;
         Ok(Self::new(src, Some(path.as_ref().to_path_buf())))
@@ -46,7 +46,7 @@ impl SourceCode {
 #[cfg(test)]
 mod test {
     #[test]
-     fn test() {
+    fn test() {
         let src = "hello\nworld\n".to_string();
         let src_code = super::SourceCode::new(src, None);
         println!("{:?}", src_code.line_indices);

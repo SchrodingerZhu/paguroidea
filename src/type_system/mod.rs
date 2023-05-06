@@ -217,7 +217,7 @@ pub fn well_typed<T: Token>(
 
 #[cfg(test)]
 mod test {
-    
+
     use crate::{Term, UniqueSymbol};
     use std::rc::Rc;
 

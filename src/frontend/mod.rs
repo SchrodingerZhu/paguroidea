@@ -1,8 +1,8 @@
-use std::borrow::Cow;
 use lazy_static::lazy_static;
-use pest::iterators::{Pair};
+use pest::iterators::Pair;
 use pest::pratt_parser::{Op, PrattParser};
 use pest::Span;
+use std::borrow::Cow;
 use thiserror::Error;
 
 macro_rules! unexpected_eoi {
@@ -62,10 +62,7 @@ pub enum GrammarDefinitionError<'a> {
     #[error("grammar definition error: {0}")]
     SyntaxError(#[from] Box<pest::error::Error<Rule>>),
     #[error("failed to parse {}: {message}", span.as_str())]
-    FormatError {
-        span: Span<'a>,
-        message: String,
-    },
+    FormatError { span: Span<'a>, message: String },
     #[error("{0}")]
     ParserLogicError(Cow<'a, str>),
     #[error("unexpected end of input, expecting {0}")]
@@ -75,7 +72,7 @@ pub enum GrammarDefinitionError<'a> {
 lazy_static! {
     static ref PRATT_PARSER: PrattParser<Rule> = {
         use pest::pratt_parser::Assoc::*;
-        
+
         PrattParser::new()
             .op(Op::infix(Rule::lexical_alternative, Left))
             .op(Op::infix(Rule::lexical_sequence, Left))
@@ -281,8 +278,8 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
             match primary.as_rule() {
                 Rule::grammar => {
                     let mut grammar = primary.into_inner();
-                    let lexer = grammar.next().ok_or_else(||unexpected_eoi!( "lexer"))?;
-                    let parser = grammar.next().ok_or_else(||unexpected_eoi!("parser"))?;
+                    let lexer = grammar.next().ok_or_else(|| unexpected_eoi!("lexer"))?;
+                    let parser = grammar.next().ok_or_else(|| unexpected_eoi!("parser"))?;
                     let lexer = parse_surface_syntax([lexer].into_iter(), pratt, src)?;
                     let parser = parse_surface_syntax([parser].into_iter(), pratt, src)?;
                     Ok(WithSpan {
@@ -297,7 +294,7 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                     let lexer_rules = primary
                         .into_inner()
                         .next()
-                        .ok_or_else(||unexpected_eoi!("lexer rules"))?;
+                        .ok_or_else(|| unexpected_eoi!("lexer rules"))?;
                     let rules = lexer_rules.into_inner().fold(Ok(Vec::new()), |acc, rule| {
                         acc.and_then(|vec| {
                             parse_surface_syntax([rule].into_iter(), pratt, src).map(|rule| {
@@ -316,10 +313,10 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                     let mut definition = primary.into_inner();
                     let name = definition
                         .next()
-                        .ok_or_else(||unexpected_eoi!("name for lexical definition"))?;
+                        .ok_or_else(|| unexpected_eoi!("name for lexical definition"))?;
                     let expr = definition
                         .next()
-                        .ok_or_else(||unexpected_eoi!("expr for lexical definition"))?;
+                        .ok_or_else(|| unexpected_eoi!("expr for lexical definition"))?;
                     let name = WithSpan {
                         span: name.as_span(),
                         node: (),
@@ -337,16 +334,16 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                     let mut primary = primary.into_inner();
                     let start = primary
                         .next()
-                        .ok_or_else(||unexpected_eoi!("start character for range"))?;
+                        .ok_or_else(|| unexpected_eoi!("start character for range"))?;
                     let end = primary
                         .next()
-                        .ok_or_else(||unexpected_eoi!("end character for range"))?;
+                        .ok_or_else(|| unexpected_eoi!("end character for range"))?;
                     let start = unescape_qouted(start.as_str())
-                        .ok_or_else(||format_error!(span.clone(), "failed to unescape character"))?
+                        .ok_or_else(|| format_error!(span.clone(), "failed to unescape character"))?
                         .parse()
                         .map_err(|e| format_error!(span.clone(), "{}", e))?;
                     let end = unescape_qouted(end.as_str())
-                        .ok_or_else(||format_error!(span.clone(), "failed to unescape character"))?
+                        .ok_or_else(|| format_error!(span.clone(), "failed to unescape character"))?
                         .parse()
                         .map_err(|e| format_error!(span.clone(), "{}", e))?;
                     Ok(WithSpan {
@@ -368,10 +365,10 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                     let mut token = primary.into_inner();
                     let name = token
                         .next()
-                        .ok_or_else(||unexpected_eoi!("name for token rule"))?;
+                        .ok_or_else(|| unexpected_eoi!("name for token rule"))?;
                     let expr = token
                         .next()
-                        .ok_or_else(||unexpected_eoi!("expr for token rule"))?;
+                        .ok_or_else(|| unexpected_eoi!("expr for token rule"))?;
                     let name = WithSpan {
                         span: name.as_span(),
                         node: (),
@@ -437,14 +434,14 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                     let mut parser_rules = primary.into_inner();
                     let entrypoint = parser_rules
                         .next()
-                        .ok_or_else(||unexpected_eoi!("entrypoint for parser"))?;
+                        .ok_or_else(|| unexpected_eoi!("entrypoint for parser"))?;
                     let entrypoint = WithSpan {
                         span: entrypoint.as_span(),
                         node: (),
                     };
                     let parser_rules = parser_rules
                         .next()
-                        .ok_or_else(||unexpected_eoi!("parser rules"))?;
+                        .ok_or_else(|| unexpected_eoi!("parser rules"))?;
                     let rules = parser_rules
                         .into_inner()
                         .fold(Ok(Vec::new()), |acc, rule| {
@@ -466,10 +463,10 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                     let mut definition = primary.into_inner();
                     let name = definition
                         .next()
-                        .ok_or_else(||unexpected_eoi!("name for token rule"))?;
+                        .ok_or_else(|| unexpected_eoi!("name for token rule"))?;
                     let expr = definition
                         .next()
-                        .ok_or_else(||unexpected_eoi!("expr for token rule"))?;
+                        .ok_or_else(|| unexpected_eoi!("expr for token rule"))?;
                     let name = WithSpan {
                         span: name.as_span(),
                         node: (),
@@ -489,10 +486,10 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                     let mut fixpoint = primary.into_inner();
                     let name = fixpoint
                         .next()
-                        .ok_or_else(||unexpected_eoi!("name for token rule"))?;
+                        .ok_or_else(|| unexpected_eoi!("name for token rule"))?;
                     let expr = fixpoint
                         .next()
-                        .ok_or_else(||unexpected_eoi!("expr for token rule"))?;
+                        .ok_or_else(|| unexpected_eoi!("expr for token rule"))?;
                     let name = WithSpan {
                         span: name.as_span(),
                         node: (),
@@ -515,8 +512,8 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
         .map_infix(|lhs, op, rhs| {
             let lhs = lhs?;
             let rhs = rhs?;
-            let total_span =
-                Span::new(src, lhs.span.start(), rhs.span.end()).ok_or_else(||parser_logical_error!("invalid span"))?;
+            let total_span = Span::new(src, lhs.span.start(), rhs.span.end())
+                .ok_or_else(|| parser_logical_error!("invalid span"))?;
             match op.as_rule() {
                 Rule::lexical_alternative => Ok(WithSpan {
                     span: total_span,
@@ -553,8 +550,8 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
         .map_postfix(|expr, op| {
             let expr = expr?;
             let op_span = op.as_span();
-            let total_span =
-                Span::new(src, expr.span.start(), op_span.end()).ok_or_else(||unexpected_eoi!("invalid span"))?;
+            let total_span = Span::new(src, expr.span.start(), op_span.end())
+                .ok_or_else(|| unexpected_eoi!("invalid span"))?;
             match op.as_rule() {
                 Rule::lexical_plus => Ok(WithSpan {
                     span: total_span,
@@ -598,8 +595,8 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
         .map_prefix(|op, expr| {
             let expr = expr?;
             let op_span = op.as_span();
-            let total_span =
-                Span::new(src, expr.span.start(), op_span.end()).ok_or_else(||parser_logical_error!("invalid span"))?;
+            let total_span = Span::new(src, expr.span.start(), op_span.end())
+                .ok_or_else(|| parser_logical_error!("invalid span"))?;
             match op.as_rule() {
                 Rule::parser_not => Ok(WithSpan {
                     span: total_span,

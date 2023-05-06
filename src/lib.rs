@@ -1,14 +1,14 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
-use std::ops::{Range};
+use std::ops::Range;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-pub mod frontend;
-pub mod type_system;
 pub mod core_syntax;
-pub mod utilities;
+pub mod frontend;
 pub mod lexer;
+pub mod type_system;
+pub mod utilities;
 use type_system::Type;
 
 #[derive(Clone, Debug)]

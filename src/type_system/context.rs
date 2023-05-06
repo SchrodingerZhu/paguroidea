@@ -2,7 +2,7 @@ use crate::type_system::Type;
 use crate::{Token, UniqueSymbol};
 use std::borrow::Cow;
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 pub struct Context<T: Token> {
     guarded: bool,
