@@ -12,9 +12,9 @@ mod tests {
     use crate::derivative::derivative;
     use crate::normalization::normalize;
     use crate::regex_tree::*;
+    use crate::vector::{build_dfa, print_dfa, Vector};
     use std::rc::Rc;
     use RegexTree::*;
-    use crate::vector::{build_dfa, print_dfa, Vector};
 
     #[test]
     fn it_prints_basic() {
@@ -36,7 +36,7 @@ mod tests {
         let c = Rc::new(RegexTree::single('c'));
         let ba = Rc::new(Concat(b, a.clone()));
         let a_or_ba = Rc::new(Union(a, ba));
-        let a_or_ba_or_c = Rc::new(Union(a_or_ba, c));
+        let a_or_ba_or_c = Rc::new(KleeneClosure(Rc::new(Union(a_or_ba, c))));
         println!("{}", a_or_ba_or_c);
         let normalized = normalize(a_or_ba_or_c);
         println!("{}", normalized);
@@ -44,6 +44,6 @@ mod tests {
         println!("{:?}", congruence);
         println!();
         let vectorized = Vector::new([normalized].into_iter());
-        print_dfa(&build_dfa(vectorized));
+        print_dfa(&vectorized, &build_dfa(vectorized.clone()));
     }
 }

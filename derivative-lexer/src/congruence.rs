@@ -28,12 +28,14 @@ pub fn approximate_congruence_class(tree: &RegexTree) -> Vec<Intervals> {
         RegexTree::Set(x) => {
             let x = x.clone();
             match x.complement() {
-                Some(y) => if x < y {
-                    vec![x, y]
-                } else {
-                    vec![y, x]
-                },
-                None => vec![x]
+                Some(y) => {
+                    if x < y {
+                        vec![x, y]
+                    } else {
+                        vec![y, x]
+                    }
+                }
+                None => vec![x],
             }
         }
         RegexTree::Concat(r, s) => {

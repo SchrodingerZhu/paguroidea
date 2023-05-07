@@ -68,20 +68,12 @@ impl RegexTree {
             )
         }
     }
-    pub fn mangle(&self)-> String {
+    pub fn mangle(&self) -> String {
         match self {
-            RegexTree::Top => {
-                "T".to_string()
-            }
-            RegexTree::Bottom => {
-                "B".to_string()
-            }
-            RegexTree::Set(x) => {
-                x.mangle()
-            }
-            RegexTree::Epsilon => {
-                "E".to_string()
-            }
+            RegexTree::Top => "T".to_string(),
+            RegexTree::Bottom => "B".to_string(),
+            RegexTree::Set(x) => x.mangle(),
+            RegexTree::Epsilon => "E".to_string(),
             RegexTree::Concat(x, y) => {
                 let x = x.mangle();
                 let y = y.mangle();

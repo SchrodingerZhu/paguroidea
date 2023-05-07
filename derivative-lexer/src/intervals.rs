@@ -1,3 +1,5 @@
+use proc_macro2::TokenStream;
+use quote::quote;
 use smallvec::SmallVec;
 use std::fmt::{Display, Formatter};
 
@@ -78,14 +80,32 @@ impl Intervals {
         }
         format!("S{}{}", result.len(), result)
     }
+    pub fn to_tokens(&self) -> TokenStream {
+        debug_assert!(!self.0.is_empty());
+        let mut iter = self.0.iter().map(|x| {
+            let start = x.0;
+            let end = x.1;
+            if start == end {
+                quote! { #start }
+            } else {
+                quote! { #start ..= #end }
+            }
+        });
+        let first = unsafe { iter.next().unwrap_unchecked() };
+        quote! {
+            #first #(|#iter)*
+        }
+    }
     pub fn new<I>(mut data: I) -> Option<Self>
     where
         I: Iterator<Item = ClosedInterval>,
     {
-        data.next().map(|first| data.fold(Self([first].into_iter().collect()), |acc, x| {
+        data.next().map(|first| {
+            data.fold(Self([first].into_iter().collect()), |acc, x| {
                 let temp = Self([x].into_iter().collect());
                 acc.union(&temp)
-            }))
+            })
+        })
     }
     // it is okay is contains non-unicode code points; they will never be read anyway.
     pub fn complement(&self) -> Option<Self> {
@@ -207,11 +227,13 @@ mod test {
         let interval = super::ClosedInterval::new(0x1F600, 0x1F600);
         assert_eq!(format!("{}", interval), "'😀'");
     }
+
     #[test]
     fn intervals_format() {
         let intervals = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
         println!("{}", intervals);
     }
+
     #[test]
     fn union() {
         let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
@@ -224,16 +246,24 @@ mod test {
         let z = intervals!(('!', '7'), ('C', 'e')).unwrap();
         assert_eq!(intervals!(('!', '9'), ('A', 'z')).unwrap(), x.union(&z));
     }
+
     #[test]
     fn complement() {
         let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
         let y = intervals!((0, 47), (58, 64), (91, 96), (123, 0x10FFFF)).unwrap();
         assert_eq!(x.complement(), Some(y));
         let z = intervals!(('\0', '7')).unwrap();
-        assert_eq!(z.complement().unwrap(), intervals!(('8', 0x10FFFF)).unwrap());
+        assert_eq!(
+            z.complement().unwrap(),
+            intervals!(('8', 0x10FFFF)).unwrap()
+        );
         assert_eq!(x.complement().unwrap().complement().unwrap(), x);
-        assert_eq!(x.union(&x.complement().unwrap()), intervals!((0, 0x10FFFF)).unwrap());
+        assert_eq!(
+            x.union(&x.complement().unwrap()),
+            intervals!((0, 0x10FFFF)).unwrap()
+        );
     }
+
     #[test]
     fn intersection() {
         let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
