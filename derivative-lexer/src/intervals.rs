@@ -80,6 +80,14 @@ impl Intervals {
         }
         format!("S{}{}", result.len(), result)
     }
+    pub fn is_full_set(&self) -> bool {
+        if self.0.len() == 1 &&
+            let Some(x) = self.0.first() {
+            x.0 == 0 && x.1 == 0x10FFFF
+        } else {
+            false
+        }
+    }
     pub fn to_tokens(&self) -> TokenStream {
         debug_assert!(!self.0.is_empty());
         let mut iter = self.0.iter().map(|x| {

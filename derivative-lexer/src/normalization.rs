@@ -64,7 +64,13 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
                 Rc::new(RegexTree::Intersection(s, r))
             }
         }
-        RegexTree::Set(_) => tree.clone(),
+        RegexTree::Set(x) => {
+            if x.is_full_set() {
+                Rc::new(RegexTree::Top)
+            } else {
+                tree.clone()
+            }
+        }
         RegexTree::Epsilon => tree.clone(),
         RegexTree::Concat(r, s) => {
             let r = normalize(r.clone());

@@ -3,7 +3,7 @@ use crate::derivative::derivative;
 use crate::intervals::Intervals;
 use crate::normalization::normalize;
 use crate::regex_tree::RegexTree;
-use proc_macro2::Ident;
+
 use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
