@@ -8,6 +8,7 @@ use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
+use proc_macro2::TokenStream;
 
 #[derive(Hash, PartialEq, Eq, Debug, Clone, Ord, PartialOrd)]
 pub struct Vector {
@@ -29,8 +30,8 @@ impl Display for Vector {
 
 impl Vector {
     pub fn new<I>(iter: I) -> Self
-    where
-        I: Iterator<Item = Rc<RegexTree>>,
+        where
+            I: Iterator<Item=Rc<RegexTree>>,
     {
         let regex_trees = iter.collect();
         Self { regex_trees }
@@ -75,9 +76,81 @@ impl Vector {
             })
             .unwrap_or_default()
     }
-    pub fn normalize(self) -> Self {
-        let regex_trees = self.regex_trees.into_iter().map(normalize).collect();
+    pub fn normalize(&self) -> Self {
+        let regex_trees = self.regex_trees.iter().map(|x|normalize(x.clone())).collect();
         Self { regex_trees }
+    }
+    pub fn generate_dfa(&self, name: String) -> TokenStream {
+        let normalized = self.normalize();
+        let dfa = build_dfa(normalized.clone());
+        let name = format_ident!("{}", name);
+        let states = dfa
+            .keys()
+            .map(|x| x.mangle())
+            .map(|x| format_ident!("{}", x));
+        let initial = format_ident!("{}", normalized.mangle());
+        let actions = dfa.iter().map(|(state, transitions)| {
+            let state_enum = format_ident!("{}", state.mangle());
+            if state.is_rejecting_state() {
+                quote! {
+                States::#state_enum => return longest_match,
+            }
+            } else {
+                let transitions = transitions.iter().map(|x| {
+                    let condition = x.0.to_tokens();
+                    let target = format_ident!("{}", x.1.mangle());
+                    quote!(#condition => States::#target)
+                });
+                match state.accepting_state() {
+                    Some(x) => quote! {
+                    States::#state_enum => {
+                        longest_match.replace((#x, idx));
+                        state = match c as u32 {
+                            #(#transitions,)*
+                            _ => unsafe { ::std::hint::unreachable_unchecked() }
+                        }
+                    },
+                },
+                    None => quote! {
+                    States::#state_enum => {
+                        state = match c as u32 {
+                             #(#transitions,)*
+                            _ => unsafe { ::std::hint::unreachable_unchecked() }
+                        };
+                    },
+                },
+                }
+            }
+        });
+        let accepting_actions = dfa.iter().filter_map(|(state, _)| {
+            state.accepting_state().map(|rule| {
+                let label = format_ident!("{}", state.mangle());
+                quote! {
+                States::#label => {
+                    longest_match.replace((#rule, input.len()));
+                }
+            }
+            })
+        });
+        quote! {
+          fn #name(input: &str) -> Option<(usize, usize)> {
+              enum States {
+                    #(#states,)*
+              };
+              let mut state = States::#initial;
+              let mut longest_match = None;
+              for (idx, c) in input.chars().enumerate() {
+                  match state {
+                    #(#actions)*
+                  };
+              }
+              match state {
+                  #(#accepting_actions,)*
+                  _ => ()
+              }
+              longest_match
+          }
+        }
     }
 }
 
@@ -106,87 +179,10 @@ fn explore_dfa_node(dfa: &mut HashMap<Vector, Vec<(Intervals, Vector)>>, state: 
     }
 }
 
-pub fn build_dfa(initial_state: Vector) -> HashMap<Vector, Vec<(Intervals, Vector)>> {
+fn build_dfa(initial_state: Vector) -> HashMap<Vector, Vec<(Intervals, Vector)>> {
     let mut dfa = HashMap::new();
     dfa.insert(initial_state.clone(), vec![]);
     explore_dfa_node(&mut dfa, initial_state);
     dfa
 }
 
-pub fn print_dfa(initial: &Vector, dfa: &HashMap<Vector, Vec<(Intervals, Vector)>>) {
-    let states = dfa
-        .keys()
-        .map(|x| x.mangle())
-        .map(|x| format_ident!("{}", x));
-    let initial = format_ident!("{}", initial.mangle());
-    let actions = dfa.iter().map(|(state, transitions)| {
-        let state_enum = format_ident!("{}", state.mangle());
-        if state.is_rejecting_state() {
-            quote! {
-                States::#state_enum => return longest_match,
-            }
-        } else {
-            let transitions = transitions.iter().map(|x| {
-                let condition = x.0.to_tokens();
-                let target = format_ident!("{}", x.1.mangle());
-                quote!(#condition => States::#target)
-            });
-            match state.accepting_state() {
-                Some(x) => quote! {
-                    States::#state_enum => {
-                        longest_match.replace((#x, idx));
-                        state = match c as u32 {
-                            #(#transitions,)*
-                            _ => unsafe { ::std::hint::unreachable_unchecked() }
-                        }
-                    },
-                },
-                None => quote! {
-                    States::#state_enum => {
-                        state = match c as u32 {
-                             #(#transitions,)*
-                            _ => unsafe { ::std::hint::unreachable_unchecked() }
-                        };
-                    },
-                },
-            }
-        }
-    });
-    let accepting_actions = dfa.iter().filter_map(|(state, _)| {
-        state.accepting_state().map(|rule| {
-            let label = format_ident!("{}", state.mangle());
-            quote! {
-                States::#label => {
-                    longest_match.replace((#rule, input.len()));
-                }
-            }
-        })
-    });
-    let tokens = quote! {
-      fn lexer(input: &str) -> Option<(usize, usize)> {
-          enum States {
-                #(#states,)*
-          };
-          let mut state = States::#initial;
-          let mut longest_match = None;
-          for (idx, c) in input.chars().enumerate() {
-              match state {
-                #(#actions)*
-              };
-          }
-          match state {
-              #(#accepting_actions,)*
-              _ => ()
-          }
-          longest_match
-      }
-    };
-    for (state, transitions) in dfa {
-        println!("State: {} [{}]", state, state.mangle());
-        for (transition, next_state) in transitions {
-            println!("Transition: {} -> {}", transition, next_state);
-        }
-        println!();
-    }
-    println!("{:#}", tokens);
-}

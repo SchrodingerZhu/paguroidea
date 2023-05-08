@@ -12,7 +12,7 @@ mod tests {
     use crate::derivative::derivative;
     use crate::normalization::normalize;
     use crate::regex_tree::*;
-    use crate::vector::{build_dfa, print_dfa, Vector};
+    use crate::vector::Vector;
     use std::rc::Rc;
     use RegexTree::*;
 
@@ -44,6 +44,6 @@ mod tests {
         println!("{:?}", congruence);
         println!();
         let vectorized = Vector::new([normalized].into_iter());
-        print_dfa(&vectorized, &build_dfa(vectorized.clone()));
+        println!("{}", vectorized.generate_dfa("test".to_string()));
     }
 }
