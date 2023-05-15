@@ -16,3 +16,4 @@ anyhow = { version = "1", features = [ "backtrace"] }
 memchr = "2"
 regex = "1"
 regex-syntax = "0.7"
+derivative-lexer = { path = "../derivative-lexer"}

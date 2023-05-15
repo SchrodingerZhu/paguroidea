@@ -4,11 +4,11 @@ use crate::intervals::Intervals;
 use crate::normalization::normalize;
 use crate::regex_tree::RegexTree;
 
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
-use proc_macro2::TokenStream;
 
 #[derive(Hash, PartialEq, Eq, Debug, Clone, Ord, PartialOrd)]
 pub struct Vector {
@@ -30,8 +30,8 @@ impl Display for Vector {
 
 impl Vector {
     pub fn new<I>(iter: I) -> Self
-        where
-            I: Iterator<Item=Rc<RegexTree>>,
+    where
+        I: Iterator<Item = Rc<RegexTree>>,
     {
         let regex_trees = iter.collect();
         Self { regex_trees }
@@ -77,7 +77,11 @@ impl Vector {
             .unwrap_or_default()
     }
     pub fn normalize(&self) -> Self {
-        let regex_trees = self.regex_trees.iter().map(|x|normalize(x.clone())).collect();
+        let regex_trees = self
+            .regex_trees
+            .iter()
+            .map(|x| normalize(x.clone()))
+            .collect();
         Self { regex_trees }
     }
     pub fn generate_dfa(&self, name: String) -> TokenStream {
@@ -93,8 +97,8 @@ impl Vector {
             let state_enum = format_ident!("{}", state.mangle());
             if state.is_rejecting_state() {
                 quote! {
-                States::#state_enum => return longest_match,
-            }
+                    States::#state_enum => return longest_match,
+                }
             } else {
                 let transitions = transitions.iter().map(|x| {
                     let condition = x.0.to_tokens();
@@ -103,22 +107,22 @@ impl Vector {
                 });
                 match state.accepting_state() {
                     Some(x) => quote! {
-                    States::#state_enum => {
-                        longest_match.replace((#x, idx));
-                        state = match c as u32 {
-                            #(#transitions,)*
-                            _ => unsafe { ::std::hint::unreachable_unchecked() }
-                        }
+                        States::#state_enum => {
+                            longest_match.replace((#x, idx));
+                            state = match c as u32 {
+                                #(#transitions,)*
+                                _ => unsafe { ::std::hint::unreachable_unchecked() }
+                            }
+                        },
                     },
-                },
                     None => quote! {
-                    States::#state_enum => {
-                        state = match c as u32 {
-                             #(#transitions,)*
-                            _ => unsafe { ::std::hint::unreachable_unchecked() }
-                        };
+                        States::#state_enum => {
+                            state = match c as u32 {
+                                 #(#transitions,)*
+                                _ => unsafe { ::std::hint::unreachable_unchecked() }
+                            };
+                        },
                     },
-                },
                 }
             }
         });
@@ -126,10 +130,10 @@ impl Vector {
             state.accepting_state().map(|rule| {
                 let label = format_ident!("{}", state.mangle());
                 quote! {
-                States::#label => {
-                    longest_match.replace((#rule, input.len()));
+                    States::#label => {
+                        longest_match.replace((#rule, input.len()));
+                    }
                 }
-            }
             })
         });
         quote! {
@@ -185,4 +189,3 @@ fn build_dfa(initial_state: Vector) -> HashMap<Vector, Vec<(Intervals, Vector)>>
     explore_dfa_node(&mut dfa, initial_state);
     dfa
 }
-

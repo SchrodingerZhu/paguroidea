@@ -3,7 +3,9 @@ use pest::iterators::Pair;
 use pest::pratt_parser::{Op, PrattParser};
 use pest::Span;
 use std::borrow::Cow;
+use std::fmt::Display;
 use thiserror::Error;
+pub mod lexical;
 
 macro_rules! unexpected_eoi {
     ($expectation:literal) => {
@@ -153,12 +155,17 @@ fn unescape(string: &str) -> Option<String> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WithSpan<'a, T> {
     pub span: Span<'a>,
     pub node: T,
 }
 
+impl<'a, T: Display> Display for WithSpan<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.node.fmt(f)
+    }
+}
 pub type SpanBox<'a, T> = Box<WithSpan<'a, T>>;
 
 #[derive(Debug)]
@@ -339,13 +346,13 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                         .next()
                         .ok_or_else(|| unexpected_eoi!("end character for range"))?;
                     let start = unescape_qouted(start.as_str())
-                        .ok_or_else(|| format_error!(span.clone(), "failed to unescape character"))?
+                        .ok_or_else(|| format_error!(span, "failed to unescape character"))?
                         .parse()
-                        .map_err(|e| format_error!(span.clone(), "{}", e))?;
+                        .map_err(|e| format_error!(span, "{}", e))?;
                     let end = unescape_qouted(end.as_str())
-                        .ok_or_else(|| format_error!(span.clone(), "failed to unescape character"))?
+                        .ok_or_else(|| format_error!(span, "failed to unescape character"))?
                         .parse()
-                        .map_err(|e| format_error!(span.clone(), "{}", e))?;
+                        .map_err(|e| format_error!(span, "{}", e))?;
                     Ok(WithSpan {
                         span,
                         node: SurfaceSyntaxTree::Range { start, end },
@@ -353,7 +360,7 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                 }
                 Rule::string => {
                     let value = unescape_qouted(primary.as_str())
-                        .ok_or_else(|| format_error!(span.clone(), "failed to unescape string"))?;
+                        .ok_or_else(|| format_error!(span, "failed to unescape string"))?;
                     Ok(WithSpan {
                         span,
                         node: SurfaceSyntaxTree::String(value),
@@ -385,9 +392,9 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                 }
                 Rule::character => {
                     let character = unescape_qouted(primary.as_str())
-                        .ok_or_else(|| format_error!(span.clone(), "failed to unescape character"))?
+                        .ok_or_else(|| format_error!(span, "failed to unescape character"))?
                         .parse()
-                        .map_err(|e| format_error!(span.clone(), "{}", e))?;
+                        .map_err(|e| format_error!(span, "{}", e))?;
                     Ok(WithSpan {
                         span,
                         node: SurfaceSyntaxTree::Char {
@@ -614,6 +621,8 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
 mod test {
     use pest::Parser;
 
+    use crate::{frontend::lexical::LexerDatabase, unreachable_branch};
+
     const TEST: &str = include_str!("example.pag");
 
     #[test]
@@ -621,7 +630,16 @@ mod test {
         match super::GrammarParser::parse(super::Rule::grammar, TEST) {
             Ok(pairs) => {
                 let tree = super::parse_surface_syntax(pairs, &super::PRATT_PARSER, TEST).unwrap();
-                println!("{:#?}", tree)
+                match &tree.node {
+                    crate::frontend::SurfaceSyntaxTree::Grammar { lexer, .. } => {
+                        let database = LexerDatabase::new(lexer).unwrap();
+                        for (i, rule) in database.entries {
+                            println!("{i} ::= {}, active = {}", rule.rule, rule.active)
+                        }
+                    }
+                    _ => unreachable_branch(),
+                }
+                //println!("{:#?}", tree)
             }
             Err(e) => panic!("{}", e),
         }
