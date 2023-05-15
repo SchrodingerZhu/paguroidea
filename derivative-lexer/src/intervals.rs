@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use smallvec::SmallVec;
-use std::fmt::{Display, Formatter};
+use std::{fmt::{Display, Formatter}, write};
 
 // A closed interval of u32s.
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Copy, Clone)]
@@ -208,13 +208,20 @@ impl Intervals {
 impl Display for Intervals {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut iter = self.0.iter();
+        if self.0.len() > 1 {
+            write!(f, "[")?;
+        }
         if let Some(first) = iter.next() {
             write!(f, "{}", first)?;
             for i in iter {
                 write!(f, " | {}", i)?;
             }
         }
-        Ok(())
+        if self.0.len() > 1 {
+            write!(f, "]")
+        } else {
+            Ok(())
+        }
     }
 }
 
