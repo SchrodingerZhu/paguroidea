@@ -29,6 +29,21 @@ mod tests {
         println!("{}", normalized);
         println!("{:?}", approximate_congruence_class(&normalized));
     }
+
+    #[test]
+
+    fn renormalize_tests() {
+        // concat
+        let a = Rc::new(RegexTree::single('a'));
+        let b = Rc::new(RegexTree::single('b'));
+        let concat = Rc::new(Concat(a.clone(), b.clone()));
+        let normalized = normalize(concat.clone());
+        assert!(Rc::ptr_eq(&concat, &normalized));
+        // kleene closure
+        let kleene = Rc::new(KleeneClosure(a.clone()));
+        let normalized = normalize(kleene.clone());
+        assert!(Rc::ptr_eq(&kleene, &normalized));
+    }
     #[test]
     fn approximate_congruence_class_test() {
         let a = Rc::new(RegexTree::single('a'));
