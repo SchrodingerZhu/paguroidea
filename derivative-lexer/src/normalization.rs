@@ -73,38 +73,47 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
         }
         RegexTree::Epsilon => tree.clone(),
         RegexTree::Concat(r, s) => {
-            let r = normalize(r.clone());
-            let s = normalize(s.clone());
-            // empty . r = empty
-            if matches!(r.as_ref(), RegexTree::Bottom) {
-                return r;
+            let nr = normalize(r.clone());
+            let ns = normalize(s.clone());
+            // empty . s = empty
+            if matches!(nr.as_ref(), RegexTree::Bottom) {
+                return nr;
             }
-            if matches!(s.as_ref(), RegexTree::Bottom) {
-                return s;
+            // r . empty = empty
+            if matches!(ns.as_ref(), RegexTree::Bottom) {
+                return ns;
             }
             // r. epsilon = r
-            if matches!(s.as_ref(), RegexTree::Epsilon) {
-                return r;
+            if matches!(ns.as_ref(), RegexTree::Epsilon) {
+                return nr;
             }
             // epsilon . s = s
-            if matches!(r.as_ref(), RegexTree::Epsilon) {
-                return s;
+            if matches!(nr.as_ref(), RegexTree::Epsilon) {
+                return ns;
             }
-            if let RegexTree::Concat(r1, r2) = r.as_ref() {
+            if let RegexTree::Concat(r1, r2) = nr.as_ref() {
                 return normalize(Rc::new(RegexTree::Concat(
                     r1.clone(),
-                    Rc::new(RegexTree::Concat(r2.clone(), s)),
+                    Rc::new(RegexTree::Concat(r2.clone(), ns)),
                 )));
             }
-            Rc::new(RegexTree::Concat(r, s))
+            if Rc::ptr_eq(&nr, &r) && Rc::ptr_eq(&ns, &s) {
+                return tree;
+            }
+            Rc::new(RegexTree::Concat(nr, ns))
         }
         RegexTree::KleeneClosure(r) => {
-            let r = normalize(r.clone());
-            match r.as_ref() {
-                RegexTree::KleeneClosure(_) => r.clone(),
+            let nr = normalize(r.clone());
+            match nr.as_ref() {
+                RegexTree::KleeneClosure(_) => nr.clone(),
                 RegexTree::Bottom => Rc::new(RegexTree::Epsilon),
                 RegexTree::Epsilon => Rc::new(RegexTree::Epsilon),
-                _ => Rc::new(RegexTree::KleeneClosure(r)),
+                _ => {
+                    if Rc::ptr_eq(r, &nr) {
+                        return tree;
+                    }
+                    Rc::new(RegexTree::KleeneClosure(nr))
+                }
             }
         }
         RegexTree::Union(r, s) => {
