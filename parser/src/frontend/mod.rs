@@ -6,6 +6,31 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use thiserror::Error;
 pub mod lexical;
+pub mod syntax;
+
+#[derive(thiserror::Error, Debug, Clone)]
+pub enum Error<'a> {
+    #[error("internal logic error: {0}")]
+    InternalLogicalError(Cow<'a, str>),
+    #[error("multiple definition for {0}")]
+    MultipleDefinition(&'a str, pest::Span<'a>),
+    #[error("lexical reference {0} is not allowed within lexical definitions")]
+    InvalidLexicalReference(&'a str),
+    #[error("lexical {0} is undefined")]
+    UndefinedLexicalReference(&'a str),
+    #[error("parser rule {0} is undefined")]
+    UndefinedParserRuleReference(&'a str),
+}
+
+#[macro_export]
+macro_rules! span_errors {
+    ($ekind:ident, $span:expr, $($params:expr,)*) => {
+        vec![WithSpan {
+            span: $span,
+            node: Error::$ekind ($($params,)*)
+        }]
+    };
+}
 
 macro_rules! unexpected_eoi {
     ($expectation:literal) => {
@@ -619,9 +644,13 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
 
 #[cfg(test)]
 mod test {
+    use std::println;
+
     use pest::Parser;
 
-    use crate::{frontend::lexical::LexerDatabase, unreachable_branch};
+    use crate::{frontend::lexical::LexerDatabase, unreachable_branch, core_syntax::TermArena};
+
+    use super::syntax::construct_parser;
 
     const TEST: &str = include_str!("example.pag");
 
@@ -631,11 +660,18 @@ mod test {
             Ok(pairs) => {
                 let tree = super::parse_surface_syntax(pairs, &super::PRATT_PARSER, TEST).unwrap();
                 match &tree.node {
-                    crate::frontend::SurfaceSyntaxTree::Grammar { lexer, .. } => {
+                    crate::frontend::SurfaceSyntaxTree::Grammar { lexer, parser } => {
                         let database = LexerDatabase::new(lexer).unwrap();
-                        for (i, rule) in database.entries {
+                        for (i, rule) in database.entries.iter() {
                             println!("{i} ::= {}, active = {}", rule.rule, rule.active)
                         }
+                        println!("----");
+                        let arena = TermArena::new();
+                        let parser = construct_parser(&arena, database, parser).unwrap();
+                        for (i, rule) in parser.bindings.iter() {
+                            println!("{i} ::= {}, active = {}", rule.term, rule.active)
+                        }
+                        assert!(parser.type_check().is_empty());
                     }
                     _ => unreachable_branch(),
                 }

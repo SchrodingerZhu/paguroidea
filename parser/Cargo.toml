@@ -17,3 +17,4 @@ memchr = "2"
 regex = "1"
 regex-syntax = "0.7"
 derivative-lexer = { path = "../derivative-lexer"}
+typed-arena = "2.0.2"

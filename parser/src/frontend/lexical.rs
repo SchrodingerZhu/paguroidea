@@ -1,22 +1,13 @@
-use std::{borrow::Cow, collections::HashMap, rc::Rc};
+use std::{borrow::Cow, collections::HashMap, hash::Hash, rc::Rc};
 
-use derivative_lexer::{regex_tree::RegexTree, normalization::normalize};
+use derivative_lexer::{normalization::normalize, regex_tree::RegexTree};
 
-use crate::unreachable_branch;
+use crate::span_errors;
+use crate::{unreachable_branch, utilities::Symbol};
 
 use super::{SurfaceSyntaxTree, WithSpan};
 
-#[derive(thiserror::Error, Debug, Clone)]
-pub enum Error<'a> {
-    #[error("internal logic error: {0}")]
-    InternalLogicalError(Cow<'a, str>),
-    #[error("multiple definition for {0}")]
-    MultipleDefinition(&'a str, pest::Span<'a>),
-    #[error("lexical reference {0} is not allowed within lexical definitions")]
-    InvalidLexicalReference(&'a str),
-    #[error("lexical reference {0} is undefined")]
-    UndefinedLexicalReference(&'a str),
-}
+use super::Error;
 
 type SpanRegexTree<'a> = WithSpan<'a, Rc<RegexTree>>;
 
@@ -26,7 +17,8 @@ pub struct LexerRule<'a> {
 }
 
 pub struct LexerDatabase<'a> {
-    pub entries: HashMap<&'a str, LexerRule<'a>>,
+    pub symbol_table: HashMap<&'a str, Symbol<'a>>,
+    pub entries: HashMap<Symbol<'a>, LexerRule<'a>>,
 }
 
 impl<'a> LexerDatabase<'a> {
@@ -40,15 +32,6 @@ impl<'a> LexerDatabase<'a> {
 struct TranslationContext<'a> {
     definitions: HashMap<&'a str, SpanRegexTree<'a>>,
     database: LexerDatabase<'a>,
-}
-
-macro_rules! span_errors {
-    ($ekind:ident, $span:expr, $($params:expr)*) => {
-        vec![WithSpan {
-            span: $span,
-            node: Error::$ekind ($($params)*)
-        }]
-    };
 }
 
 fn construct_regex_tree<'a, F>(
@@ -138,7 +121,7 @@ fn construct_definition<'a>(
         Err(span_errors!(
             InvalidLexicalReference,
             name.span,
-            name.span.as_str()
+            name.span.as_str(),
         ))
     }
     match &sst.node {
@@ -160,13 +143,13 @@ fn construct_definition<'a>(
 fn construct_lexical_rule<'a>(
     definitions: &HashMap<&'a str, SpanRegexTree<'a>>,
     sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-) -> Result<(&'a str, SpanRegexTree<'a>), Vec<WithSpan<'a, Error<'a>>>> {
+) -> Result<(Symbol<'a>, SpanRegexTree<'a>), Vec<WithSpan<'a, Error<'a>>>> {
     let reference_handler = |name: WithSpan<'a, ()>| match definitions.get(name.span.as_str()) {
         Some(x) => Ok(x.node.clone()),
         _ => Err(span_errors!(
             UndefinedLexicalReference,
             name.span,
-            name.span.as_str()
+            name.span.as_str(),
         )),
     };
     match &sst.node {
@@ -174,7 +157,7 @@ fn construct_lexical_rule<'a>(
             let name = name.span.as_str();
             let tree = construct_regex_tree(expr, &reference_handler)?;
             Ok((
-                name,
+                Symbol::new(name),
                 WithSpan {
                     span: expr.span,
                     node: normalize(tree),
@@ -191,6 +174,7 @@ impl<'a> TranslationContext<'a> {
             definitions: HashMap::new(),
             database: LexerDatabase {
                 entries: HashMap::new(),
+                symbol_table: HashMap::new(),
             },
         }
     }
@@ -224,6 +208,7 @@ impl<'a> TranslationContext<'a> {
                         }
                     }
                 }
+
                 if error.is_empty() {
                     Ok(())
                 } else {
@@ -233,7 +218,7 @@ impl<'a> TranslationContext<'a> {
             _ => Err(span_errors!(
                 InternalLogicalError,
                 sst.span,
-                "populating definitions from a non-lexer node".into()
+                "populating definitions from a non-lexer node".into(),
             )),
         }
     }
@@ -261,16 +246,23 @@ impl<'a> TranslationContext<'a> {
                         }
                         Ok((k, rule)) => {
                             let current_span = rule.span;
-                            match ctx
-                                .database
-                                .entries
-                                .insert(k, LexerRule { active: i.0, rule })
-                            {
-                                None => (),
+                            match ctx.database.symbol_table.insert(k.name(), k) {
+                                None => {
+                                    ctx.database
+                                        .entries
+                                        .insert(k, LexerRule { active: i.0, rule });
+                                }
                                 Some(x) => {
                                     errs.push(WithSpan {
                                         span: current_span,
-                                        node: Error::MultipleDefinition(k, x.rule.span),
+                                        node: Error::MultipleDefinition(k.name(), unsafe {
+                                            ctx.database
+                                                .entries
+                                                .get(&x)
+                                                .unwrap_unchecked()
+                                                .rule
+                                                .span
+                                        }),
                                     });
                                 }
                             }
@@ -286,7 +278,7 @@ impl<'a> TranslationContext<'a> {
             _ => Err(span_errors!(
                 InternalLogicalError,
                 sst.span,
-                "creating lexer rule database from a non-lexer node".into()
+                "creating lexer rule database from a non-lexer node".into(),
             )),
         }
     }

@@ -37,7 +37,7 @@ impl Display for RegexTree {
                 write!(f, "({} ~ {})", x, y)
             }
             RegexTree::KleeneClosure(x) => {
-                write!(f, "({})*", x)
+                write!(f, "{}*", x)
             }
             RegexTree::Union(x, y) => {
                 write!(f, "({} ∪ {})", x, y)

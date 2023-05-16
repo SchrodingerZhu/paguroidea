@@ -10,6 +10,8 @@ pub mod lexer;
 pub mod type_system;
 pub mod utilities;
 use type_system::Type;
+mod type_system2;
+mod nf;
 
 #[derive(Clone, Debug)]
 pub struct UniqueSymbol(Rc<String>);
