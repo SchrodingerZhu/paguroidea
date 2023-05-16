@@ -68,10 +68,10 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
             if x.is_full_set() {
                 Rc::new(RegexTree::Top)
             } else {
-                tree.clone()
+                tree
             }
         }
-        RegexTree::Epsilon => tree.clone(),
+        RegexTree::Epsilon => tree,
         RegexTree::Concat(r, s) => {
             let nr = normalize(r.clone());
             let ns = normalize(s.clone());
@@ -105,7 +105,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
         RegexTree::KleeneClosure(r) => {
             let nr = normalize(r.clone());
             match nr.as_ref() {
-                RegexTree::KleeneClosure(_) => nr.clone(),
+                RegexTree::KleeneClosure(_) => nr,
                 RegexTree::Bottom => Rc::new(RegexTree::Epsilon),
                 RegexTree::Epsilon => Rc::new(RegexTree::Epsilon),
                 _ => {
@@ -160,7 +160,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
                 Rc::new(RegexTree::Union(s, r))
             }
         }
-        RegexTree::Top => tree.clone(),
-        RegexTree::Bottom => tree.clone(),
+        RegexTree::Top => tree,
+        RegexTree::Bottom => tree,
     }
 }
