@@ -14,7 +14,8 @@ lazy_static = "1"
 error-stack = "0.3"
 anyhow = { version = "1", features = [ "backtrace"] }
 memchr = "2"
-regex = "1"
-regex-syntax = "0.7"
 derivative-lexer = { path = "../derivative-lexer"}
 typed-arena = "2.0.2"
+quote = "1.0.26"
+syn = "2.0"
+proc-macro2 = "1.0"
