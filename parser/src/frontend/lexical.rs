@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, hash::Hash, rc::Rc};
+use std::{collections::HashMap, rc::Rc};
 
 use derivative_lexer::{normalization::normalize, regex_tree::RegexTree};
 

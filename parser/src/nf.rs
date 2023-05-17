@@ -3,8 +3,6 @@ use std::{
     fmt::Display,
     matches,
     num::NonZeroUsize,
-    sync::atomic::{AtomicUsize, Ordering},
-    todo,
 };
 
 use smallvec::SmallVec;
@@ -50,7 +48,7 @@ impl<'src> TagAssigner<'src> {
                     version: Some(next),
                 }
             }
-            Entry::Vacant(mut x) => {
+            Entry::Vacant(x) => {
                 x.insert(NonZeroUsize::MIN);
                 Tag {
                     symbol,

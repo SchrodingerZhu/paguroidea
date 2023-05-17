@@ -41,7 +41,7 @@ impl<'src> TypeContext<'src> {
     where
         F: FnOnce(&mut Self) -> R,
     {
-        let backup = self.gamma.insert(sym.clone(), r#type);
+        let backup = self.gamma.insert(sym, r#type);
         let result = f(self);
         if let Some(backup) = backup {
             self.gamma.insert(sym, backup);

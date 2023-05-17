@@ -4,7 +4,7 @@ use crate::unreachable_branch;
 use crate::utilities::Symbol;
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::{todo, vec};
+use std::{vec};
 
 use crate::type_system2::context::TypeContext;
 use pest::Span;
@@ -206,13 +206,13 @@ fn type_check_impl<'src, 'a>(
         Term::Fix(var, body) => {
             let r#type = Type::fixpoint(|x| {
                 typing_ctx
-                    .with(var.clone(), x.clone(), |ctx| {
+                    .with(*var, x.clone(), |ctx| {
                         type_check_impl(ctx, binding_ctx, body)
                     })
                     .0
             });
             if r#type.guarded {
-                typing_ctx.with(var.clone(), r#type.clone(), |ctx| {
+                typing_ctx.with(*var, r#type.clone(), |ctx| {
                     type_check_impl(ctx, binding_ctx, body)
                 })
             } else {
