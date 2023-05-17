@@ -4,7 +4,7 @@ use crate::unreachable_branch;
 use crate::utilities::Symbol;
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::{vec};
+use std::vec;
 
 use crate::type_system2::context::TypeContext;
 use pest::Span;

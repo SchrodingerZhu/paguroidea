@@ -10,6 +10,7 @@ pub mod lexer;
 pub mod type_system;
 pub mod utilities;
 use type_system::Type;
+mod fusion;
 mod nf;
 mod type_system2;
 

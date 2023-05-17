@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    fmt::Display,
-    matches,
-    num::NonZeroUsize,
-};
+use std::{collections::HashMap, fmt::Display, matches, num::NonZeroUsize};
 
 use smallvec::SmallVec;
 use typed_arena::Arena;
@@ -105,7 +100,7 @@ impl<'src> Display for NormalForm<'src> {
     }
 }
 pub struct NormalForms<'src, 'a> {
-    entries: HashMap<Tag<'src>, SmallVec<[&'a NormalForm<'src>; 4]>>,
+    pub entries: HashMap<Tag<'src>, SmallVec<[&'a NormalForm<'src>; 4]>>,
 }
 
 impl<'src, 'a> NormalForms<'src, 'a> {

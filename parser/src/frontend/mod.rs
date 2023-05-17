@@ -652,6 +652,7 @@ mod test {
     use crate::{
         core_syntax::TermArena,
         frontend::lexical::LexerDatabase,
+        fusion::fusion_lexer,
         nf::{fully_normalize, semi_normalize, NormalForms, Tag, TagAssigner},
         unreachable_branch,
     };
@@ -692,9 +693,15 @@ mod test {
                             )
                         }
                         println!("{}", nfs);
-                        println!("----"); // something is wrong here
+                        println!("----");
                         fully_normalize(&nf_arena, &mut nfs);
                         println!("{}", nfs);
+                        println!("----");
+                        for (tag, rule) in nfs.entries.iter() {
+                            let vector = fusion_lexer(rule.as_slice(), &parser.lexer_database);
+                            println!("{tag} ==> {}", vector);
+                            println!("{}", vector.generate_dfa("lexer".to_string()));
+                        }
                     }
                     _ => unreachable_branch(),
                 }
