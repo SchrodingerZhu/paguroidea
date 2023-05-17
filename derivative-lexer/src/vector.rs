@@ -21,6 +21,18 @@ lazy_static! {
     pub static ref COUNTER: Mutex<usize> = Mutex::new(0);
 }
 
+
+#[macro_export]
+macro_rules! beautify_mangle {
+    ($mangle:expr) => {
+       if let Some(res) = MANGLE_MAP.lock().unwrap().get(&$mangle) {
+            format_ident!("{}", res)
+        } else {
+            unreachable!("state not in mangle map")
+        }
+    };
+}
+
 #[derive(Hash, PartialEq, Eq, Debug, Clone, Ord, PartialOrd)]
 pub struct Vector {
     regex_trees: Vec<Rc<RegexTree>>,
@@ -101,29 +113,10 @@ impl Vector {
         let name = format_ident!("{}", name);
         let states = dfa
             .keys()
-            .map(|x| {
-                if let Some(res) = MANGLE_MAP.lock().unwrap().get(&x.mangle()) {
-                    format_ident!("{}", res)
-                } else {
-                    unreachable!("state not in mangle map")
-                }
-            });
-            //.map(|x| format_ident!("{}", x));
-        let initial = {
-            if let Some(res) = MANGLE_MAP.lock().unwrap().get(&normalized.mangle()) {
-                format_ident!("{}", res)
-            } else {
-                unreachable!("state not in mangle map")
-            }
-        };
+            .map(|x| beautify_mangle!(x.mangle()));
+        let initial = beautify_mangle!(normalized.mangle());
         let actions = dfa.iter().map(|(state, transitions)| {
-            let state_enum = {
-                if let Some(res) = MANGLE_MAP.lock().unwrap().get(&state.mangle()) {
-                    format_ident!("{}", res)
-                } else {
-                    unreachable!("state not in mangle map")
-                }
-        };
+            let state_enum = beautify_mangle!(state.mangle());
             if state.is_rejecting_state() {
                 quote! {
                     States::#state_enum => return longest_match,
@@ -131,13 +124,7 @@ impl Vector {
             } else {
                 let transitions = transitions.iter().map(|x| {
                     let condition = x.0.to_tokens();
-                    let target = {
-                        if let Some(res) = MANGLE_MAP.lock().unwrap().get(&x.1.mangle()) {
-                            format_ident!("{}", res)
-                        } else {
-                            unreachable!("state not in mangle map")
-                        }
-                };
+                    let target = beautify_mangle!(x.1.mangle());
                     quote!(#condition => States::#target)
                 });
                 match state.accepting_state() {
