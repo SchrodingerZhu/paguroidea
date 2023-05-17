@@ -4,11 +4,22 @@ use crate::intervals::Intervals;
 use crate::normalization::normalize;
 use crate::regex_tree::RegexTree;
 
+use lazy_static::lazy_static;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
+use std::sync::Mutex;
+
+
+lazy_static! {
+    static ref MANGLE_MAP: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
+}
+
+lazy_static! {
+    pub static ref COUNTER: Mutex<usize> = Mutex::new(0);
+}
 
 #[derive(Hash, PartialEq, Eq, Debug, Clone, Ord, PartialOrd)]
 pub struct Vector {
@@ -90,11 +101,29 @@ impl Vector {
         let name = format_ident!("{}", name);
         let states = dfa
             .keys()
-            .map(|x| x.mangle())
-            .map(|x| format_ident!("{}", x));
-        let initial = format_ident!("{}", normalized.mangle());
+            .map(|x| {
+                if let Some(res) = MANGLE_MAP.lock().unwrap().get(&x.mangle()) {
+                    format_ident!("{}", res)
+                } else {
+                    unreachable!("state not in mangle map")
+                }
+            });
+            //.map(|x| format_ident!("{}", x));
+        let initial = {
+            if let Some(res) = MANGLE_MAP.lock().unwrap().get(&normalized.mangle()) {
+                format_ident!("{}", res)
+            } else {
+                unreachable!("state not in mangle map")
+            }
+        };
         let actions = dfa.iter().map(|(state, transitions)| {
-            let state_enum = format_ident!("{}", state.mangle());
+            let state_enum = {
+                if let Some(res) = MANGLE_MAP.lock().unwrap().get(&state.mangle()) {
+                    format_ident!("{}", res)
+                } else {
+                    unreachable!("state not in mangle map")
+                }
+        };
             if state.is_rejecting_state() {
                 quote! {
                     States::#state_enum => return longest_match,
@@ -102,7 +131,13 @@ impl Vector {
             } else {
                 let transitions = transitions.iter().map(|x| {
                     let condition = x.0.to_tokens();
-                    let target = format_ident!("{}", x.1.mangle());
+                    let target = {
+                        if let Some(res) = MANGLE_MAP.lock().unwrap().get(&x.1.mangle()) {
+                            format_ident!("{}", res)
+                        } else {
+                            unreachable!("state not in mangle map")
+                        }
+                };
                     quote!(#condition => States::#target)
                 });
                 match state.accepting_state() {
@@ -128,7 +163,13 @@ impl Vector {
         });
         let accepting_actions = dfa.iter().filter_map(|(state, _)| {
             state.accepting_state().map(|rule| {
-                let label = format_ident!("{}", state.mangle());
+                let label = {
+                    if let Some(res) = MANGLE_MAP.lock().unwrap().get(&state.mangle()) {
+                        format_ident!("{}", res)
+                    } else {
+                        unreachable!("state not in mangle map")
+                    }
+            };
                 quote! {
                     States::#label => {
                         longest_match.replace((#rule, input.len()));
@@ -172,6 +213,8 @@ fn make_dfa_transition(
     }
     if !dfa.contains_key(&derivative) {
         dfa.insert(derivative.clone(), vec![]);
+        MANGLE_MAP.lock().unwrap().insert(derivative.mangle(), format!("S{}",*COUNTER.lock().unwrap()));
+        *COUNTER.lock().unwrap() += 1;
         explore_dfa_node(dfa, derivative)
     }
 }
@@ -185,6 +228,8 @@ fn explore_dfa_node(dfa: &mut HashMap<Vector, Vec<(Intervals, Vector)>>, state: 
 
 fn build_dfa(initial_state: Vector) -> HashMap<Vector, Vec<(Intervals, Vector)>> {
     let mut dfa = HashMap::new();
+    MANGLE_MAP.lock().unwrap().insert(initial_state.mangle(), format!("S{}",*COUNTER.lock().unwrap()));
+    *COUNTER.lock().unwrap() += 1;
     dfa.insert(initial_state.clone(), vec![]);
     explore_dfa_node(&mut dfa, initial_state);
     dfa
