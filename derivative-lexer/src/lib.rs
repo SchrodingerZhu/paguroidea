@@ -44,6 +44,25 @@ mod tests {
         let normalized = normalize(kleene.clone());
         assert!(Rc::ptr_eq(&kleene, &normalized));
     }
+
+    #[test]
+    fn beautify_mangle_tests() {
+        // generate huge test for me
+        let a = Rc::new(RegexTree::single('a'));
+        let b = Rc::new(RegexTree::single('b'));
+        let c = Rc::new(RegexTree::single('c'));
+        let d = Rc::new(RegexTree::single('d'));
+        let ba = Rc::new(Concat(b, a.clone()));
+        let a_or_ba = Rc::new(Union(a, ba));
+        let a_or_ba_or_c = Rc::new(Union(a_or_ba, c));
+        let a_or_ba_or_c_con_d = Rc::new(KleeneClosure(Rc::new(Concat(a_or_ba_or_c, d))));
+        let normalized = normalize(a_or_ba_or_c_con_d);
+        let congruence = approximate_congruence_class(&normalized);
+        println!("{:?}", congruence);
+        let vectorized = Vector::new([normalized].into_iter());
+        println!("{}", vectorized.generate_dfa("polo".to_string()));
+    }
+
     #[test]
     fn approximate_congruence_class_test() {
         let a = Rc::new(RegexTree::single('a'));
