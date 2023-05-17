@@ -36,11 +36,11 @@ mod tests {
         // concat
         let a = Rc::new(RegexTree::single('a'));
         let b = Rc::new(RegexTree::single('b'));
-        let concat = Rc::new(Concat(a.clone(), b.clone()));
+        let concat = Rc::new(Concat(a.clone(), b));
         let normalized = normalize(concat.clone());
         assert!(Rc::ptr_eq(&concat, &normalized));
         // kleene closure
-        let kleene = Rc::new(KleeneClosure(a.clone()));
+        let kleene = Rc::new(KleeneClosure(a));
         let normalized = normalize(kleene.clone());
         assert!(Rc::ptr_eq(&kleene, &normalized));
     }

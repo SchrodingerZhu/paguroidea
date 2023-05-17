@@ -97,7 +97,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
                     Rc::new(RegexTree::Concat(r2.clone(), ns)),
                 )));
             }
-            if Rc::ptr_eq(&nr, &r) && Rc::ptr_eq(&ns, &s) {
+            if Rc::ptr_eq(&nr, r) && Rc::ptr_eq(&ns, s) {
                 return tree;
             }
             Rc::new(RegexTree::Concat(nr, ns))
