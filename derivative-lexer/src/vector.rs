@@ -10,11 +10,10 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
-
 #[macro_export]
 macro_rules! beautify_mangle {
     ($mangle:expr, $mangle_map:ident) => {
-       if let Some(res) = $mangle_map.get(&$mangle) {
+        if let Some(res) = $mangle_map.get(&$mangle) {
             format_ident!("{}", res)
         } else {
             unreachable!("state not in mangle map")
@@ -99,15 +98,13 @@ impl Vector {
     pub fn generate_dfa(&self, name: String) -> TokenStream {
         let normalized = self.normalize();
         let mut statdid = 0;
-        let mut mangle_map: HashMap<String, String> = HashMap::new();
-        let dfa = build_dfa(normalized.clone(), &mut statdid, &mut mangle_map);
+        let mut state_map = HashMap::new();
+        let dfa = build_dfa(normalized.clone(), &mut statdid, &mut state_map);
         let name = format_ident!("{}", name);
-        let states = dfa
-            .keys()
-            .map(|x| beautify_mangle!(x.mangle(), mangle_map));
-        let initial = beautify_mangle!(normalized.mangle(), mangle_map);
+        let states = dfa.keys().map(|x| beautify_mangle!(x, state_map));
+        let initial = beautify_mangle!(normalized, state_map);
         let actions = dfa.iter().map(|(state, transitions)| {
-            let state_enum = beautify_mangle!(state.mangle(), mangle_map);
+            let state_enum = beautify_mangle!(state, state_map);
             if state.is_rejecting_state() {
                 quote! {
                     States::#state_enum => return longest_match,
@@ -115,7 +112,7 @@ impl Vector {
             } else {
                 let transitions = transitions.iter().map(|x| {
                     let condition = x.0.to_tokens();
-                    let target = beautify_mangle!(x.1.mangle(), mangle_map);
+                    let target = beautify_mangle!(&x.1, state_map);
                     quote!(#condition => States::#target)
                 });
                 match state.accepting_state() {
@@ -141,7 +138,7 @@ impl Vector {
         });
         let accepting_actions = dfa.iter().filter_map(|(state, _)| {
             state.accepting_state().map(|rule| {
-                let label = beautify_mangle!(state.mangle(), mangle_map);
+                let label = beautify_mangle!(state, state_map);
                 quote! {
                     States::#label => {
                         longest_match.replace((#rule, input.len()));
@@ -176,7 +173,7 @@ fn make_dfa_transition(
     transition: Intervals,
     vector: Vector,
     stateid: &mut usize,
-    mangle_map: &mut HashMap<String, String>,
+    state_map: &mut HashMap<Vector, String>,
 ) {
     let c = transition.representative();
     let derivative = vector.derivative(c).normalize();
@@ -187,28 +184,34 @@ fn make_dfa_transition(
     }
     if !dfa.contains_key(&derivative) {
         dfa.insert(derivative.clone(), vec![]);
-        mangle_map.insert(derivative.mangle(), format!("S{}",*stateid));
+        state_map.insert(derivative.clone(), format!("S{}", *stateid));
         *stateid += 1;
-        explore_dfa_node(dfa, derivative, stateid, mangle_map)
+        explore_dfa_node(dfa, derivative, stateid, state_map)
     }
 }
 
-fn explore_dfa_node(dfa: &mut HashMap<Vector, Vec<(Intervals, Vector)>>, 
-    state: Vector, 
-    stateid: &mut usize, 
-    mangle_map: &mut HashMap<String, String>) {
+fn explore_dfa_node(
+    dfa: &mut HashMap<Vector, Vec<(Intervals, Vector)>>,
+    state: Vector,
+    stateid: &mut usize,
+    state_map: &mut HashMap<Vector, String>,
+) {
     let transitions = state.approximate_congruence_class();
     for transition in transitions {
-        make_dfa_transition(dfa, transition, state.clone(), stateid, mangle_map);
+        make_dfa_transition(dfa, transition, state.clone(), stateid, state_map);
     }
 }
 
-fn build_dfa(initial_state: Vector, stateid: &mut usize, mangle_map: &mut HashMap<String, String>) -> HashMap<Vector, Vec<(Intervals, Vector)>> {
+fn build_dfa(
+    initial_state: Vector,
+    stateid: &mut usize,
+    state_map: &mut HashMap<Vector, String>,
+) -> HashMap<Vector, Vec<(Intervals, Vector)>> {
     let mut dfa = HashMap::new();
-    mangle_map.insert(initial_state.mangle(), format!("S{}",*stateid));
+    state_map.insert(initial_state.clone(), format!("S{}", *stateid));
     *stateid += 1;
     dfa.insert(initial_state.clone(), vec![]);
-    explore_dfa_node(&mut dfa, initial_state, stateid, mangle_map);
+    explore_dfa_node(&mut dfa, initial_state, stateid, state_map);
     *stateid = 0;
     dfa
 }
