@@ -1,7 +1,7 @@
 use std::{matches, rc::Rc};
 
 use derivative_lexer::{normalization::normalize, regex_tree::RegexTree, vector::Vector};
-use smallvec::SmallVec;
+
 
 use crate::{frontend::lexical::LexerDatabase, nf::NormalForm, unreachable_branch};
 
@@ -16,7 +16,7 @@ pub fn fusion_lexer<'src>(
                 NormalForm::Sequence { terminal, .. } => Some(terminal),
                 _ => None,
             })
-            .filter_map(|x| lexer_database.entries.get(&x))
+            .filter_map(|x| lexer_database.entries.get(x))
             .map(|x| x.rule.node.clone())
             .chain(
                 lexer_database
@@ -41,7 +41,7 @@ pub fn fusion_lexer<'src>(
                 NormalForm::Unexpanded(..) => unreachable_branch(),
                 NormalForm::Sequence { terminal, .. } => lexer_database
                     .entries
-                    .get(&terminal)
+                    .get(terminal)
                     .map(|x| x.rule.node.clone()),
             })
             .chain(
