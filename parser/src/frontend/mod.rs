@@ -647,8 +647,14 @@ mod test {
     use std::println;
 
     use pest::Parser;
+    use typed_arena::Arena;
 
-    use crate::{frontend::lexical::LexerDatabase, unreachable_branch, core_syntax::TermArena};
+    use crate::{
+        core_syntax::TermArena,
+        frontend::lexical::LexerDatabase,
+        nf::{fully_normalize, semi_normalize, NormalForms, Tag, TagAssigner},
+        unreachable_branch,
+    };
 
     use super::syntax::construct_parser;
 
@@ -672,6 +678,23 @@ mod test {
                             println!("{i} ::= {}, active = {}", rule.term, rule.active)
                         }
                         assert!(parser.type_check().is_empty());
+                        println!("----");
+                        let nf_arena = Arena::new();
+                        let mut nfs = NormalForms::new();
+                        let mut assigner = TagAssigner::new();
+                        for (i, rule) in parser.bindings.iter() {
+                            semi_normalize(
+                                &rule.term.node,
+                                Tag::new(*i),
+                                &nf_arena,
+                                &mut nfs,
+                                &mut assigner,
+                            )
+                        }
+                        println!("{}", nfs);
+                        println!("----"); // something is wrong here
+                        fully_normalize(&nf_arena, &mut nfs);
+                        println!("{}", nfs);
                     }
                     _ => unreachable_branch(),
                 }

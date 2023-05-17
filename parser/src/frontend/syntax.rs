@@ -3,12 +3,13 @@ use std::{collections::HashMap, todo, unimplemented};
 use crate::{
     core_syntax::BindingContext,
     core_syntax::{ParserRule, Term, TermArena, TermPtr},
-    lexer, span_errors, unreachable_branch,
-    utilities::Symbol, type_system2::{TypeError, type_check},
+    lexer, span_errors,
+    type_system2::{type_check, TypeError},
+    unreachable_branch,
+    utilities::Symbol,
 };
 
 use super::{lexical::LexerDatabase, Error, SurfaceSyntaxTree, WithSpan};
-
 
 pub struct Parser<'src, 'a> {
     pub entrypoint: Symbol<'src>,
@@ -35,7 +36,7 @@ pub fn construct_parser<'src, 'a>(
         arena,
         bindings: HashMap::new(),
         lexer_database,
-        symbol_table:HashMap::new(),
+        symbol_table: HashMap::new(),
     };
     let mut errs = match construct_symbol_table(&mut parser, sst) {
         Ok(()) => vec![],
