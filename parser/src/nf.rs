@@ -20,6 +20,12 @@ impl<'src> Tag<'src> {
             version: None,
         }
     }
+    pub fn is_versioned(&self) -> bool {
+        self.version.is_some()
+    }
+    pub fn symbol(&self) -> Symbol<'src> {
+        self.symbol
+    }
 }
 
 pub struct TagAssigner<'src> {
