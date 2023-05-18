@@ -4,7 +4,6 @@ use derivative_lexer::{normalization::normalize, regex_tree::RegexTree, vector::
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-
 use crate::{
     frontend::{lexical::LexerDatabase, syntax::Parser},
     nf::{NormalForm, NormalForms, Tag},
@@ -181,7 +180,8 @@ fn generate_inactive_parser<'src>(
     let lexer_name = format_ident!("lexer_{}", tag_name);
     let parser_rules = generate_children(false, parser, rules).into_iter().chain(
         lexer_database
-            .skip.map(|_| generate_skip(rules.len(), tag, false)),
+            .skip
+            .map(|_| generate_skip(rules.len(), tag, false)),
     );
     quote! {
         fn #parser_name<'a>(
@@ -214,7 +214,8 @@ fn generate_active_parser<'src>(
     let lexer_name = format_ident!("lexer_{}", tag_name);
     let parser_rules = generate_children(true, parser, rules).into_iter().chain(
         lexer_database
-            .skip.map(|_| generate_skip(rules.len(), tag, true)),
+            .skip
+            .map(|_| generate_skip(rules.len(), tag, true)),
     );
     quote! {
         fn #parser_name<'a>(

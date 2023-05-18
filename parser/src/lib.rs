@@ -6,12 +6,11 @@ use std::rc::Rc;
 
 pub mod core_syntax;
 pub mod frontend;
+mod fusion;
 pub mod lexer;
+mod nf;
 pub mod type_system;
 pub mod utilities;
-mod fusion;
-mod nf;
-
 
 pub(crate) fn unreachable_branch() -> ! {
     if cfg!(debug_assertions) {
