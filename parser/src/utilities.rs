@@ -3,7 +3,7 @@ use std::io::Read;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord)]
 pub struct Symbol<'a>(&'a str);
 
 impl<'a> Symbol<'a> {

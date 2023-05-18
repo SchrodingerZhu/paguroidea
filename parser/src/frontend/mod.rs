@@ -652,8 +652,11 @@ mod test {
     use crate::{
         core_syntax::TermArena,
         frontend::lexical::LexerDatabase,
-        fusion::{fusion_parser},
-        nf::{fully_normalize, semi_normalize, NormalForms, Tag, TagAssigner},
+        fusion::fusion_parser,
+        nf::{
+            dfs_remove_unreachable_rules, fully_normalize, merge_inactive_rules, semi_normalize,
+            NormalForms, Tag, TagAssigner,
+        },
         unreachable_branch,
     };
 
@@ -695,6 +698,12 @@ mod test {
                         println!("{}", nfs);
                         println!("----");
                         fully_normalize(&nf_arena, &mut nfs);
+                        println!("{}", nfs);
+                        println!("----");
+                        merge_inactive_rules(&mut nfs, &parser, &nf_arena);
+                        println!("{}", nfs);
+                        println!("----");
+                        dfs_remove_unreachable_rules(&mut nfs, &parser);
                         println!("{}", nfs);
                         println!("----");
                         let parser = fusion_parser(&nfs, &parser);

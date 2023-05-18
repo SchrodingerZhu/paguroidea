@@ -1,13 +1,18 @@
-use std::{collections::HashMap, fmt::Display, matches, num::NonZeroUsize};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    fmt::Display,
+    matches,
+    num::NonZeroUsize,
+};
 
 use smallvec::SmallVec;
 use typed_arena::Arena;
 
-use crate::{core_syntax::Term, unreachable_branch, utilities::Symbol};
+use crate::{core_syntax::Term, frontend::syntax::Parser, unreachable_branch, utilities::Symbol};
 
 // thinking a while...
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Tag<'src> {
     symbol: Symbol<'src>,
     version: Option<NonZeroUsize>,
@@ -60,6 +65,7 @@ impl<'src> TagAssigner<'src> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NormalForm<'src> {
     Empty,
     Unexpanded(SmallVec<[Tag<'src>; 4]>),
@@ -218,6 +224,117 @@ pub fn semi_normalize<'src, 'p, 'nf>(
             .into_iter()
             .collect();
             nfs.entries.insert(tag, nf);
+        }
+    }
+}
+
+pub fn dfs_remove_unreachable_rules<'src, 'nf>(
+    nfs: &mut NormalForms<'src, 'nf>,
+    parser: &Parser<'src, '_>,
+) {
+    let mut visited = HashSet::new();
+    let roots: Vec<Tag> = nfs
+        .entries
+        .keys()
+        .filter(|x| {
+            !x.is_versioned()
+                && parser
+                    .bindings
+                    .get(&x.symbol)
+                    .map(|x| x.active)
+                    .unwrap_or(false)
+        })
+        .copied()
+        .collect();
+    fn dfs<'src, 'nf>(
+        nfs: &NormalForms<'src, 'nf>,
+        current: Tag<'src>,
+        visited: &mut HashSet<Tag<'src>>,
+    ) {
+        if visited.contains(&current) {
+            return;
+        }
+        visited.insert(current);
+        if let Some(tag) = nfs.entries.get(&current) {
+            for i in tag {
+                match i {
+                    NormalForm::Empty => (),
+                    NormalForm::Unexpanded(_) => (),
+                    NormalForm::Sequence { nonterminals, .. } => {
+                        for i in nonterminals {
+                            dfs(nfs, *i, visited);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for i in roots {
+        dfs(nfs, i, &mut visited);
+    }
+    let to_remove = nfs
+        .entries
+        .keys()
+        .filter(|x| !visited.contains(x))
+        .copied()
+        .collect::<Vec<_>>();
+    for i in to_remove {
+        nfs.entries.remove(&i);
+    }
+}
+
+pub fn merge_inactive_rules<'src, 'nf>(
+    nfs: &mut NormalForms<'src, 'nf>,
+    parser: &Parser<'src, '_>,
+    arena: &'nf Arena<NormalForm<'src>>,
+) {
+    // sort all rules
+    for i in nfs.entries.values_mut() {
+        i.sort_unstable();
+    }
+    let mut table: HashMap<&[&NormalForm], Tag<'src>> = HashMap::new();
+    let mut rename = Vec::new();
+    for (tag, nf) in nfs.entries.iter() {
+        if !tag.is_versioned()
+            && parser
+                .bindings
+                .get(&tag.symbol)
+                .map(|x| x.active)
+                .unwrap_or(false)
+        {
+            continue;
+        }
+        match table.entry(nf.as_slice()) {
+            Entry::Occupied(x) => {
+                rename.push((*tag, *x.get()));
+            }
+            Entry::Vacant(x) => {
+                x.insert(*tag);
+            }
+        }
+    }
+    for (tag, new_tag) in rename {
+        nfs.entries.remove(&tag);
+        for i in nfs.entries.values_mut() {
+            for j in i.iter_mut() {
+                match j {
+                    NormalForm::Sequence {
+                        terminal,
+                        nonterminals,
+                    } => {
+                        if nonterminals.contains(&tag) {
+                            *j = arena.alloc(NormalForm::Sequence {
+                                terminal: *terminal,
+                                nonterminals: nonterminals
+                                    .iter()
+                                    .map(|x| if *x == tag { new_tag } else { *x })
+                                    .collect(),
+                            }) as &'nf _;
+                        }
+                    }
+                    _ => {}
+                }
+            }
         }
     }
 }
