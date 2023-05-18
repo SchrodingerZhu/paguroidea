@@ -4,7 +4,7 @@ use crate::{
     core_syntax::BindingContext,
     core_syntax::{ParserRule, Term, TermArena, TermPtr},
     span_errors,
-    type_system2::{type_check, TypeError},
+    type_system::{type_check, TypeError},
     unreachable_branch,
     utilities::Symbol,
 };
