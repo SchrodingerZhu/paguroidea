@@ -1,46 +1,51 @@
-use crate::{unreachable_branch, Location, Term, Token, UniqueSymbol};
+use crate::core_syntax::{BindingContext, Term};
+use crate::frontend::WithSpan;
+use crate::unreachable_branch;
+use crate::utilities::Symbol;
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::rc::Rc;
+use std::vec;
 
-use crate::type_system::context::Context;
+use crate::type_system::context::TypeContext;
+use pest::Span;
 use thiserror::Error;
 
-mod context;
+pub mod context;
 
 #[derive(Error, Debug)]
-pub enum TypeError {
-    #[error("type {0} and {1} violates the sequential uniqueness requirement")]
-    SequentialUniquenessViolation(String, String),
-    #[error("type {0} and {1} violates the disjunctive uniqueness requirement")]
-    DisjunctiveUniquenessViolation(String, String),
-    #[error("no such variable {0}")]
-    NoSuchVariable(UniqueSymbol),
+pub enum TypeError<'a> {
+    #[error("sequential uniqueness requirement volidation")]
+    SequentialUniquenessViolation {
+        lhs: Span<'a>,
+        rhs: Span<'a>,
+        total: Span<'a>,
+    },
+    #[error("disjunctive uniqueness requirement volidation")]
+    DisjunctiveUniquenessViolation {
+        lhs: Span<'a>,
+        rhs: Span<'a>,
+        total: Span<'a>,
+    },
     #[error("unguarded fixpoint {0}")]
-    UnguardedFixpoint(String),
-    #[error("{1} at {0}")]
-    Positioned(Location, Box<Self>),
+    UnguardedFixpoint(Symbol<'a>, Span<'a>),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub struct Type<T: Token> {
-    first: HashSet<T>,
-    follow: HashSet<T>,
+struct Type<'src> {
+    first: HashSet<Symbol<'src>>,
+    follow: HashSet<Symbol<'src>>,
     nullable: bool,
     guarded: bool,
 }
 
-impl<T> Type<T>
-where
-    T: Token,
-{
-    pub fn sequential_uniqueness(&self, other: &Self) -> bool {
+impl<'src> Type<'src> {
+    fn sequential_uniqueness(&self, other: &Self) -> bool {
         !self.nullable && self.follow.is_disjoint(&other.first)
     }
-    pub fn disjunctive_uniqueness(&self, other: &Self) -> bool {
+    fn disjunctive_uniqueness(&self, other: &Self) -> bool {
         !(self.nullable && other.nullable) && self.first.is_disjoint(&other.first)
     }
-    pub fn epsilon() -> Self {
+    fn epsilon() -> Self {
         Self {
             first: HashSet::new(),
             follow: HashSet::new(),
@@ -48,7 +53,7 @@ where
             guarded: true,
         }
     }
-    pub fn token(token: T) -> Self {
+    fn token(token: Symbol<'src>) -> Self {
         Self {
             first: HashSet::from([token]),
             follow: HashSet::new(),
@@ -56,7 +61,13 @@ where
             guarded: true,
         }
     }
-    pub fn sequence(t1: &Self, t2: &Self) -> Result<Self, TypeError> {
+    fn sequence(
+        t1: &Self,
+        t2: &Self,
+        lhs: Span<'src>,
+        rhs: Span<'src>,
+        total: Span<'src>,
+    ) -> Result<Self, TypeError<'src>> {
         if t1.sequential_uniqueness(t2) {
             Ok(Self {
                 first: t1.first.clone(),
@@ -73,13 +84,10 @@ where
                 guarded: t1.guarded,
             })
         } else {
-            Err(TypeError::SequentialUniquenessViolation(
-                format!("{t1:?}"),
-                format!("{t2:?}"),
-            ))
+            Err(TypeError::SequentialUniquenessViolation { lhs, rhs, total })
         }
     }
-    pub fn bottom() -> Self {
+    fn bottom() -> Self {
         Self {
             first: HashSet::new(),
             follow: HashSet::new(),
@@ -87,7 +95,13 @@ where
             guarded: true,
         }
     }
-    pub fn alternative(t1: &Self, t2: &Self) -> Result<Self, TypeError> {
+    fn alternative(
+        t1: &Self,
+        t2: &Self,
+        lhs: Span<'src>,
+        rhs: Span<'src>,
+        total: Span<'src>,
+    ) -> Result<Self, TypeError<'src>> {
         if t1.disjunctive_uniqueness(t2) {
             Ok(Self {
                 first: t1.first.union(&t2.first).cloned().collect(),
@@ -96,27 +110,25 @@ where
                 guarded: t1.guarded && t2.guarded,
             })
         } else {
-            Err(TypeError::DisjunctiveUniquenessViolation(
-                format!("{t1:?}"),
-                format!("{t2:?}"),
-            ))
+            Err(TypeError::DisjunctiveUniquenessViolation { lhs, rhs, total })
         }
     }
-    pub fn star(t: &Self) -> Result<Self, TypeError> {
-        if t.sequential_uniqueness(t) {
-            Ok(Self {
-                first: t.first.clone(),
-                follow: t.first.union(&t.follow).cloned().collect(),
-                nullable: true,
-                guarded: t.guarded,
-            })
-        } else {
-            Err(TypeError::SequentialUniquenessViolation(
-                format!("{t:?}"),
-                format!("{t:?}"),
-            ))
-        }
-    }
+    // fn star(t: &Self, inner: Span<'src>, outer: Span<'src>) -> Result<Self, TypeError<'src>> {
+    //     if t.sequential_uniqueness(t) {
+    //         Ok(Self {
+    //             first: t.first.clone(),
+    //             follow: t.first.union(&t.follow).cloned().collect(),
+    //             nullable: true,
+    //             guarded: t.guarded,
+    //         })
+    //     } else {
+    //         Err(TypeError::SequentialUniquenessViolation {
+    //             lhs: inner,
+    //             rhs: inner,
+    //             total: outer,
+    //         })
+    //     }
+    // }
     fn minimum() -> Self {
         Self {
             first: HashSet::new(),
@@ -125,138 +137,98 @@ where
             guarded: false,
         }
     }
-    pub fn fixpoint<E, F>(mut f: F) -> Result<Self, E>
+    fn fixpoint<F>(mut f: F) -> Self
     where
-        F: FnMut(&Self) -> Result<Self, E>,
+        F: FnMut(&Self) -> Self,
     {
         let mut last = Self::minimum();
         loop {
-            let next = f(&last)?;
+            let next = f(&last);
             if next == last {
-                return Ok(next);
+                return next;
             }
             last = next;
         }
     }
 }
 
-pub fn well_typed<T: Token>(
-    ctx: &mut Context<T>,
-    term: Rc<Term<T>>,
-) -> Result<Rc<Term<T>>, TypeError> {
-    Ok(match term.as_ref() {
-        Term::Epsilon => Rc::new(Term::WellTyped(term.clone(), Type::epsilon())),
+fn type_check_impl<'src, 'a>(
+    typing_ctx: &mut TypeContext<'src>,
+    binding_ctx: &BindingContext<'src, 'a>,
+    term: &'a WithSpan<'src, Term<'src, 'a>>,
+) -> (Type<'src>, Vec<TypeError<'src>>) {
+    match &term.node {
+        Term::Epsilon => (Type::epsilon(), vec![]),
         Term::Sequence(x, y) => {
-            let x = well_typed(ctx, x.clone())?;
-            let y = ctx.guarded(|ctx| well_typed(ctx, y.clone()))?;
-            let x_type = match x.as_ref() {
-                Term::WellTyped(_, t) => t,
-                _ => unreachable_branch(),
+            let (x_type, x_errors) = type_check_impl(typing_ctx, binding_ctx, x);
+            let (y_type, y_errors) = type_check_impl(typing_ctx, binding_ctx, y);
+            let (r#type, err) = match Type::sequence(&x_type, &y_type, x.span, y.span, term.span) {
+                Ok(r#type) => (r#type, None),
+                Err(err) => (Type::bottom(), Some(err)),
             };
-            let y_type = match y.as_ref() {
-                Term::WellTyped(_, t) => t,
-                _ => unreachable_branch(),
-            };
-            let r#type = Type::sequence(x_type, y_type)?;
-            Rc::new(Term::WellTyped(Rc::new(Term::Sequence(x, y)), r#type))
+            (
+                r#type,
+                x_errors.into_iter().chain(y_errors).chain(err).collect(),
+            )
         }
-        Term::Token(x) => {
-            let r#type = Type::token(x.clone());
-            Rc::new(Term::WellTyped(term.clone(), r#type))
-        }
-        Term::Bottom => {
-            let r#type = Type::bottom();
-            Rc::new(Term::WellTyped(term.clone(), r#type))
-        }
+        Term::LexerRef(name) => (Type::token(*name), vec![]),
+        Term::Bottom => (Type::bottom(), vec![]),
         Term::Alternative(x, y) => {
-            let x = well_typed(ctx, x.clone())?;
-            let y = well_typed(ctx, y.clone())?;
-            let x_type = match x.as_ref() {
-                Term::WellTyped(_, t) => t,
-                _ => unreachable_branch(),
+            let (x_type, x_errors) = type_check_impl(typing_ctx, binding_ctx, x);
+            let (y_type, y_errors) = type_check_impl(typing_ctx, binding_ctx, y);
+            let (r#type, err) = match Type::alternative(&x_type, &y_type, x.span, y.span, term.span)
+            {
+                Ok(r#type) => (r#type, None),
+                Err(err) => (Type::bottom(), Some(err)),
             };
-            let y_type = match y.as_ref() {
-                Term::WellTyped(_, t) => t,
-                _ => unreachable_branch(),
-            };
-            let r#type = Type::alternative(x_type, y_type)?;
-            Rc::new(Term::WellTyped(Rc::new(Term::Alternative(x, y)), r#type))
+            (
+                r#type,
+                x_errors.into_iter().chain(y_errors).chain(err).collect(),
+            )
+        }
+        Term::ParserRef(name) => {
+            // first check if name is already typed in the context.
+            // if so return that type directly.
+            if let Some(ty) = typing_ctx.lookup(*name) {
+                return (ty.as_ref().clone(), vec![]);
+            }
+            // otherwise, we need to type check the parser definition.
+            if let Some(target) = binding_ctx.get(name) {
+                // we should not cache the result, since it can be recursive and changed during the calculation of the fixpoint.
+                let (r#type, errors) = type_check_impl(typing_ctx, binding_ctx, target.term);
+                (r#type, errors)
+            } else {
+                // unreachable because the parser definition should be in the context.
+                // this should be garanteed when translating the Parser Tree to the AST.
+                unreachable_branch();
+            }
         }
         Term::Fix(var, body) => {
             let r#type = Type::fixpoint(|x| {
-                ctx.with(var.clone(), x.clone(), |ctx| {
-                    well_typed(ctx, body.clone()).map(|x| match x.as_ref() {
-                        Term::WellTyped(_, t) => t.clone(),
-                        _ => unreachable_branch(),
+                typing_ctx
+                    .with(*var, x.clone(), |ctx| {
+                        type_check_impl(ctx, binding_ctx, body)
                     })
-                })
-            })?;
+                    .0
+            });
             if r#type.guarded {
-                let well_typed_body = ctx.with(var.clone(), r#type.clone(), |ctx| {
-                    well_typed(ctx, body.clone())
-                })?;
-                Rc::new(Term::WellTyped(
-                    Rc::new(Term::Fix(var.clone(), well_typed_body)),
-                    r#type,
-                ))
+                typing_ctx.with(*var, r#type.clone(), |ctx| {
+                    type_check_impl(ctx, binding_ctx, body)
+                })
             } else {
-                return Err(TypeError::UnguardedFixpoint(format!("{:?}", r#type)));
+                (
+                    Type::bottom(),
+                    vec![TypeError::UnguardedFixpoint(*var, term.span)],
+                )
             }
         }
-        Term::Variable(name) => {
-            let r#type = ctx
-                .lookup(name)
-                .ok_or(TypeError::NoSuchVariable(name.clone()))?;
-            Rc::new(Term::WellTyped(term.clone(), r#type.into_owned()))
-        }
-        Term::SrcPos(inner, loc) => well_typed(ctx, inner.clone())
-            .map_err(|x| TypeError::Positioned(loc.clone(), Box::new(x)))?,
-        Term::WellTyped(_, _) => term.clone(),
-    })
+    }
 }
 
-#[cfg(test)]
-mod test {
-
-    use crate::{Term, UniqueSymbol};
-    use std::rc::Rc;
-
-    #[test]
-    fn sexpr_type_checked() {
-        use Term::*;
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-        enum Token {
-            LPAREN,
-            RPAREN,
-            ATOM,
-        }
-        impl crate::Token for Token {}
-        let sexpr_sym = UniqueSymbol::new("sexpr");
-        let sexprs_sym = UniqueSymbol::new("sexprs");
-        let sexpr: Rc<Term<Token>> = Rc::new(Fix(
-            sexpr_sym.clone(),
-            Rc::new(Alternative(
-                Rc::new(Sequence(
-                    Rc::new(Sequence(
-                        Rc::new(Token(Token::LPAREN)),
-                        Rc::new(Fix(
-                            sexprs_sym.clone(),
-                            Rc::new(Alternative(
-                                Rc::new(Epsilon),
-                                Rc::new(Sequence(
-                                    Rc::new(Variable(sexpr_sym)),
-                                    Rc::new(Variable(sexprs_sym)),
-                                )),
-                            )),
-                        )),
-                    )),
-                    Rc::new(Token(Token::RPAREN)),
-                )),
-                Rc::new(Token(Token::ATOM)),
-            )),
-        ));
-        println!("{}", sexpr);
-        let well_typed = super::well_typed(&mut super::Context::new(), sexpr).unwrap();
-        println!("{}", well_typed);
-    }
+pub fn type_check<'src, 'a>(
+    binding_ctx: &BindingContext<'src, 'a>,
+    term: &'a WithSpan<'src, Term<'src, 'a>>,
+) -> Vec<TypeError<'src>> {
+    let mut typing_ctx = TypeContext::new();
+    type_check_impl(&mut typing_ctx, binding_ctx, term).1
 }
