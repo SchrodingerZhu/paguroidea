@@ -1,4 +1,4 @@
-use std::{collections::HashMap, matches, rc::Rc};
+use std::{collections::HashMap, matches, rc::Rc, vec};
 
 use derivative_lexer::{normalization::normalize, regex_tree::RegexTree, vector::Vector};
 use proc_macro2::TokenStream;
@@ -174,7 +174,7 @@ fn generate_children<'src>(
                 NormalForm::Sequence { nonterminals, .. } => {
                     let mut result = Vec::new();
                     let mut subtree = false;
-                    let next_tree_indices = create_next_tree_indices(nonterminals);
+                    let next_tree_indices = create_next_tree_indices(&nonterminals);
                     if let Some(sym) = next_tree_indices.get(&0) {
                         let tag = format_ident!("{}", sym.name());
                         result.push(quote! {
@@ -209,7 +209,6 @@ fn generate_children<'src>(
                                 }
                             }
                             Action::Summarize(..) => {
-                                subtree = false;
                                 match next_tree_indices.get(&(i + 1)) {
                                     Some(sym) => {
                                         let tag = format_ident!("{}", sym.name());
@@ -218,6 +217,7 @@ fn generate_children<'src>(
                                         });
                                     }
                                     None => {
+                                        subtree = false;
                                         if active {
                                             result.push(quote! {
                                                 subtree.set_span(offset..cursor);
