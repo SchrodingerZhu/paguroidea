@@ -21,7 +21,7 @@ parser sexpr {
         = ATOM;    
 
     silent fixpoint sexprs
-        = _ | sexpr ~ sexprs;
+        = _ | (compound | atom) ~ sexprs;
 
     active fixpoint sexpr
         = compound | atom;

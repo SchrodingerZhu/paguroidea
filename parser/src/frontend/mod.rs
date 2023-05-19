@@ -536,8 +536,9 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                         },
                     })
                 }
+                Rule::parser_expr => parse_surface_syntax(primary.into_inner(), pratt, src),
                 _ => {
-                    todo!("{primary:?} is not yet implemented");
+                    todo!("{:?} is not yet implemented", primary.as_rule());
                 }
             }
         })
