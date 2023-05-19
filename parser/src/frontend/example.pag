@@ -14,12 +14,15 @@ lexer {
 parser sexpr {
     // definition in parser can be a real grammer rule.
 
-    silent definition compound
+    active definition compound
         = LPAREN ~ sexprs ~ RPAREN;
+
+    active definition atom
+        = ATOM;    
 
     silent fixpoint sexprs
         = _ | sexpr ~ sexprs;
 
     active fixpoint sexpr
-        = compound | ATOM;
+        = compound | atom;
 }

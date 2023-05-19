@@ -693,6 +693,7 @@ mod test {
                                 &nf_arena,
                                 &mut nfs,
                                 &mut assigner,
+                                &parser,
                             )
                         }
                         println!("{}", nfs);
