@@ -161,7 +161,7 @@ fn type_check_impl<'src, 'a>(
         Term::Epsilon => (Type::epsilon(), vec![]),
         Term::Sequence(x, y) => {
             let (x_type, x_errors) = type_check_impl(typing_ctx, binding_ctx, x);
-            let (y_type, y_errors) = type_check_impl(typing_ctx, binding_ctx, y);
+            let (y_type, y_errors) = typing_ctx.guarded(|ctx| type_check_impl(ctx, binding_ctx, y));
             let (r#type, err) = match Type::sequence(&x_type, &y_type, x.span, y.span, term.span) {
                 Ok(r#type) => (r#type, None),
                 Err(err) => (Type::bottom(), Some(err)),
