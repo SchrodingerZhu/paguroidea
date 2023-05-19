@@ -121,7 +121,7 @@ impl Vector {
                             longest_match.replace((#x, idx));
                             state = match c as u32 {
                                 #(#transitions,)*
-                                _ => unsafe { ::std::hint::unreachable_unchecked() }
+                                _ => unsafe { ::core::hint::unreachable_unchecked() }
                             }
                         },
                     },
@@ -129,7 +129,7 @@ impl Vector {
                         States::#state_enum => {
                             state = match c as u32 {
                                  #(#transitions,)*
-                                _ => unsafe { ::std::hint::unreachable_unchecked() }
+                                _ => unsafe { ::core::hint::unreachable_unchecked() }
                             };
                         },
                     },
