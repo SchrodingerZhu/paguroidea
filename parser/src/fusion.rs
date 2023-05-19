@@ -1,6 +1,6 @@
-use std::{collections::HashMap, matches, rc::Rc, vec};
+use std::{collections::HashMap, matches};
 
-use derivative_lexer::{normalization::normalize, regex_tree::RegexTree, vector::Vector};
+use derivative_lexer::vector::Vector;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
@@ -176,7 +176,7 @@ fn generate_children<'src>(
                 NormalForm::Sequence { nonterminals, .. } => {
                     let mut result = Vec::new();
                     let mut subtree = false;
-                    let next_tree_indices = create_next_tree_indices(&nonterminals);
+                    let next_tree_indices = create_next_tree_indices(nonterminals);
                     if let Some(sym) = next_tree_indices.get(&0) {
                         let tag = format_ident!("{}", sym.name());
                         result.push(quote! {
