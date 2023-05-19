@@ -9,7 +9,7 @@ use std::{
 use smallvec::SmallVec;
 use typed_arena::Arena;
 
-use crate::{core_syntax::Term, frontend::syntax::Parser, unreachable_branch, utilities::Symbol};
+use crate::{core_syntax::Term, frontend::syntax::Parser, utilities::Symbol};
 
 // thinking a while...
 
@@ -243,13 +243,13 @@ pub fn semi_normalize<'src, 'p, 'nf>(
     }
 }
 
-pub fn dfs_remove_unreachable_rules<'src, 'nf>(
-    nfs: &mut NormalForms<'src, 'nf>,
+pub fn dfs_remove_unreachable_rules<'src>(
+    nfs: &mut NormalForms<'src, '_>,
     parser: &Parser<'src, '_>,
 ) {
     let mut visited = HashSet::new();
-    fn dfs<'src, 'nf>(
-        nfs: &NormalForms<'src, 'nf>,
+    fn dfs<'src>(
+        nfs: &NormalForms<'src, '_>,
         current: Tag<'src>,
         visited: &mut HashSet<Tag<'src>>,
     ) {
