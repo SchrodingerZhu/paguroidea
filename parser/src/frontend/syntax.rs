@@ -3,6 +3,7 @@ use std::{collections::HashMap, unimplemented};
 use crate::{
     core_syntax::BindingContext,
     core_syntax::{ParserRule, Term, TermArena, TermPtr},
+    nf::Tag,
     span_errors,
     type_system::{type_check, TypeError},
     unreachable_branch,
@@ -23,6 +24,14 @@ impl<'src, 'a> Parser<'src, 'a> {
     pub fn type_check(&self) -> Vec<TypeError<'src>> {
         let target = unsafe { self.bindings.get(&self.entrypoint).unwrap_unchecked() };
         type_check(&self.bindings, target.term)
+    }
+    pub fn is_active(&self, tag: &Tag<'src>) -> bool {
+        !tag.is_versioned()
+            && self
+                .bindings
+                .get(&tag.symbol())
+                .map(|x| x.active)
+                .unwrap_or(false)
     }
 }
 
