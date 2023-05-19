@@ -27,6 +27,7 @@ fn generate_tag_enum(parser: &Parser<'_, '_>) -> TokenStream {
 
 fn generate_parse_tree() -> TokenStream {
     quote! {
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub struct ParserTree<'a> {
             tag: Tag,
             src: &'a str,
@@ -72,7 +73,7 @@ fn generate_inactive_to_active_call(target: &Tag<'_>) -> TokenStream {
     quote! {
         {
             let child = #target_function(src, cursor)?;
-            cursor += child.len();
+            cursor = child.span.end;
             parent.add_child(child);
         }
     }
@@ -82,7 +83,7 @@ fn generate_active_to_active_call(target: &Tag<'_>) -> TokenStream {
     quote! {
         {
             let child = #target_function(src, cursor)?;
-            cursor += child.len();
+            cursor = child.span.end;
             tree.add_child(child);
         }
     }
@@ -92,7 +93,7 @@ fn generate_active_to_inactive_call(target: &Tag<'_>) -> TokenStream {
     let target_function = format_ident!("parse_{}", format!("{}", target));
     quote! {
         {
-            cursor += #target_function(src, cursor, &mut tree)?;
+            cursor = #target_function(src, cursor, &mut tree)?;
         }
     }
 }
@@ -101,7 +102,7 @@ fn generate_inactive_to_inactive_call(target: &Tag<'_>) -> TokenStream {
     let target_function = format_ident!("parse_{}", format!("{}", target));
     quote! {
         {
-            cursor += #target_function(src, cursor, parent)?;
+            cursor = #target_function(src, cursor, parent)?;
         }
     }
 }
@@ -110,7 +111,7 @@ fn generate_subtree_to_inactive_call(target: &Tag<'_>) -> TokenStream {
     let target_function = format_ident!("parse_{}", format!("{}", target));
     quote! {
         {
-            cursor += #target_function(src, cursor, &mut subtree)?;
+            cursor = #target_function(src, cursor, &mut subtree)?;
         }
     }
 }
@@ -120,7 +121,7 @@ fn generate_subtree_to_active_call(target: &Tag<'_>) -> TokenStream {
     quote! {
         {
             let child = #target_function(src, cursor)?;
-            cursor += child.len();
+            cursor = child.span.end;
             subtree.add_child(child);
         }
     }
@@ -166,6 +167,7 @@ fn generate_children<'src>(
 ) -> Vec<TokenStream> {
     rules
         .iter()
+        .filter(|x| !matches!(x, NormalForm::Empty(..)))
         .enumerate()
         .map(|(index, subroutines)| {
             let actions = match subroutines {
@@ -208,30 +210,28 @@ fn generate_children<'src>(
                                     }
                                 }
                             }
-                            Action::Summarize(..) => {
-                                match next_tree_indices.get(&(i + 1)) {
-                                    Some(sym) => {
-                                        let tag = format_ident!("{}", sym.name());
+                            Action::Summarize(..) => match next_tree_indices.get(&(i + 1)) {
+                                Some(sym) => {
+                                    let tag = format_ident!("{}", sym.name());
+                                    result.push(quote! {
+                                        subtree = subtree.next_level(Tag::#tag, offset..cursor);
+                                    });
+                                }
+                                None => {
+                                    subtree = false;
+                                    if active {
                                         result.push(quote! {
-                                            subtree = subtree.next_level(Tag::#tag, offset..cursor);
+                                            subtree.set_span(offset..cursor);
+                                            tree.add_child(subtree);
+                                        });
+                                    } else {
+                                        result.push(quote! {
+                                            subtree.set_span(offset..cursor);
+                                            parent.add_child(subtree);
                                         });
                                     }
-                                    None => {
-                                        subtree = false;
-                                        if active {
-                                            result.push(quote! {
-                                                subtree.set_span(offset..cursor);
-                                                tree.add_child(subtree);
-                                            });
-                                        } else {
-                                            result.push(quote! {
-                                                subtree.set_span(offset..cursor);
-                                                parent.add_child(subtree);
-                                            });
-                                        }
-                                    }
                                 }
-                            }
+                            },
                         }
                     }
                     result
@@ -275,11 +275,37 @@ fn generate_inactive_parser<'src>(
     let parser_name = format_ident!("parse_{}", tag_name);
     let lexer = fusion_lexer(rules, lexer_database).generate_dfa(format!("lexer_{}", tag_name));
     let lexer_name = format_ident!("lexer_{}", tag_name);
-    let parser_rules = generate_children(false, parser, rules).into_iter().chain(
-        lexer_database
-            .skip
-            .map(|_| generate_skip(rules.len(), tag, false)),
-    );
+    let parser_rules =
+        generate_children(false, parser, rules)
+            .into_iter()
+            .chain(lexer_database.skip.map(|_| {
+                generate_skip(
+                    rules
+                        .iter()
+                        .filter(|x| !matches!(x, NormalForm::Empty(..)))
+                        .count(),
+                    tag,
+                    false,
+                )
+            }));
+    let none_action = match rules.iter().find_map(|x| match x {
+        NormalForm::Empty(e) => Some(e),
+        _ => None,
+    }) {
+        Some(e) => {
+            let actions = generate_empty_actions(true, e);
+            quote! {
+                None => {
+                    #(#actions)*
+                }
+            }
+        }
+        None => quote! {
+            None => {
+                unimplemented!("error message is not implemented");
+            }
+        },
+    };
     quote! {
         fn #parser_name<'a>(
             src: &'a str,
@@ -289,11 +315,11 @@ fn generate_inactive_parser<'src>(
             #lexer
             let mut cursor = offset;
             match #lexer_name(&src[offset..]) {
-                None => return Err(unimplemented!("error message is not implemented")),
+                #none_action,
                 #(#parser_rules,)*
                 _ => unreachable!("should not enter this branch"),
             }
-            Ok(cursor - offset)
+            Ok(cursor)
         }
     }
 }
@@ -309,11 +335,37 @@ fn generate_active_parser<'src>(
     let parser_name = format_ident!("parse_{}", tag_name);
     let lexer = fusion_lexer(rules, lexer_database).generate_dfa(format!("lexer_{}", tag_name));
     let lexer_name = format_ident!("lexer_{}", tag_name);
-    let parser_rules = generate_children(true, parser, rules).into_iter().chain(
-        lexer_database
-            .skip
-            .map(|_| generate_skip(rules.len(), tag, true)),
-    );
+    let parser_rules =
+        generate_children(true, parser, rules)
+            .into_iter()
+            .chain(lexer_database.skip.map(|_| {
+                generate_skip(
+                    rules
+                        .iter()
+                        .filter(|x| !matches!(x, NormalForm::Empty(..)))
+                        .count(),
+                    tag,
+                    true,
+                )
+            }));
+    let none_action = match rules.iter().find_map(|x| match x {
+        NormalForm::Empty(e) => Some(e),
+        _ => None,
+    }) {
+        Some(e) => {
+            let actions = generate_empty_actions(true, e);
+            quote! {
+                None => {
+                    #(#actions)*
+                }
+            }
+        }
+        None => quote! {
+            None => {
+                unimplemented!("error message is not implemented");
+            }
+        },
+    };
     quote! {
         fn #parser_name<'a>(
             src: &'a str,
@@ -323,7 +375,7 @@ fn generate_active_parser<'src>(
             let mut tree = ParserTree::new(Tag::#tag_ident, src);
             let mut cursor = offset;
             match #lexer_name(&src[offset..]) {
-                None => return Err(unimplemented!("error message is not implemented")),
+                #none_action,
                 #(#parser_rules,)*
                 _ => unreachable!("should not enter this branch"),
             }
@@ -364,36 +416,12 @@ pub fn fusion_lexer<'src>(
     rules: &[&NormalForm<'src>],
     lexer_database: &LexerDatabase<'src>,
 ) -> Vector {
-    let complement = if rules.iter().any(|x| matches!(x, NormalForm::Empty(..))) {
-        rules
-            .iter()
-            .filter_map(|x| match x {
-                NormalForm::Sequence { terminal, .. } => Some(terminal),
-                _ => None,
-            })
-            .filter_map(|x| lexer_database.entries.get(x))
-            .map(|x| x.rule.node.clone())
-            .chain(
-                lexer_database
-                    .skip
-                    .and_then(|x| lexer_database.entries.get(&x).map(|x| x.rule.node.clone())),
-            )
-            .fold(None, |acc, y| match acc {
-                None => Some(y),
-                Some(x) => Some(Rc::new(RegexTree::Union(x, y))),
-            })
-            .map(RegexTree::Complement)
-            .map(Rc::new)
-            .map(normalize)
-    } else {
-        None
-    };
     Vector::new(
         rules
             .iter()
             .filter_map(|x| match x {
-                NormalForm::Empty(..) => complement.clone(),
-                NormalForm::Unexpanded(..) => unreachable_branch(),
+                NormalForm::Empty(..) => None,
+                NormalForm::Unexpanded(..) => None,
                 NormalForm::Sequence { terminal, .. } => lexer_database
                     .entries
                     .get(terminal)
