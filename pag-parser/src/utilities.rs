@@ -30,9 +30,29 @@ impl<'a> std::hash::Hash for Symbol<'a> {
     }
 }
 
+fn is_valid(x: char) -> bool {
+    x.is_ascii_alphanumeric() || x == '_'
+}
+
+fn convert_symbol(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for x in s.chars() {
+        if is_valid(x) {
+            result.push(x);
+        } else {
+            result.push_str(&format!("_C{}", x as u32));
+        }
+    }
+    result
+}
+
 impl<'a> std::fmt::Display for Symbol<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        if self.0.chars().all(is_valid) {
+            write!(f, "{}", self.0)
+        } else {
+            write!(f, "{}", convert_symbol(self.0))
+        }
     }
 }
 

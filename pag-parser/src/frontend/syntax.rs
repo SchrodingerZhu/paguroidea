@@ -6,7 +6,7 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use std::{collections::HashMap, unimplemented};
+use std::{collections::HashMap, todo, unimplemented};
 
 use crate::{
     core_syntax::BindingContext,
@@ -206,8 +206,68 @@ fn construct_core_syntax_tree<'src, 'a>(
                 }
             }
         }
-        SurfaceSyntaxTree::ParserStar { .. } => unimplemented!("star is not supported yet"),
-        SurfaceSyntaxTree::ParserPlus { .. } => unimplemented!("plus is not supported yet"),
+        SurfaceSyntaxTree::ParserStar { inner } => {
+            let symbol = Symbol::new(sst.span.as_str());
+            let inner = construct_core_syntax_tree(translation_context, inner)?;
+            // \x . (i ~ x) | epsilon
+            let sequence = translation_context.arena.alloc(WithSpan {
+                span: sst.span,
+                node: crate::core_syntax::Term::Sequence(
+                    inner,
+                    translation_context.arena.alloc(WithSpan {
+                        span: sst.span,
+                        node: crate::core_syntax::Term::ParserRef(symbol),
+                    }),
+                ),
+            });
+            let alternative = translation_context.arena.alloc(WithSpan {
+                span: sst.span,
+                node: crate::core_syntax::Term::Alternative(
+                    sequence,
+                    translation_context.arena.alloc(WithSpan {
+                        span: sst.span,
+                        node: crate::core_syntax::Term::Epsilon,
+                    }),
+                ),
+            });
+            Ok(translation_context.arena.alloc(WithSpan {
+                span: sst.span,
+                node: crate::core_syntax::Term::Fix(symbol, alternative),
+            }))
+        }
+        SurfaceSyntaxTree::ParserPlus { inner } => {
+            let symbol = Symbol::new(sst.span.as_str());
+            let inner = construct_core_syntax_tree(translation_context, inner)?;
+            // \x . (i ~ x) | epsilon
+            let sequence = translation_context.arena.alloc(WithSpan {
+                span: sst.span,
+                node: crate::core_syntax::Term::Sequence(
+                    inner,
+                    translation_context.arena.alloc(WithSpan {
+                        span: sst.span,
+                        node: crate::core_syntax::Term::ParserRef(symbol),
+                    }),
+                ),
+            });
+            let alternative = translation_context.arena.alloc(WithSpan {
+                span: sst.span,
+                node: crate::core_syntax::Term::Alternative(
+                    sequence,
+                    translation_context.arena.alloc(WithSpan {
+                        span: sst.span,
+                        node: crate::core_syntax::Term::Epsilon,
+                    }),
+                ),
+            });
+            let fixpoint = translation_context.arena.alloc(WithSpan {
+                span: sst.span,
+                node: crate::core_syntax::Term::Fix(symbol, alternative),
+            });
+            Ok(translation_context.arena.alloc(WithSpan {
+                span: sst.span,
+                node: crate::core_syntax::Term::Sequence(inner, fixpoint),
+            }))
+        }
         SurfaceSyntaxTree::ParserOptional { inner } => {
             let inner = construct_core_syntax_tree(translation_context, inner)?;
             Ok(translation_context.arena.alloc(WithSpan {
