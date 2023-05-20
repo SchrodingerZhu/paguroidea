@@ -113,17 +113,12 @@ lazy_static! {
             .op(Op::infix(Rule::lexical_sequence, Left))
             .op(Op::postfix(Rule::lexical_star)
                 | Op::postfix(Rule::lexical_plus)
-                | Op::postfix(Rule::lexical_optional)
-                | Op::postfix(Rule::lexical_repeat)
-                | Op::postfix(Rule::lexical_repeat_range))
+                | Op::postfix(Rule::lexical_optional))
             .op(Op::infix(Rule::parser_alternative, Left))
             .op(Op::infix(Rule::parser_sequence, Left))
             .op(Op::postfix(Rule::parser_star)
                 | Op::postfix(Rule::parser_plus)
-                | Op::postfix(Rule::parser_optional)
-                | Op::postfix(Rule::parser_repeat)
-                | Op::postfix(Rule::parser_repeat_range))
-            .op(Op::prefix(Rule::parser_not))
+                | Op::postfix(Rule::parser_optional))
     };
 }
 
@@ -231,14 +226,6 @@ pub enum SurfaceSyntaxTree<'a> {
     LexicalOptional {
         inner: SpanBox<'a, Self>,
     },
-    LexicalRepeat {
-        inner: SpanBox<'a, Self>,
-    },
-    LexicalRepeatRange {
-        inner: SpanBox<'a, Self>,
-        min: usize,
-        max: usize,
-    },
     LexicalNot {
         inner: SpanBox<'a, Self>,
     },
@@ -257,17 +244,6 @@ pub enum SurfaceSyntaxTree<'a> {
         inner: SpanBox<'a, Self>,
     },
     ParserOptional {
-        inner: SpanBox<'a, Self>,
-    },
-    ParserRepeat {
-        inner: SpanBox<'a, Self>,
-    },
-    ParserRepeatRange {
-        inner: SpanBox<'a, Self>,
-        min: usize,
-        max: usize,
-    },
-    ParserNot {
         inner: SpanBox<'a, Self>,
     },
     LexicalDefinition {
@@ -633,27 +609,12 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                 _ => unreachable_branch(),
             }
         })
-        .map_prefix(|op, expr| {
-            let expr = expr?;
-            let op_span = op.as_span();
-            let total_span = Span::new(src, expr.span.start(), op_span.end())
-                .ok_or_else(|| parser_logical_error!("invalid span"))?;
-            match op.as_rule() {
-                Rule::parser_not => Ok(WithSpan {
-                    span: total_span,
-                    node: SurfaceSyntaxTree::ParserNot {
-                        inner: Box::new(expr),
-                    },
-                }),
-                _ => unreachable_branch(),
-            }
-        })
         .parse(pairs)
 }
 
 #[cfg(test)]
 mod test {
-    use std::println;
+    use std::{mem::size_of, println};
 
     use pest::Parser;
     use typed_arena::Arena;
@@ -664,7 +625,7 @@ mod test {
         fusion::fusion_parser,
         nf::{
             dfs_remove_unreachable_rules, fully_normalize, merge_inactive_rules, semi_normalize,
-            NormalForms, Tag, TagAssigner,
+            NormalForm, NormalForms, Tag, TagAssigner,
         },
         unreachable_branch,
     };
@@ -675,6 +636,7 @@ mod test {
 
     #[test]
     fn it_parses_lexical_expr() {
+        println!("{}", size_of::<NormalForm>());
         match super::GrammarParser::parse(super::Rule::grammar, TEST) {
             Ok(pairs) => {
                 let tree = super::parse_surface_syntax(pairs, &super::PRATT_PARSER, TEST).unwrap();

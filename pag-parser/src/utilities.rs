@@ -30,28 +30,26 @@ impl<'a> std::hash::Hash for Symbol<'a> {
     }
 }
 
-fn is_valid(x: char) -> bool {
+fn is_ascii_ident_body(x: char) -> bool {
     x.is_ascii_alphanumeric() || x == '_'
 }
 
-fn convert_symbol(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    for x in s.chars() {
-        if is_valid(x) {
-            result.push(x);
-        } else {
-            result.push_str(&format!("_C{}", x as u32));
-        }
-    }
-    result
+fn is_ascii_ident_head(x: char) -> bool {
+    x.is_ascii_alphabetic() || x == '_'
+}
+
+fn is_ascii_ident(x: &str) -> bool {
+    !x.is_empty()
+        && is_ascii_ident_head(unsafe { x.chars().next().unwrap_unchecked() })
+        && x[1..].chars().all(is_ascii_ident_body)
 }
 
 impl<'a> std::fmt::Display for Symbol<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.0.chars().all(is_valid) {
+        if is_ascii_ident(self.0) {
             write!(f, "{}", self.0)
         } else {
-            write!(f, "{}", convert_symbol(self.0))
+            write!(f, "S{:X}_{}", self.0.as_ptr() as usize, self.0.len())
         }
     }
 }

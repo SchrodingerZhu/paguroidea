@@ -41,9 +41,7 @@ parser_id = ${ !KEYWORD ~ lowercase ~ (lowercase | digit | "_")* }
 // pratt parser for lexical expressions
 lexical_primary = _{ any | bottom | empty | range | character | string | token_id | "(" ~ lexical_expr ~ ")" }
 lexical_expr = { lexical_primary ~ lexical_postfix* ~ (lexical_infix ~ lexical_primary ~ lexical_postfix* )* }
-lexical_postfix = _{ lexical_optional | lexical_star | lexical_plus | lexical_repeat | lexical_repeat_range }
-lexical_repeat = { "{" ~ digit+ ~ "}" }
-lexical_repeat_range = { "{" ~ digit+ ~ "," ~ digit+ ~ "}" }
+lexical_postfix = _{ lexical_optional | lexical_star | lexical_plus }
 lexical_optional = { "?" }
 lexical_star = { "*" }
 lexical_plus = { "+" }
@@ -53,12 +51,8 @@ lexical_alternative = { "|" }
 
 // pratt parser for parser expressions
 parser_primary = _{ bottom | empty | parser_id | token_id | "(" ~ parser_expr ~ ")" }
-parser_expr = { parser_prefix* ~ parser_primary ~ parser_postfix* ~ (parser_infix ~ parser_prefix* ~ parser_primary ~ parser_postfix* )* }
-parser_prefix = _{ parser_not }
-parser_not = { "!" }
-parser_postfix = _{ parser_optional | parser_star | parser_plus | parser_repeat | parser_repeat_range }
-parser_repeat = { "{" ~ digit+ ~ "}" }
-parser_repeat_range = { "{" ~ digit+ ~ "," ~ digit+ ~ "}" }
+parser_expr = { parser_primary ~ parser_postfix* ~ (parser_infix ~ parser_primary ~ parser_postfix* )* }
+parser_postfix = _{ parser_optional | parser_star | parser_plus }
 parser_optional = { "?" }
 parser_star = { "*" }
 parser_plus = { "+" }
