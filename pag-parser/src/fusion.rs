@@ -8,7 +8,7 @@
 
 use std::{collections::HashMap, matches};
 
-use derivative_lexer::vector::Vector;
+use pag_lexer::vector::Vector;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 

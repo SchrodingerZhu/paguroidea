@@ -7,7 +7,7 @@
 # modified, or distributed except according to those terms.
 
 [package]
-name = "paguroidea"
+name = "pag-parser"
 version = "0.1.0"
 edition = "2021"
 
@@ -22,7 +22,7 @@ lazy_static = "1"
 error-stack = "0.3"
 anyhow = { version = "1", features = [ "backtrace"] }
 memchr = "2"
-derivative-lexer = { path = "../derivative-lexer"}
+pag-lexer = { path = "../pag-lexer"}
 typed-arena = "2.0.2"
 quote = "1.0.26"
 proc-macro2 = "1.0"

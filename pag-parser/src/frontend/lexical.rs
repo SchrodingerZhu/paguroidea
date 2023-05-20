@@ -8,7 +8,7 @@
 
 use std::{collections::HashMap, rc::Rc};
 
-use derivative_lexer::{normalization::normalize, regex_tree::RegexTree};
+use pag_lexer::{normalization::normalize, regex_tree::RegexTree};
 
 use crate::span_errors;
 use crate::{unreachable_branch, utilities::Symbol};
