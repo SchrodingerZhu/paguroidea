@@ -1,3 +1,11 @@
+/*
+Copyright (C) 2023 Paguroidea Developpers
+
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at <https://mozilla.org/MPL/2.0/>.
+*/
+
 use std::{collections::HashMap, matches};
 
 use derivative_lexer::vector::Vector;
@@ -366,8 +374,14 @@ fn generate_active_parser<'src>(
             }
         },
     };
+    let modifier = if parser.entrypoint == tag.symbol() {
+        Some(quote!(pub))
+    } else {
+        None
+    }
+    .into_iter();
     quote! {
-        fn #parser_name<'a>(
+        #(#modifier)* fn #parser_name<'a>(
             src: &'a str,
             offset: usize,
         ) -> Result<ParserTree<'a>, ()> {
