@@ -10,4 +10,5 @@
 members = [
     "pag-lexer",
     "pag-parser",
+    "pag-derive",
 ]
