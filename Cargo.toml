@@ -8,6 +8,6 @@
 
 [workspace]
 members = [
-    "derivative-lexer",
-    "parser",
+    "pag-lexer",
+    "pag-parser",
 ]
