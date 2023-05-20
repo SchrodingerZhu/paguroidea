@@ -100,11 +100,11 @@ impl<'src> Action<'src> {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NormalForm<'src> {
-    Empty(SmallVec<[Symbol<'src>; 4]>),
-    Unexpanded(SmallVec<[Action<'src>; 4]>),
+    Empty(SmallVec<[Symbol<'src>; 1]>),
+    Unexpanded(SmallVec<[Action<'src>; 1]>),
     Sequence {
         terminal: Symbol<'src>,
-        nonterminals: SmallVec<[Action<'src>; 4]>,
+        nonterminals: SmallVec<[Action<'src>; 1]>,
     },
 }
 

@@ -96,8 +96,6 @@ where
                 Rc::new(RegexTree::Epsilon),
             )))
         }
-        SurfaceSyntaxTree::LexicalRepeat { .. } => unimplemented!(),
-        SurfaceSyntaxTree::LexicalRepeatRange { .. } => unimplemented!(),
         SurfaceSyntaxTree::LexicalNot { inner } => {
             let inner = construct_regex_tree(inner, reference_handler)?;
             Ok(Rc::new(RegexTree::Complement(inner)))

@@ -281,11 +281,6 @@ fn construct_core_syntax_tree<'src, 'a>(
                 ),
             }))
         }
-        SurfaceSyntaxTree::ParserRepeat { .. } => unimplemented!("repeat is not supported yet"),
-        SurfaceSyntaxTree::ParserRepeatRange { .. } => {
-            unimplemented!("repeat is not supported yet")
-        }
-        SurfaceSyntaxTree::ParserNot { .. } => unimplemented!("complement is not supported yet"),
         SurfaceSyntaxTree::Bottom => Ok(translation_context.arena.alloc(WithSpan {
             span: sst.span,
             node: crate::core_syntax::Term::Bottom,
