@@ -10,9 +10,8 @@ file, You can obtain one at <https://mozilla.org/MPL/2.0/>.
 */
 
 /*
-All quoted content inside this file, together with the generated code 
-(distributed either as token streams or in the file form) is licensed 
-under the Apache License, Version 2.0.
+The generated code (distributed either as token streams or in the 
+file form) is licensed under the Apache License, Version 2.0.
 
 Copyright 2023 Paguroidea Developpers
 
