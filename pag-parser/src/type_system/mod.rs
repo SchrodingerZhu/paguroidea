@@ -212,6 +212,9 @@ fn type_check_impl<'src, 'a>(
             }
         }
         Term::Fix(var, body) => {
+            if let Some(ty) = typing_ctx.lookup(*var)  {
+                return (ty.as_ref().clone(), vec![]);
+            }
             let r#type = Type::fixpoint(|x| {
                 typing_ctx
                     .with(*var, x.clone(), |ctx| {
