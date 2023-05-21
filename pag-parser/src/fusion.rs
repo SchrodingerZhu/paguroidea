@@ -76,6 +76,39 @@ fn generate_parse_tree() -> TokenStream {
         }
     }
 }
+
+fn generate_error() -> TokenStream {
+    quote! {
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        pub struct Error {
+            pub active_rule: Tag,
+            pub expecting: &'static [&'static str],
+            pub offset: usize,
+        }
+
+        impl core::fmt::Display for Error {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                let expectation = if self.expecting.len() == 1 {
+                    self.expecting[0].to_string()
+                } else {
+                    format!(
+                        "{} or {}",
+                        self.expecting[0..self.expecting.len() - 1].join(", "),
+                        self.expecting[self.expecting.len() - 1]
+                    )
+                };
+                write!(
+                    f,
+                    "expecting {expectation} for {:?} at offset {}",
+                    self.active_rule, self.offset
+                )
+            }
+        }
+
+        impl std::error::Error for Error {}
+    }
+}
+
 fn generate_inactive_to_active_call(target: &Tag<'_>) -> TokenStream {
     let target_function = format_ident!("parse_{}", format!("{}", target));
     quote! {
@@ -405,6 +438,7 @@ pub fn fusion_parser<'src>(
 ) -> TokenStream {
     let tag = generate_tag_enum(parser);
     let tree = generate_parse_tree();
+    let error = generate_error();
     let parsers = rules.entries.iter().map(|(tag, rules)| {
         if !tag.is_versioned()
             && parser
@@ -422,6 +456,7 @@ pub fn fusion_parser<'src>(
         extern crate alloc;
         #tag
         #tree
+        #error
         #(#parsers)*
     }
 }
