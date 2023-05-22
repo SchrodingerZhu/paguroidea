@@ -79,8 +79,6 @@ fn generate_parse_tree() -> TokenStream {
 
 fn generate_error() -> TokenStream {
     quote! {
-        const EXPECTING : [&str; 1] = ["hello,polo"]; 
-
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub struct Error {
             pub active_rule: Tag,
@@ -308,6 +306,33 @@ fn generate_skip(index: usize, tag: Tag<'_>, active: bool) -> TokenStream {
     }
 }
 
+fn generate_expect<'src>(
+    rules: &[&NormalForm<'src>],
+    lexer_database: &LexerDatabase<'src>,
+) -> TokenStream {
+    let mut length1 = 0;
+    let mut length2 = 0;
+    let elements: Vec<&str> = rules
+        .iter()
+        .filter_map(|x| match x {
+            NormalForm::Empty(..) => None,
+            NormalForm::Unexpanded(..) => None,
+            NormalForm::Sequence { terminal, .. } => {
+                length1 += 1;
+                Some(terminal.name())
+            }
+        })
+        .chain(lexer_database.skip.and_then(|x| {
+            length2 += 1;
+            Some(x.name())
+        }))
+        .collect();
+    let length = (length1 + length2) as usize;
+    quote! {
+        const EXPECTING: [&str; #length] = [#(#elements),*];
+    }
+}
+
 fn generate_inactive_parser<'src>(
     tag: Tag<'src>,
     parser: &Parser<'src, '_>,
@@ -316,6 +341,7 @@ fn generate_inactive_parser<'src>(
 ) -> TokenStream {
     let tag_name = format!("{}", tag);
     let parser_name = format_ident!("parse_{}", tag_name);
+    let expect = generate_expect(rules, lexer_database);
     let lexer = fusion_lexer(rules, lexer_database).generate_dfa(format!("lexer_{}", tag_name));
     let lexer_name = format_ident!("lexer_{}", tag_name);
     let parser_rules =
@@ -359,6 +385,7 @@ fn generate_inactive_parser<'src>(
             offset: usize,
             parent: &mut ParserTree<'a>,
         ) -> Result<usize, Error> {
+            #expect
             #lexer
             let mut cursor = offset;
             let mut res: Result<usize, Error> = Ok(cursor);
@@ -385,6 +412,7 @@ fn generate_active_parser<'src>(
     let tag_name = format!("{}", tag);
     let tag_ident = format_ident!("{}", tag_name);
     let parser_name = format_ident!("parse_{}", tag_name);
+    let expect = generate_expect(rules, lexer_database);
     let lexer = fusion_lexer(rules, lexer_database).generate_dfa(format!("lexer_{}", tag_name));
     let lexer_name = format_ident!("lexer_{}", tag_name);
     let parser_rules =
@@ -433,6 +461,7 @@ fn generate_active_parser<'src>(
             src: &'a str,
             offset: usize,
         ) -> Result<ParserTree<'a>, Error> {
+            #expect
             #lexer
             let mut tree = ParserTree::new(Tag::#tag_ident, src);
             let mut cursor = offset;
