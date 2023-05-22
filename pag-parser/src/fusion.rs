@@ -79,6 +79,8 @@ fn generate_parse_tree() -> TokenStream {
 
 fn generate_error() -> TokenStream {
     quote! {
+        const EXPECTING : [&str; 1] = ["hello,polo"]; 
+
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub struct Error {
             pub active_rule: Tag,
@@ -343,7 +345,11 @@ fn generate_inactive_parser<'src>(
         }
         None => quote! {
             None => {
-                unimplemented!("error message is not implemented");
+                let res = Error{
+                    active_rule: parent.tag,
+                    expecting: &EXPECTING,
+                    offset: offset,
+                };
             }
         },
     };
@@ -352,15 +358,20 @@ fn generate_inactive_parser<'src>(
             src: &'a str,
             offset: usize,
             parent: &mut ParserTree<'a>,
-        ) -> Result<usize, ()> {
+        ) -> Result<usize, Error> {
             #lexer
             let mut cursor = offset;
+            let mut res: Result<usize, Error> = Ok(cursor);
             match #lexer_name(&src[offset..]) {
                 #none_action,
                 #(#parser_rules,)*
                 _ => unreachable!("should not enter this branch"),
             }
-            Ok(cursor)
+            if res.is_err() {
+                res
+            } else {
+                Ok(cursor)
+            }
         }
     }
 }
@@ -403,7 +414,11 @@ fn generate_active_parser<'src>(
         }
         None => quote! {
             None => {
-                unimplemented!("error message is not implemented");
+                let res = Error{
+                    active_rule: *(&tree.tag),
+                    expecting: &EXPECTING,
+                    offset: offset,
+                };
             }
         },
     };
@@ -417,17 +432,22 @@ fn generate_active_parser<'src>(
         #(#modifier)* fn #parser_name<'a>(
             src: &'a str,
             offset: usize,
-        ) -> Result<ParserTree<'a>, ()> {
+        ) -> Result<ParserTree<'a>, Error> {
             #lexer
             let mut tree = ParserTree::new(Tag::#tag_ident, src);
             let mut cursor = offset;
+            let mut res: Result<ParserTree<'a>, Error> = Ok(tree.clone());
             match #lexer_name(&src[offset..]) {
                 #none_action,
                 #(#parser_rules,)*
                 _ => unreachable!("should not enter this branch"),
             }
             tree.set_span(offset..cursor);
-            Ok(tree)
+            if res.is_err() {
+                res
+            } else {
+                Ok(tree)
+            }
         }
     }
 }
