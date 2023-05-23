@@ -6,7 +6,7 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use std::{collections::HashMap, todo, unimplemented};
+use std::{collections::HashMap};
 
 use crate::{
     core_syntax::BindingContext,
