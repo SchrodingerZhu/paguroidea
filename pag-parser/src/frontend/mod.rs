@@ -88,7 +88,7 @@ mod grammar {
     pub struct Parser;
 }
 
-use crate::unreachable_branch;
+use crate::utilities::unreachable_branch;
 pub use grammar::Parser as GrammarParser;
 pub use grammar::Rule;
 
@@ -561,7 +561,7 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                     },
                 }),
 
-                _ => unreachable_branch(),
+                _ => unreachable_branch!("Operator {} is not an infix operator", op.as_str()),
             }
         })
         .map_postfix(|expr, op| {
@@ -606,7 +606,7 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                         inner: Box::new(expr),
                     },
                 }),
-                _ => unreachable_branch(),
+                _ => unreachable_branch!("Operator {} is not a postfix operator", op.as_str()),
             }
         })
         .parse(pairs)
@@ -627,7 +627,7 @@ mod test {
             dfs_remove_unreachable_rules, fully_normalize, merge_inactive_rules, semi_normalize,
             NormalForm, NormalForms, Tag, TagAssigner,
         },
-        unreachable_branch,
+        utilities::unreachable_branch,
     };
 
     use super::syntax::construct_parser;
@@ -681,7 +681,7 @@ mod test {
                         let parser = fusion_parser(&nfs, &parser);
                         println!("{}", parser);
                     }
-                    _ => unreachable_branch(),
+                    _ => unreachable_branch!(),
                 }
                 //println!("{:#?}", tree)
             }

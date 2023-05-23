@@ -110,3 +110,15 @@ mod test {
         println!("{:?}", src_code.line_indices);
     }
 }
+
+macro_rules! unreachable_branch {
+    ($($arg:tt)*) => {
+        if cfg!(debug_assertions) {
+            unreachable!($($arg)*)
+        } else {
+            unsafe { std::hint::unreachable_unchecked() }
+        }
+    };
+}
+
+pub(crate) use unreachable_branch;
