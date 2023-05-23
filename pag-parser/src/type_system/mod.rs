@@ -120,22 +120,6 @@ impl<'src> Type<'src> {
             Err(TypeError::DisjunctiveUniquenessViolation { lhs, rhs, total })
         }
     }
-    // fn star(t: &Self, inner: Span<'src>, outer: Span<'src>) -> Result<Self, TypeError<'src>> {
-    //     if t.sequential_uniqueness(t) {
-    //         Ok(Self {
-    //             first: t.first.clone(),
-    //             follow: t.first.union(&t.follow).cloned().collect(),
-    //             nullable: true,
-    //             guarded: t.guarded,
-    //         })
-    //     } else {
-    //         Err(TypeError::SequentialUniquenessViolation {
-    //             lhs: inner,
-    //             rhs: inner,
-    //             total: outer,
-    //         })
-    //     }
-    // }
     fn minimum() -> Self {
         Self {
             first: HashSet::new(),
