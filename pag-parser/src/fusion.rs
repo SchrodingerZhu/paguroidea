@@ -321,9 +321,9 @@ fn generate_expect<'src>(
                 Some(terminal.name())
             }
         })
-        .chain(lexer_database.skip.and_then(|x| {
+        .chain(lexer_database.skip.map(|x| {
             length2 += 1;
-            Some(x.name())
+            x.name()
         }))
         .collect();
     let length = (length1 + length2) as usize;
