@@ -12,6 +12,7 @@ use ariadne::{Color, Report, ReportKind, Source};
 use frontend::{lexical::LexerDatabase, GrammarDefinitionError, WithSpan};
 use fusion::fusion_parser;
 use proc_macro2::TokenStream;
+use quote::format_ident;
 use typed_arena::Arena;
 use utilities::unreachable_branch;
 
@@ -238,7 +239,15 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
             fully_normalize(&nf_arena, &mut nfs);
             merge_inactive_rules(&mut nfs, &parser, &nf_arena);
             dfs_remove_unreachable_rules(&mut nfs, &parser);
-            Ok(fusion_parser(&nfs, &parser))
+            let parser_routines = fusion_parser(&nfs, &parser);
+            let entrypoint = format_ident!("parse_{}", parser.entrypoint.name());
+            Ok(quote::quote! {
+                #![allow(non_snake_case, dead_code, non_camel_case_types)]
+                #parser_routines
+                pub fn parse(input: &str) -> Result<ParserTree, Error> {
+                    #entrypoint(input, 0)
+                }
+            })
         }
         _ => unreachable_branch!("the entrypoint of sst can only be Grammar"),
     }
