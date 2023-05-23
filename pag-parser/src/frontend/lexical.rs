@@ -11,7 +11,7 @@ use std::{collections::HashMap, rc::Rc};
 use pag_lexer::{normalization::normalize, regex_tree::RegexTree};
 
 use crate::span_errors;
-use crate::{unreachable_branch, utilities::Symbol};
+use crate::{utilities::unreachable_branch, utilities::Symbol};
 
 use super::{SurfaceSyntaxTree, WithSpan};
 
@@ -116,7 +116,10 @@ where
         SurfaceSyntaxTree::Empty => Ok(Rc::new(RegexTree::Epsilon)),
         SurfaceSyntaxTree::Char { value } => Ok(Rc::new(RegexTree::single(value.node))),
         SurfaceSyntaxTree::LexicalRuleRef { name } => reference_handler(name.clone()),
-        _ => unreachable_branch(),
+        _ => unreachable_branch!(
+            "lexer translation is called with unsupported code: {}",
+            sst.span.as_str()
+        ),
     }
 }
 
@@ -144,7 +147,10 @@ fn construct_definition<'a>(
                 },
             ))
         }
-        _ => unreachable_branch(),
+        _ => unreachable_branch!(
+            "lexer translation can only be called with lexical definition: {}",
+            sst.span.as_str()
+        ),
     }
 }
 
@@ -172,7 +178,10 @@ fn construct_lexical_rule<'a>(
                 },
             ))
         }
-        _ => unreachable_branch(),
+        _ => unreachable_branch!(
+            "lexer rule translation can only be called with lexical definition: {}",
+            sst.span.as_str()
+        ),
     }
 }
 

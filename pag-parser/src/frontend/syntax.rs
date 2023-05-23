@@ -14,8 +14,7 @@ use crate::{
     nf::Tag,
     span_errors,
     type_system::{type_check, TypeError},
-    unreachable_branch,
-    utilities::Symbol,
+    utilities::{unreachable_branch, Symbol},
 };
 
 use super::{lexical::LexerDatabase, Error, SurfaceSyntaxTree, WithSpan};
@@ -120,7 +119,9 @@ pub fn construct_parser<'src, 'a>(
                             Err(e) => errs.extend(e),
                         }
                     }
-                    _ => unreachable_branch(),
+                    _ => unreachable_branch!(
+                        "parser rule should only contains definitions or fixpoints"
+                    ),
                 }
             }
             parser.entrypoint = entrypoint.node;
@@ -128,7 +129,7 @@ pub fn construct_parser<'src, 'a>(
                 return Err(errs);
             }
         }
-        _ => unreachable_branch(),
+        _ => unreachable_branch!("sst should be a parser"),
     }
     Ok(parser)
 }
@@ -160,12 +161,14 @@ fn construct_symbol_table<'src>(
                             );
                         }
                     }
-                    _ => unreachable_branch(),
+                    _ => unreachable_branch!(
+                        "parser rule should only contains definitions or fixpoints"
+                    ),
                 }
             }
             Ok(())
         }
-        _ => unreachable_branch(),
+        _ => unreachable_branch!("sst should be a parser"),
     }
 }
 
@@ -309,6 +312,9 @@ fn construct_core_syntax_tree<'src, 'a>(
                 None => Err(span_errors!(UndefinedLexicalReference, sst.span, name,)),
             }
         }
-        _ => unreachable_branch(),
+        _ => unreachable_branch!(
+            "core syntax tree construction should not be called on this node: {}",
+            sst.span.as_str()
+        ),
     }
 }

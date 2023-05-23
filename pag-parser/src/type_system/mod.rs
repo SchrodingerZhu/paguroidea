@@ -8,8 +8,7 @@
 
 use crate::core_syntax::{BindingContext, Term};
 use crate::frontend::WithSpan;
-use crate::unreachable_branch;
-use crate::utilities::Symbol;
+use crate::utilities::{unreachable_branch, Symbol};
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::vec;
@@ -208,7 +207,7 @@ fn type_check_impl<'src, 'a>(
             } else {
                 // unreachable because the parser definition should be in the context.
                 // this should be garanteed when translating the Parser Tree to the AST.
-                unreachable_branch();
+                unreachable_branch!("")
             }
         }
         Term::Fix(var, body) => {

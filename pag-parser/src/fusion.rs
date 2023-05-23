@@ -15,8 +15,7 @@ use quote::{format_ident, quote};
 use crate::{
     frontend::{lexical::LexerDatabase, syntax::Parser},
     nf::{Action, NormalForm, NormalForms, Tag},
-    unreachable_branch,
-    utilities::Symbol,
+    utilities::{unreachable_branch, Symbol},
 };
 
 fn generate_tag_enum(parser: &Parser<'_, '_>) -> TokenStream {
@@ -212,7 +211,7 @@ fn generate_children<'src>(
         .enumerate()
         .map(|(index, subroutines)| {
             let actions = match subroutines {
-                NormalForm::Unexpanded(..) => unreachable_branch(),
+                NormalForm::Unexpanded(..) => unreachable_branch!("should be fully normalized"),
                 NormalForm::Empty(symbols) => generate_empty_actions(active, symbols),
                 NormalForm::Sequence { nonterminals, .. } => {
                     let mut result = Vec::new();
