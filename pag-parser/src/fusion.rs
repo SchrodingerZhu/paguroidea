@@ -60,6 +60,9 @@ fn generate_parse_tree() -> TokenStream {
             pub fn tag(&self) -> &Tag {
                 &self.tag
             }
+            pub fn as_slice(&self) -> &'a str {
+                &self.src[self.span.clone()]
+            }
             pub fn set_span(&mut self, span: core::ops::Range<usize>) {
                 self.span = span;
             }
@@ -373,7 +376,7 @@ fn generate_inactive_parser<'src>(
                 return Err(Error {
                     active_rule: parent.tag,
                     expecting: &EXPECTING,
-                    offset: offset,
+                    offset,
                 });
             }
         },
@@ -437,9 +440,9 @@ fn generate_active_parser<'src>(
         None => quote! {
             None => {
                 return Err(Error{
-                    active_rule: *(&tree.tag),
+                    active_rule: tree.tag,
                     expecting: &EXPECTING,
-                    offset: offset,
+                    offset,
                 });
             }
         },
@@ -451,10 +454,10 @@ fn generate_active_parser<'src>(
     }
     .into_iter();
     quote! {
-        #(#modifier)* fn #parser_name<'a>(
-            src: &'a str,
+        #(#modifier)* fn #parser_name(
+            src: &str,
             offset: usize,
-        ) -> Result<ParserTree<'a>, Error> {
+        ) -> Result<ParserTree, Error> {
             #expect
             #lexer
             let mut tree = ParserTree::new(Tag::#tag_ident, src);

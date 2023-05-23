@@ -11,4 +11,5 @@ members = [
     "pag-lexer",
     "pag-parser",
     "pag-compiler",
+    "tests/sexpr-calculator"
 ]
