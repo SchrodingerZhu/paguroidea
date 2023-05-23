@@ -207,7 +207,10 @@ fn type_check_impl<'src, 'a>(
             } else {
                 // unreachable because the parser definition should be in the context.
                 // this should be garanteed when translating the Parser Tree to the AST.
-                unreachable_branch!("")
+                unreachable_branch!(
+                    "type system should guarantee that the parser definition {} is in the context",
+                    name
+                )
             }
         }
         Term::Fix(var, body) => {
