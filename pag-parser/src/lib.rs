@@ -165,7 +165,7 @@ impl<'src> Error<'src> {
                                 ))
                                     .with_color(Color::Green))
                                 .with_label(ariadne::Label::new((input_name, rhs.0.start()..rhs.0.end()))
-                                    .with_message(format!("type info for left-hand side: nullable: {}, first set: {{{}}}, follow set: {{{}}}",
+                                    .with_message(format!("type info for right-hand side: nullable: {}, first set: {{{}}}, follow set: {{{}}}",
                                     rhs.1.nullable, rhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "), 
                                     rhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
                                 ))
@@ -182,7 +182,7 @@ impl<'src> Error<'src> {
                                 ))
                                     .with_color(Color::Green))
                                 .with_label(ariadne::Label::new((input_name, rhs.0.start()..rhs.0.end()))
-                                    .with_message(format!("type info for left-hand side: nullable {}, first set: {}, follow set: {}",
+                                    .with_message(format!("type info for right-hand side: nullable {}, first set: {}, follow set: {}",
                                     rhs.1.nullable, rhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "), 
                                     rhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
                                 ))
