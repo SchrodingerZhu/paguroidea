@@ -15,14 +15,10 @@ fn eval(tree: &parser::ParserTree) -> usize {
         parser::Tag::compound => {
             match tree.children()[0].as_slice() {
                 "+" => {
-                    let lhs = eval(&tree.children()[1]);
-                    let rhs = eval(&tree.children()[2]);
-                    lhs + rhs
+                    tree.children()[1..].iter().map(|x| eval(x)).sum()
                 },
                 "*" => {
-                    let lhs = eval(&tree.children()[1]);
-                    let rhs = eval(&tree.children()[2]);
-                    lhs * rhs
+                    tree.children()[1..].iter().map(|x| eval(x)).product()
                 },
                 _ => unreachable!("only + and * are supported")
             }
