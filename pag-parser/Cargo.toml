@@ -26,3 +26,4 @@ pag-lexer = { path = "../pag-lexer"}
 typed-arena = "2.0.2"
 quote = "1.0.26"
 proc-macro2 = "1.0"
+ariadne = { version = "0.2", features = ["auto-color"] }

@@ -92,7 +92,7 @@ use crate::utilities::unreachable_branch;
 pub use grammar::Parser as GrammarParser;
 pub use grammar::Rule;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum GrammarDefinitionError<'a> {
     #[error("grammar definition error: {0}")]
     SyntaxError(#[from] Box<pest::error::Error<Rule>>),
@@ -612,10 +612,21 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
         .parse(pairs)
 }
 
+pub fn parse(input: &str) -> Result<WithSpan<SurfaceSyntaxTree>, crate::Error> {
+    match <GrammarParser as pest::Parser<Rule>>::parse(Rule::grammar, input) {
+        Ok(pairs) => parse_surface_syntax(pairs, &PRATT_PARSER, input)
+            .map_err(|e| crate::Error::GrammarDefinitionError(e)),
+        Err(e) => Err(crate::Error::GrammarDefinitionError(
+            GrammarDefinitionError::SyntaxError(Box::new(e)),
+        )),
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::{mem::size_of, println};
 
+    use ariadne::Source;
     use pest::Parser;
     use typed_arena::Arena;
 
@@ -630,7 +641,7 @@ mod test {
         utilities::unreachable_branch,
     };
 
-    use super::syntax::construct_parser;
+    use super::{syntax::construct_parser, SurfaceSyntaxTree, WithSpan};
 
     const TEST: &str = include_str!("example.pag");
 
@@ -653,14 +664,14 @@ mod test {
                             println!("{i} ::= {}, active = {}", rule.term, rule.active)
                         }
                         let errs = parser.type_check();
-                        assert!(
-                            errs.is_empty(),
-                            "{}",
-                            errs.into_iter()
-                                .map(|x| x.to_string())
-                                .collect::<Vec<_>>()
-                                .join("\n")
-                        );
+
+                        let liberr = crate::Error::from(errs);
+                        let reports = liberr.to_reports("example.pag");
+                        let mut src = ("example.pag", Source::from(TEST));
+                        for i in reports.iter() {
+                            i.eprint(&mut src).unwrap();
+                        }
+                        assert!(reports.is_empty(),);
                         println!("----");
                         let nf_arena = Arena::new();
                         let mut nfs = NormalForms::new();

@@ -8,7 +8,7 @@
 
 use crate::core_syntax::{BindingContext, Term};
 use crate::frontend::WithSpan;
-use crate::utilities::{Symbol};
+use crate::utilities::Symbol;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::vec;
@@ -141,15 +141,15 @@ impl<'src> Type<'src> {
             guarded: false,
         }
     }
-    fn fixpoint<F>(mut f: F) -> Self
+    fn fixpoint<F>(mut f: F) -> (Self, Vec<TypeError<'src>>)
     where
-        F: FnMut(&Self) -> Self,
+        F: FnMut(&Self) -> (Self, Vec<TypeError<'src>>),
     {
         let mut last = Self::minimum();
         loop {
-            let next = f(&last);
-            if next == last {
-                return next;
+            let (next, errs) = f(&last);
+            if !errs.is_empty() || next == last {
+                return (next, errs);
             }
             last = next;
         }
@@ -214,13 +214,14 @@ fn type_check_impl<'src, 'a>(
             if let Some(ty) = typing_ctx.lookup(*var) {
                 return (ty.as_ref().clone(), vec![]);
             }
-            let r#type = Type::fixpoint(|x| {
-                typing_ctx
-                    .with(*var, x.clone(), |ctx| {
-                        type_check_impl(ctx, binding_ctx, body)
-                    })
-                    .0
+            let (r#type, errs) = Type::fixpoint(|x| {
+                typing_ctx.with(*var, x.clone(), |ctx| {
+                    type_check_impl(ctx, binding_ctx, body)
+                })
             });
+            if !errs.is_empty() {
+                return (r#type, errs);
+            }
             if r#type.guarded {
                 typing_ctx.with(*var, r#type.clone(), |ctx| {
                     type_check_impl(ctx, binding_ctx, body)

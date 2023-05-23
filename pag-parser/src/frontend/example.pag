@@ -22,6 +22,6 @@ parser sexpr {
     silent definition sexprs
         = (compound | atom) *;
 
-    active fixpoint sexpr
+    active definition sexpr
         = compound | atom;
 }
