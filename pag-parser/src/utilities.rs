@@ -6,11 +6,6 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use std::fs::File;
-use std::io::Read;
-use std::ops::Range;
-use std::path::{Path, PathBuf};
-
 #[derive(Debug, Clone, Copy, PartialOrd, Ord)]
 pub struct Symbol<'a>(&'a str);
 

@@ -73,6 +73,8 @@ impl<'src> Type<'src> {
             guarded: true,
         }
     }
+
+    #[allow(clippy::result_large_err)]
     fn sequence(
         t1: &Self,
         t2: &Self,
@@ -96,6 +98,7 @@ impl<'src> Type<'src> {
                 guarded: t1.guarded,
             })
         } else {
+            // it is fine to return large error here, they will be stored in vectors anyway
             Err(TypeError::SequentialUniquenessViolation {
                 lhs: (lhs, t1.clone()),
                 rhs: (rhs, t2.clone()),
@@ -111,6 +114,8 @@ impl<'src> Type<'src> {
             guarded: true,
         }
     }
+
+    #[allow(clippy::result_large_err)]
     fn alternative(
         t1: &Self,
         t2: &Self,
@@ -126,6 +131,7 @@ impl<'src> Type<'src> {
                 guarded: t1.guarded && t2.guarded,
             })
         } else {
+            // it is fine to return large error here, they will be stored in vectors anyway
             Err(TypeError::DisjunctiveUniquenessViolation {
                 lhs: (lhs, t1.clone()),
                 rhs: (rhs, t2.clone()),

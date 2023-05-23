@@ -615,7 +615,7 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
 pub fn parse(input: &str) -> Result<WithSpan<SurfaceSyntaxTree>, crate::Error> {
     match <GrammarParser as pest::Parser<Rule>>::parse(Rule::grammar, input) {
         Ok(pairs) => parse_surface_syntax(pairs, &PRATT_PARSER, input)
-            .map_err(|e| crate::Error::GrammarDefinitionError(e)),
+            .map_err(crate::Error::GrammarDefinitionError),
         Err(e) => Err(crate::Error::GrammarDefinitionError(
             GrammarDefinitionError::SyntaxError(Box::new(e)),
         )),
@@ -641,7 +641,7 @@ mod test {
         utilities::unreachable_branch,
     };
 
-    use super::{syntax::construct_parser, SurfaceSyntaxTree, WithSpan};
+    use super::syntax::construct_parser;
 
     const TEST: &str = include_str!("example.pag");
 

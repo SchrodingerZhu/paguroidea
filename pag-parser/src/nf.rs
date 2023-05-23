@@ -53,7 +53,6 @@ impl<'src> TagAssigner<'src> {
         }
     }
     fn next(&mut self, symbol: Symbol<'src>) -> Tag<'src> {
-        use std::collections::hash_map::Entry;
         match self.counters.entry(symbol) {
             Entry::Occupied(mut x) => {
                 let next = x.get().saturating_add(1);
@@ -327,28 +326,26 @@ pub fn merge_inactive_rules<'src, 'nf>(
         nfs.entries.remove(&tag);
         for i in nfs.entries.values_mut() {
             for j in i.iter_mut() {
-                match j {
-                    NormalForm::Sequence {
-                        terminal,
-                        nonterminals,
-                    } => {
-                        if nonterminals.contains(&Action::Subroutine(tag)) {
-                            *j = arena.alloc(NormalForm::Sequence {
-                                terminal: *terminal,
-                                nonterminals: nonterminals
-                                    .iter()
-                                    .map(|x| {
-                                        if *x == Action::Subroutine(tag) {
-                                            Action::Subroutine(new_tag)
-                                        } else {
-                                            *x
-                                        }
-                                    })
-                                    .collect(),
-                            }) as &'nf _;
-                        }
+                if let NormalForm::Sequence {
+                    terminal,
+                    nonterminals,
+                } = j
+                {
+                    if nonterminals.contains(&Action::Subroutine(tag)) {
+                        *j = arena.alloc(NormalForm::Sequence {
+                            terminal: *terminal,
+                            nonterminals: nonterminals
+                                .iter()
+                                .map(|x| {
+                                    if *x == Action::Subroutine(tag) {
+                                        Action::Subroutine(new_tag)
+                                    } else {
+                                        *x
+                                    }
+                                })
+                                .collect(),
+                        }) as &'nf _;
                     }
-                    _ => {}
                 }
             }
         }
