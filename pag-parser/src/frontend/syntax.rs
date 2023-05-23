@@ -30,7 +30,7 @@ pub struct Parser<'src, 'a> {
 impl<'src, 'a> Parser<'src, 'a> {
     pub fn type_check(&self) -> Vec<TypeError<'src>> {
         let target = unsafe { self.bindings.get(&self.entrypoint).unwrap_unchecked() };
-        type_check(&self.bindings, target.term)
+        type_check(&self.bindings, target.term, self.entrypoint)
     }
     pub fn is_active(&self, tag: &Tag<'src>) -> bool {
         !tag.is_versioned()

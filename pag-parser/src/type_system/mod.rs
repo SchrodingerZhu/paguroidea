@@ -8,7 +8,7 @@
 
 use crate::core_syntax::{BindingContext, Term};
 use crate::frontend::WithSpan;
-use crate::utilities::{unreachable_branch, Symbol};
+use crate::utilities::{Symbol};
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::vec;
@@ -17,32 +17,37 @@ use crate::type_system::context::TypeContext;
 use pest::Span;
 use thiserror::Error;
 
+use self::binding_proxy::BindingProxy;
+
+pub mod binding_proxy;
 pub mod context;
 
 #[derive(Error, Debug)]
 pub enum TypeError<'a> {
     #[error("sequential uniqueness requirement volidation")]
     SequentialUniquenessViolation {
-        lhs: Span<'a>,
-        rhs: Span<'a>,
+        lhs: (Span<'a>, Type<'a>),
+        rhs: (Span<'a>, Type<'a>),
         total: Span<'a>,
     },
     #[error("disjunctive uniqueness requirement volidation")]
     DisjunctiveUniquenessViolation {
-        lhs: Span<'a>,
-        rhs: Span<'a>,
+        lhs: (Span<'a>, Type<'a>),
+        rhs: (Span<'a>, Type<'a>),
         total: Span<'a>,
     },
     #[error("unguarded fixpoint {0}")]
     UnguardedFixpoint(Symbol<'a>, Span<'a>),
+    #[error("unresolved reference {0}")]
+    UnresolvedReference(Symbol<'a>, Span<'a>),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-struct Type<'src> {
-    first: HashSet<Symbol<'src>>,
-    follow: HashSet<Symbol<'src>>,
-    nullable: bool,
-    guarded: bool,
+pub struct Type<'src> {
+    pub first: HashSet<Symbol<'src>>,
+    pub follow: HashSet<Symbol<'src>>,
+    pub nullable: bool,
+    pub guarded: bool,
 }
 
 impl<'src> Type<'src> {
@@ -91,7 +96,11 @@ impl<'src> Type<'src> {
                 guarded: t1.guarded,
             })
         } else {
-            Err(TypeError::SequentialUniquenessViolation { lhs, rhs, total })
+            Err(TypeError::SequentialUniquenessViolation {
+                lhs: (lhs, t1.clone()),
+                rhs: (rhs, t2.clone()),
+                total,
+            })
         }
     }
     fn bottom() -> Self {
@@ -117,7 +126,11 @@ impl<'src> Type<'src> {
                 guarded: t1.guarded && t2.guarded,
             })
         } else {
-            Err(TypeError::DisjunctiveUniquenessViolation { lhs, rhs, total })
+            Err(TypeError::DisjunctiveUniquenessViolation {
+                lhs: (lhs, t1.clone()),
+                rhs: (rhs, t2.clone()),
+                total,
+            })
         }
     }
     fn minimum() -> Self {
@@ -145,7 +158,7 @@ impl<'src> Type<'src> {
 
 fn type_check_impl<'src, 'a>(
     typing_ctx: &mut TypeContext<'src>,
-    binding_ctx: &BindingContext<'src, 'a>,
+    binding_ctx: &mut BindingProxy<'src, 'a>,
     term: &'a WithSpan<'src, Term<'src, 'a>>,
 ) -> (Type<'src>, Vec<TypeError<'src>>) {
     match &term.node {
@@ -184,16 +197,16 @@ fn type_check_impl<'src, 'a>(
                 return (ty.as_ref().clone(), vec![]);
             }
             // otherwise, we need to type check the parser definition.
-            if let Some(target) = binding_ctx.get(name) {
+            if let Some(target) = binding_ctx.lookup(name) {
                 // we should not cache the result, since it can be recursive and changed during the calculation of the fixpoint.
-                let (r#type, errors) = type_check_impl(typing_ctx, binding_ctx, target.term);
+                let (r#type, errors) = binding_ctx.with_hiding(*name, |binding_ctx| {
+                    type_check_impl(typing_ctx, binding_ctx, target)
+                });
                 (r#type, errors)
             } else {
-                // unreachable because the parser definition should be in the context.
-                // this should be garanteed when translating the Parser Tree to the AST.
-                unreachable_branch!(
-                    "type system should guarantee that the parser definition {} is in the context",
-                    name
+                (
+                    Type::bottom(),
+                    vec![TypeError::UnresolvedReference(*name, term.span)],
                 )
             }
         }
@@ -225,7 +238,11 @@ fn type_check_impl<'src, 'a>(
 pub fn type_check<'src, 'a>(
     binding_ctx: &BindingContext<'src, 'a>,
     term: &'a WithSpan<'src, Term<'src, 'a>>,
+    name: Symbol<'src>,
 ) -> Vec<TypeError<'src>> {
     let mut typing_ctx = TypeContext::new();
-    type_check_impl(&mut typing_ctx, binding_ctx, term).1
+    let mut proxy = BindingProxy::proxy(binding_ctx);
+    proxy.with_hiding(name, |binding_ctx| {
+        type_check_impl(&mut typing_ctx, binding_ctx, term).1
+    })
 }

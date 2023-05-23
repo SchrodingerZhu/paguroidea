@@ -652,7 +652,15 @@ mod test {
                         for (i, rule) in parser.bindings.iter() {
                             println!("{i} ::= {}, active = {}", rule.term, rule.active)
                         }
-                        assert!(parser.type_check().is_empty());
+                        let errs = parser.type_check();
+                        assert!(
+                            errs.is_empty(),
+                            "{}",
+                            errs.into_iter()
+                                .map(|x| x.to_string())
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        );
                         println!("----");
                         let nf_arena = Arena::new();
                         let mut nfs = NormalForms::new();
