@@ -24,7 +24,6 @@ pub struct LexerRule<'a> {
     pub rule: SpanRegexTree<'a>,
 }
 
-// todo: check only one skip rule
 pub struct LexerDatabase<'a> {
     pub symbol_table: HashMap<&'a str, Symbol<'a>>,
     pub entries: HashMap<Symbol<'a>, LexerRule<'a>>,
@@ -264,8 +263,12 @@ impl<'a> TranslationContext<'a> {
                         }
                         Ok((k, rule)) => {
                             if !i.0 {
-                                // TODO: make sure only one skip rule is defined
-                                ctx.database.skip.replace(k);
+                                if let Some(x) = ctx.database.skip.replace(k) {
+                                    errs.push(WithSpan {
+                                        span: rule.span,
+                                        node: Error::MultipleSkippingRule(x.name()),
+                                    });
+                                }
                             }
                             let current_span = rule.span;
                             match ctx.database.symbol_table.insert(k.name(), k) {

@@ -24,6 +24,8 @@ pub enum Error<'a> {
     MultipleDefinition(&'a str, pest::Span<'a>),
     #[error("lexical reference {0} is not allowed within lexical definitions")]
     InvalidLexicalReference(&'a str),
+    #[error("multiple skip rule detected, previous definition is {0}")]
+    MultipleSkippingRule(&'a str),
     #[error("lexical {0} is undefined")]
     UndefinedLexicalReference(&'a str),
     #[error("parser rule {0} is undefined")]
@@ -522,7 +524,7 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                 }
                 Rule::parser_expr => parse_surface_syntax(primary.into_inner(), pratt, src),
                 _ => {
-                    todo!("{:?} is not yet implemented", primary.as_rule());
+                    unreachable_branch!("undefined primary rule: {:?}", primary.as_rule())
                 }
             }
         })
