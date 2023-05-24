@@ -74,14 +74,13 @@ impl<'src> Type<'src> {
         }
     }
 
-    #[allow(clippy::result_large_err)]
     fn sequence(
         t1: &Self,
         t2: &Self,
         lhs: Span<'src>,
         rhs: Span<'src>,
         total: Span<'src>,
-    ) -> Result<Self, TypeError<'src>> {
+    ) -> Result<Self, Box<TypeError<'src>>> {
         if t1.sequential_uniqueness(t2) {
             Ok(Self {
                 first: t1.first.clone(),
@@ -99,11 +98,11 @@ impl<'src> Type<'src> {
             })
         } else {
             // it is fine to return large error here, they will be stored in vectors anyway
-            Err(TypeError::SequentialUniquenessViolation {
+            Err(Box::new(TypeError::SequentialUniquenessViolation {
                 lhs: (lhs, t1.clone()),
                 rhs: (rhs, t2.clone()),
                 total,
-            })
+            }))
         }
     }
     fn bottom() -> Self {
@@ -115,14 +114,13 @@ impl<'src> Type<'src> {
         }
     }
 
-    #[allow(clippy::result_large_err)]
     fn alternative(
         t1: &Self,
         t2: &Self,
         lhs: Span<'src>,
         rhs: Span<'src>,
         total: Span<'src>,
-    ) -> Result<Self, TypeError<'src>> {
+    ) -> Result<Self, Box<TypeError<'src>>> {
         if t1.disjunctive_uniqueness(t2) {
             Ok(Self {
                 first: t1.first.union(&t2.first).cloned().collect(),
@@ -132,11 +130,11 @@ impl<'src> Type<'src> {
             })
         } else {
             // it is fine to return large error here, they will be stored in vectors anyway
-            Err(TypeError::DisjunctiveUniquenessViolation {
+            Err(Box::new(TypeError::DisjunctiveUniquenessViolation {
                 lhs: (lhs, t1.clone()),
                 rhs: (rhs, t2.clone()),
                 total,
-            })
+            }))
         }
     }
     fn minimum() -> Self {
@@ -178,7 +176,11 @@ fn type_check_impl<'src, 'a>(
             };
             (
                 r#type,
-                x_errors.into_iter().chain(y_errors).chain(err).collect(),
+                x_errors
+                    .into_iter()
+                    .chain(y_errors)
+                    .chain(err.map(Box::into_inner))
+                    .collect(),
             )
         }
         Term::LexerRef(name) => (Type::token(*name), vec![]),
@@ -193,7 +195,11 @@ fn type_check_impl<'src, 'a>(
             };
             (
                 r#type,
-                x_errors.into_iter().chain(y_errors).chain(err).collect(),
+                x_errors
+                    .into_iter()
+                    .chain(y_errors)
+                    .chain(err.map(Box::into_inner))
+                    .collect(),
             )
         }
         Term::ParserRef(name) => {
