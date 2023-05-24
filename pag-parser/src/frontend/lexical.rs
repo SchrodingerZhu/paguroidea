@@ -36,6 +36,18 @@ impl<'a> LexerDatabase<'a> {
     ) -> Result<Self, Vec<WithSpan<'a, Error<'a>>>> {
         TranslationContext::create_database(sst)
     }
+    pub fn nullability_check(&self) -> Vec<WithSpan<'a, Error<'a>>> {
+        let mut errors = Vec::new();
+        for (sym, rule) in self.entries.iter() {
+            if rule.rule.node.is_nullable() {
+                errors.push(WithSpan {
+                    span: rule.rule.span,
+                    node: Error::NullableToken(sym.name()),
+                });
+            }
+        }
+        errors
+    }
 }
 
 struct TranslationContext<'a> {

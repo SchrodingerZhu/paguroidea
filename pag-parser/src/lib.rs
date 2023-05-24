@@ -156,6 +156,14 @@ impl<'src> Error<'src> {
                                     .with_color(Color::Red))
                                 .finish()
                         },
+                        frontend::Error::NullableToken(name) => {
+                            Report::build(ReportKind::Error, input_name, e.span.start())
+                                .with_message("Nullable token detected")
+                                .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
+                                    .with_message(format!("token {} is nullable", name))   
+                                    .with_color(Color::Red))
+                                .finish()
+                        },
                     }
                 })
                 .collect::<Vec<_>>(),
@@ -225,6 +233,10 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
     match &sst.node {
         frontend::SurfaceSyntaxTree::Grammar { lexer, parser } => {
             let lexer_database = LexerDatabase::new(lexer)?;
+            let nullable_errors = lexer_database.nullability_check();
+            if !nullable_errors.is_empty() {
+                return Err(Error::FrontendErrors(nullable_errors));
+            }
             let term_arena = TermArena::new();
             let parser = construct_parser(&term_arena, lexer_database, parser)?;
             let type_errs = parser.type_check();
