@@ -135,27 +135,21 @@ fn generate_active_to_active_call(target: &Tag<'_>) -> TokenStream {
 fn generate_active_to_inactive_call(target: &Tag<'_>) -> TokenStream {
     let target_function = format_ident!("parse_{}", format!("{}", target));
     quote! {
-        {
-            cursor = #target_function(src, cursor, &mut tree)?;
-        }
+        cursor = #target_function(src, cursor, &mut tree)?;
     }
 }
 
 fn generate_inactive_to_inactive_call(target: &Tag<'_>) -> TokenStream {
     let target_function = format_ident!("parse_{}", format!("{}", target));
     quote! {
-        {
-            cursor = #target_function(src, cursor, parent)?;
-        }
+        cursor = #target_function(src, cursor, parent)?;
     }
 }
 
 fn generate_subtree_to_inactive_call(target: &Tag<'_>) -> TokenStream {
     let target_function = format_ident!("parse_{}", format!("{}", target));
     quote! {
-        {
-            cursor = #target_function(src, cursor, &mut subtree)?;
-        }
+        cursor = #target_function(src, cursor, &mut subtree)?;
     }
 }
 
@@ -284,26 +278,18 @@ fn generate_children<'src>(
                 Some((#index, shift)) => {
                     cursor += shift;
                     #(#actions)*
+                    break;
                 }
             }
         })
         .collect()
 }
 
-fn generate_skip(index: usize, tag: Tag<'_>, active: bool) -> TokenStream {
-    let tag_name = format!("{}", tag);
-    let parser_name = format_ident!("parse_{}", tag_name);
-    if active {
-        quote! {
-            Some((#index, shift)) => {
-                return #parser_name(src, offset + shift);
-            }
-        }
-    } else {
-        quote! {
-            Some((#index, shift)) => {
-                return #parser_name(src, offset + shift, parent);
-            }
+fn generate_skip(index: usize) -> TokenStream {
+    quote! {
+        Some((#index, shift)) => {
+            offset += shift;
+            continue;
         }
     }
 }
@@ -355,8 +341,6 @@ fn generate_inactive_parser<'src>(
                         .iter()
                         .filter(|x| !matches!(x, NormalForm::Empty(..)))
                         .count(),
-                    tag,
-                    false,
                 )
             }));
     let none_action = match rules.iter().find_map(|x| match x {
@@ -368,6 +352,7 @@ fn generate_inactive_parser<'src>(
             quote! {
                 None => {
                     #(#actions)*
+                    break;
                 }
             }
         }
@@ -384,16 +369,19 @@ fn generate_inactive_parser<'src>(
     quote! {
         fn #parser_name<'a>(
             src: &'a str,
-            offset: usize,
+            mut offset: usize,
             parent: &mut ParserTree<'a>,
         ) -> Result<usize, Error> {
             #expect
             #lexer
-            let mut cursor = offset;
-            match #lexer_name(&src[offset..]) {
-                #none_action,
-                #(#parser_rules,)*
-                _ => unsafe { ::core::hint::unreachable_unchecked() },
+            let mut cursor;
+            loop {
+                cursor = offset;
+                match #lexer_name(&src[offset..]) {
+                    #none_action,
+                    #(#parser_rules,)*
+                    _ => unsafe { ::core::hint::unreachable_unchecked() },
+                }
             }
             Ok(cursor)
         }
@@ -421,8 +409,6 @@ fn generate_active_parser<'src>(
                         .iter()
                         .filter(|x| !matches!(x, NormalForm::Empty(..)))
                         .count(),
-                    tag,
-                    true,
                 )
             }));
     let none_action = match rules.iter().find_map(|x| match x {
@@ -434,6 +420,7 @@ fn generate_active_parser<'src>(
             quote! {
                 None => {
                     #(#actions)*
+                    break;
                 }
             }
         }
@@ -450,16 +437,19 @@ fn generate_active_parser<'src>(
     quote! {
         fn #parser_name(
             src: &str,
-            offset: usize,
+            mut offset: usize,
         ) -> Result<ParserTree, Error> {
             #expect
             #lexer
             let mut tree = ParserTree::new(Tag::#tag_ident, src);
-            let mut cursor = offset;
-            match #lexer_name(&src[offset..]) {
-                #none_action,
-                #(#parser_rules,)*
-                _ => unsafe { ::core::hint::unreachable_unchecked() },
+            let mut cursor;
+            loop {
+                cursor = offset;
+                match #lexer_name(&src[offset..]) {
+                    #none_action,
+                    #(#parser_rules,)*
+                    _ => unsafe { ::core::hint::unreachable_unchecked() },
+                }
             }
             tree.set_span(offset..cursor);
             Ok(tree)
