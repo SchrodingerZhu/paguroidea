@@ -1,29 +1,64 @@
-#![allow(dead_code)]
+use std::num::Wrapping;
+
 mod parser;
 
-fn eval(tree: &parser::ParserTree) -> usize {
+#[allow(dead_code)]
+fn eval(tree: &parser::ParserTree) -> Wrapping<usize> {
     match tree.tag() {
-        parser::Tag::sexpr => {
-            eval(&tree.children()[0])
-        },
-        parser::Tag::int => {
-            tree.as_slice().parse().unwrap()
-        },
+        parser::Tag::sexpr => eval(&tree.children()[0]),
+        parser::Tag::int => Wrapping(tree.as_slice().parse::<usize>().unwrap()),
         parser::Tag::op => {
             unreachable!("op should be handled by sexpr")
+        }
+        parser::Tag::compound => match tree.children()[0].as_slice() {
+            "+" => tree.children()[1..].iter().map(eval).sum(),
+            "*" => tree.children()[1..].iter().map(eval).product(),
+            _ => unreachable!("only + and * are supported"),
         },
-        parser::Tag::compound => {
-            match tree.children()[0].as_slice() {
-                "+" => {
-                    tree.children()[1..].iter().map(|x| eval(x)).sum()
-                },
-                "*" => {
-                    tree.children()[1..].iter().map(|x| eval(x)).product()
-                },
-                _ => unreachable!("only + and * are supported")
+    }
+}
+
+#[allow(dead_code)]
+fn generate_sexpr<G: rand::Rng>(mut limit: usize, gen: &mut G) -> (usize, Wrapping<usize>, String) {
+    if limit <= 1 {
+        let x = Wrapping(gen.next_u64() as usize % 100);
+        return (1, x, format!("{}", x));
+    }
+    match gen.next_u64() % 20 {
+        0 => {
+            let x = Wrapping(gen.next_u64() as usize % 100);
+            (1, x, format!("{}", x))
+        }
+        1..=15 => {
+            let width = 2 + gen.next_u64() % (limit as u64).min(10);
+            let mut buffer = "(+".to_string();
+            let mut cnt = 0;
+            let mut sum = Wrapping(0);
+            for _ in 0..width {
+                let (w, v, s) = generate_sexpr(limit, gen);
+                cnt += w;
+                limit = limit.saturating_sub(w);
+                sum += v;
+                buffer.push_str(&format!(" {}", s));
             }
-        },
-        
+            buffer.push(')');
+            (cnt, sum, buffer)
+        }
+        _ => {
+            let width = 2 + gen.next_u64() % (limit as u64).min(10);
+            let mut buffer = "(*".to_string();
+            let mut cnt = 0;
+            let mut prod = Wrapping(1);
+            for _ in 0..width {
+                let (w, v, s) = generate_sexpr(limit, gen);
+                cnt += w;
+                limit = limit.saturating_sub(w);
+                prod *= v;
+                buffer.push_str(&format!(" {}", s));
+            }
+            buffer.push(')');
+            (cnt, prod, buffer)
+        }
     }
 }
 
@@ -31,8 +66,21 @@ fn eval(tree: &parser::ParserTree) -> usize {
 fn simple_test() {
     let test = "(+ 1 (* 5 55))";
     let tree = parser::parse(test).unwrap();
-    assert_eq!(276, eval(&tree));
+    assert_eq!(276, eval(&tree).0);
     let test = "(+ 1 (# 5 5))";
     let err = parser::parse(test).unwrap_err().to_string();
-    assert_eq!(err, "expecting MULT, PLUS or WHITESPACE for compound at offset 6");
+    assert_eq!(
+        err,
+        "expecting MULT, PLUS or WHITESPACE for compound at offset 6"
+    );
+}
+
+#[test]
+fn randomized_test() {
+    for _ in 0..1000 {
+        let (_, value, expr) = generate_sexpr(20, &mut rand::thread_rng());
+
+        let tree = parser::parse(&expr).unwrap();
+        assert_eq!(value, eval(&tree))
+    }
 }

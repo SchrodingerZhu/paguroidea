@@ -447,14 +447,8 @@ fn generate_active_parser<'src>(
             }
         },
     };
-    let modifier = if parser.entrypoint == tag.symbol() {
-        Some(quote!(pub))
-    } else {
-        None
-    }
-    .into_iter();
     quote! {
-        #(#modifier)* fn #parser_name(
+        fn #parser_name(
             src: &str,
             offset: usize,
         ) -> Result<ParserTree, Error> {
