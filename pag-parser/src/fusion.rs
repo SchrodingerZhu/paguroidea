@@ -393,7 +393,7 @@ fn generate_inactive_parser<'src>(
             match #lexer_name(&src[offset..]) {
                 #none_action,
                 #(#parser_rules,)*
-                _ => unreachable!("should not enter this branch"),
+                _ => unsafe { ::core::hint::unreachable_unchecked() },
             }
             Ok(cursor)
         }
@@ -459,7 +459,7 @@ fn generate_active_parser<'src>(
             match #lexer_name(&src[offset..]) {
                 #none_action,
                 #(#parser_rules,)*
-                _ => unreachable!("should not enter this branch"),
+                _ => unsafe { ::core::hint::unreachable_unchecked() },
             }
             tree.set_span(offset..cursor);
             Ok(tree)
