@@ -1,0 +1,25 @@
+lexer {
+    definition DIGIT     = '0' .. '9';
+    active token LPAREN     = '(';
+    active token RPAREN     = ')';
+    active token PLUS     = '+';
+    active token MULT     = '*';
+    active token INT       = DIGIT+;
+    silent token WHITESPACE = (' ' | '\t' | '\n' | '\r')+;
+}
+
+parser expr {
+    active fixpoint expr
+        = mult ~ (PLUS ~ mult)*;
+
+    active fixpoint mult
+        = primary ~ (MULT ~ primary)*;
+
+    silent fixpoint primary
+        = int | LPAREN ~ expr ~ RPAREN;
+
+    active definition int
+        = INT;
+
+}
+
