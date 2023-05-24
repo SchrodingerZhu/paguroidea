@@ -230,12 +230,11 @@ fn generate_children<'src>(
                                     (false, false) => {
                                         if active {
                                             result.push(generate_active_to_inactive_call(routine))
-                                        } else if current == routine && i == nonterminals.len() - 1 {
+                                        } else if current == routine && i == nonterminals.len() - 1
+                                        {
                                             add_continue = true;
                                         } else {
-                                            result.push(generate_inactive_to_inactive_call(
-                                                routine,
-                                            ))
+                                            result.push(generate_inactive_to_inactive_call(routine))
                                         }
                                     }
                                     (false, true) => {
