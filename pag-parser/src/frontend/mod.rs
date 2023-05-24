@@ -117,7 +117,8 @@ lazy_static! {
             .op(Op::infix(Rule::lexical_sequence, Left))
             .op(Op::postfix(Rule::lexical_star)
                 | Op::postfix(Rule::lexical_plus)
-                | Op::postfix(Rule::lexical_optional))
+                | Op::postfix(Rule::lexical_optional)
+                | Op::prefix(Rule::lexical_not))
             .op(Op::infix(Rule::parser_alternative, Left))
             .op(Op::infix(Rule::parser_sequence, Left))
             .op(Op::postfix(Rule::parser_star)
@@ -528,6 +529,22 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                 _ => {
                     unreachable_branch!("undefined primary rule: {:?}", primary.as_rule())
                 }
+            }
+        })
+        .map_prefix(|op, operand| {
+            let operand = operand?;
+            match op.as_rule() {
+                Rule::lexical_not => {
+                    let total_span = Span::new(src, op.as_span().start(), operand.span.end())
+                        .ok_or_else(|| parser_logical_error!("invalid span"))?;
+                    Ok(WithSpan {
+                        span: total_span,
+                        node: SurfaceSyntaxTree::LexicalNot {
+                            inner: Box::new(operand),
+                        },
+                    })
+                }
+                _ => unreachable_branch!("only lexical not is supported as a prefix operator"),
             }
         })
         .map_infix(|lhs, op, rhs| {

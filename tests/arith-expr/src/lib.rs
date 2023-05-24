@@ -43,7 +43,7 @@ fn simple_test() {
     // (8 * 1 + 3) * 6 + ((37 + 7) * 2)
     let expr = "(8 * 1 + 3) * 6 + ((37 + 7) * 2)";
     let tree = parser::parse(expr).unwrap();
-    assert_eq!(eval(&tree), Wrapping((8 * 1 + 3) * 6 + ((37 + 7) * 2)));
+    assert_eq!(eval(&tree), Wrapping((8 + 3) * 6 + ((37 + 7) * 2)));
 
     // ((((8 + 13) + 3) * 6) * ((3 + 7) * 22)) * 91
     let expr = "((((8 + 13) + 3) * 6) * ((3 + 7) * 22)) * 91 + 1 + 2 + 3";

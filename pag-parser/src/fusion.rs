@@ -198,6 +198,7 @@ fn create_next_tree_indices<'src>(actions: &[Action<'src>]) -> HashMap<usize, Sy
 }
 
 fn generate_children<'src>(
+    current: &Tag<'src>,
     active: bool,
     parser: &Parser<'src, '_>,
     rules: &[&NormalForm<'src>],
@@ -207,6 +208,7 @@ fn generate_children<'src>(
         .filter(|x| !matches!(x, NormalForm::Empty(..)))
         .enumerate()
         .map(|(index, subroutines)| {
+            let mut add_continue = false;
             let actions = match subroutines {
                 NormalForm::Unexpanded(..) => unreachable_branch!("should be fully normalized"),
                 NormalForm::Empty(symbols) => generate_empty_actions(active, symbols),
@@ -228,8 +230,12 @@ fn generate_children<'src>(
                                     (false, false) => {
                                         if active {
                                             result.push(generate_active_to_inactive_call(routine))
+                                        } else if current == routine && i == nonterminals.len() - 1 {
+                                            add_continue = true;
                                         } else {
-                                            result.push(generate_inactive_to_inactive_call(routine))
+                                            result.push(generate_inactive_to_inactive_call(
+                                                routine,
+                                            ))
                                         }
                                     }
                                     (false, true) => {
@@ -274,11 +280,22 @@ fn generate_children<'src>(
                     result
                 }
             };
-            quote! {
-                Some((#index, shift)) => {
-                    cursor += shift;
-                    #(#actions)*
-                    break;
+            if add_continue {
+                quote! {
+                    Some((#index, shift)) => {
+                        cursor += shift;
+                        #(#actions)*
+                        offset = cursor;
+                        continue;
+                    }
+                }
+            } else {
+                quote! {
+                    Some((#index, shift)) => {
+                        cursor += shift;
+                        #(#actions)*
+                        break;
+                    }
                 }
             }
         })
@@ -332,23 +349,22 @@ fn generate_inactive_parser<'src>(
     let expect = generate_expect(rules, lexer_database);
     let lexer = fusion_lexer(rules, lexer_database).generate_dfa(format!("lexer_{}", tag_name));
     let lexer_name = format_ident!("lexer_{}", tag_name);
-    let parser_rules =
-        generate_children(false, parser, rules)
-            .into_iter()
-            .chain(lexer_database.skip.map(|_| {
-                generate_skip(
-                    rules
-                        .iter()
-                        .filter(|x| !matches!(x, NormalForm::Empty(..)))
-                        .count(),
-                )
-            }));
+    let parser_rules = generate_children(&tag, false, parser, rules)
+        .into_iter()
+        .chain(lexer_database.skip.map(|_| {
+            generate_skip(
+                rules
+                    .iter()
+                    .filter(|x| !matches!(x, NormalForm::Empty(..)))
+                    .count(),
+            )
+        }));
     let none_action = match rules.iter().find_map(|x| match x {
         NormalForm::Empty(e) => Some(e),
         _ => None,
     }) {
         Some(e) => {
-            let actions = generate_empty_actions(true, e);
+            let actions = generate_empty_actions(false, e);
             quote! {
                 None => {
                     #(#actions)*
@@ -400,17 +416,16 @@ fn generate_active_parser<'src>(
     let expect = generate_expect(rules, lexer_database);
     let lexer = fusion_lexer(rules, lexer_database).generate_dfa(format!("lexer_{}", tag_name));
     let lexer_name = format_ident!("lexer_{}", tag_name);
-    let parser_rules =
-        generate_children(true, parser, rules)
-            .into_iter()
-            .chain(lexer_database.skip.map(|_| {
-                generate_skip(
-                    rules
-                        .iter()
-                        .filter(|x| !matches!(x, NormalForm::Empty(..)))
-                        .count(),
-                )
-            }));
+    let parser_rules = generate_children(&tag, true, parser, rules)
+        .into_iter()
+        .chain(lexer_database.skip.map(|_| {
+            generate_skip(
+                rules
+                    .iter()
+                    .filter(|x| !matches!(x, NormalForm::Empty(..)))
+                    .count(),
+            )
+        }));
     let none_action = match rules.iter().find_map(|x| match x {
         NormalForm::Empty(e) => Some(e),
         _ => None,

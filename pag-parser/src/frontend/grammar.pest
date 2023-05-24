@@ -40,11 +40,13 @@ parser_id = ${ !KEYWORD ~ lowercase ~ (lowercase | digit | "_")* }
 
 // pratt parser for lexical expressions
 lexical_primary = _{ any | bottom | empty | range | character | string | token_id | "(" ~ lexical_expr ~ ")" }
-lexical_expr = { lexical_primary ~ lexical_postfix* ~ (lexical_infix ~ lexical_primary ~ lexical_postfix* )* }
+lexical_expr = { lexical_prefix* ~ lexical_primary ~ lexical_postfix* ~ (lexical_infix ~ lexical_prefix* ~ lexical_primary ~ lexical_postfix* )* }
 lexical_postfix = _{ lexical_optional | lexical_star | lexical_plus }
 lexical_optional = { "?" }
 lexical_star = { "*" }
 lexical_plus = { "+" }
+lexical_not = { "!" }
+lexical_prefix = _{ lexical_not }
 lexical_infix = _{ lexical_sequence | lexical_alternative }
 lexical_sequence = { "~" }
 lexical_alternative = { "|" }

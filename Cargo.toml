@@ -13,4 +13,5 @@ members = [
     "pag-compiler",
     "tests/sexpr-calculator",
     "tests/arith-expr",
+    "benches/csv"
 ]
