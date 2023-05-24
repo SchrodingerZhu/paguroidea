@@ -77,7 +77,7 @@ impl<'src> Error<'src> {
                         Report::build(ReportKind::Error, input_name, span.start)
                             .with_message("Syntax error in grammar definition")
                             .with_label(ariadne::Label::new((input_name, span))
-                                .with_message(format!("{}", x))   
+                                .with_message(format!("{}", x.variant.message()))   
                                 .with_color(Color::Red))
                             .finish()
                     },
@@ -262,7 +262,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
             let parser_routines = fusion_parser(&nfs, &parser);
             let entrypoint = format_ident!("parse_{}", parser.entrypoint.name());
             Ok(quote::quote! {
-                #![allow(non_snake_case, dead_code, non_camel_case_types)]
+                #![allow(non_snake_case, dead_code, non_camel_case_types, unused_variables, unused_mut, clippy::single_match)]
                 #parser_routines
                 pub fn parse(input: &str) -> Result<ParserTree, Error> {
                     #entrypoint(input, 0)
