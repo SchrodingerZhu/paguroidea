@@ -26,6 +26,8 @@ pub enum Error<'a> {
     InvalidLexicalReference(&'a str),
     #[error("multiple skip rule detected, previous definition is {0}")]
     MultipleSkippingRule(&'a str),
+    #[error("nullable token {0} is prohibited")]
+    NullableToken(&'a str),
     #[error("lexical {0} is undefined")]
     UndefinedLexicalReference(&'a str),
     #[error("parser rule {0} is undefined")]
