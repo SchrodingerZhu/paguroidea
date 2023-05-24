@@ -148,6 +148,14 @@ impl<'src> Error<'src> {
                                     .with_color(Color::Red))
                                 .finish()
                         },
+                        frontend::Error::MultipleSkippingRule(name) => {
+                            Report::build(ReportKind::Error, input_name, e.span.start())
+                                .with_message("Skipping lexical rule is already defined")
+                                .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
+                                    .with_message(format!("this definition conflicts with previous definition for {name}"))   
+                                    .with_color(Color::Red))
+                                .finish()
+                        },
                     }
                 })
                 .collect::<Vec<_>>(),
