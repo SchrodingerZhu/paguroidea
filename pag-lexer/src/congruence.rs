@@ -47,7 +47,7 @@ pub fn approximate_congruence_class(tree: &RegexTree) -> Vec<Intervals> {
             }
         }
         RegexTree::Concat(r, s) => {
-            if r.is_nullable() {
+            if !r.is_nullable() {
                 approximate_congruence_class(r)
             } else {
                 meet(

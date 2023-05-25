@@ -1,0 +1,12 @@
+[package]
+name = "pag-json"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+rand = { version = "0.8" }
+snmalloc-rs = { version = "0.3", features = ["build_cc"] }
+
+[build-dependencies]
+pag-compiler = { path = "../../pag-compiler" }
