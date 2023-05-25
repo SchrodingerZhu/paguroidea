@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Paguroidea Developpers
+// Copyright (c) 2023 Paguroidea Developers
 //
 // Licensed under the Apache License, Version 2.0
 // <LICENSE-APACHE or http://www.apache.org/licenses/LICENSE-2.0> or the MIT
@@ -39,7 +39,6 @@ mod tests {
     }
 
     #[test]
-
     fn renormalize_tests() {
         // concat
         let a = Rc::new(RegexTree::single('a'));

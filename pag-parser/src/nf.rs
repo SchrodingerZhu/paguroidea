@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Paguroidea Developpers
+// Copyright (c) 2023 Paguroidea Developers
 //
 // Licensed under the Apache License, Version 2.0
 // <LICENSE-APACHE or http://www.apache.org/licenses/LICENSE-2.0> or the MIT
@@ -214,10 +214,11 @@ pub fn semi_normalize<'src, 'p, 'nf>(
             }
         }
         Term::ParserRef(x) => {
-            let acts = if parser.is_active(&Tag::new(*x)) {
-                smallvec![Action::Subroutine(Tag::new(*x)), Action::Summarize(*x)]
+            let new_tag = Tag::new(*x);
+            let acts = if parser.is_active(&new_tag) {
+                smallvec![Action::Subroutine(new_tag), Action::Summarize(*x)]
             } else {
-                smallvec![Action::Subroutine(Tag::new(*x))]
+                smallvec![Action::Subroutine(new_tag)]
             };
             let nf = smallvec![&*arena.alloc(NormalForm::Unexpanded(acts))];
             nfs.entries.insert(tag, nf);
