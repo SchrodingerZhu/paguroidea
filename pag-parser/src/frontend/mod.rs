@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Paguroidea Developpers
+// Copyright (c) 2023 Paguroidea Developers
 //
 // Licensed under the Apache License, Version 2.0
 // <LICENSE-APACHE or http://www.apache.org/licenses/LICENSE-2.0> or the MIT
@@ -691,7 +691,7 @@ mod test {
                 for i in reports.iter() {
                     i.eprint(&mut src).unwrap();
                 }
-                assert!(reports.is_empty(),);
+                assert!(reports.is_empty());
                 println!("----");
                 let nf_arena = Arena::new();
                 let mut nfs = NormalForms::new();
@@ -706,15 +706,19 @@ mod test {
                         &parser,
                     )
                 }
+                println!("size of nfs.entries: {}", nfs.entries.len());
                 println!("{}", nfs);
                 println!("----");
                 fully_normalize(&nf_arena, &mut nfs);
+                println!("size of nfs.entries: {}", nfs.entries.len());
                 println!("{}", nfs);
                 println!("----");
                 merge_inactive_rules(&mut nfs, &parser, &nf_arena);
+                println!("size of nfs.entries: {}", nfs.entries.len());
                 println!("{}", nfs);
                 println!("----");
                 remove_unreachable_rules(&mut nfs, &parser);
+                println!("size of nfs.entries: {}", nfs.entries.len());
                 println!("{}", nfs);
                 println!("----");
                 let parser = fusion_parser(&nfs, &parser);
