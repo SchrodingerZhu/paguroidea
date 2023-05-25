@@ -1,8 +1,7 @@
 lexer {
-    active token TEXT     = ('\x20' .. '\x21' | '\x23' .. '\x2B' |  '\x2D' .. '\x7E')+;
+    active token TEXT     = (!('"' | '\r' | '\n' | ','))+;
     active token STRING     = '"' ~ ('"' ~ '"' | !'"')* ~ '"';
-    active token CR       = '\r';
-    active token LF       = '\n';
+    active token CRLF       = '\r'? ~ '\n';
     active token COMMA    = ',';
 }
 
@@ -10,20 +9,9 @@ parser csv {
     active definition csv
         = record+;
 
-    silent fixpoint fields
-        = _ | COMMA ~ (field | empty) ~ fields;
-
     active definition field
         = TEXT | STRING; 
 
-    active definition empty_head
-        = COMMA;
-
-    active definition empty
-        = _;
-
     active definition record
-        = empty_head ~ field ~ fields ~ CR? ~ LF
-        | field ~ fields ~ CR? ~ LF;  
+        = field ~ (COMMA ~ field)* ~ CRLF;  
 }
-
