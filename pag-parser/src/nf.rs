@@ -7,14 +7,13 @@
 // modified, or distributed except according to those terms.
 
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     fmt::Display,
-    matches,
     num::NonZeroUsize,
     write,
 };
 
-use smallvec::SmallVec;
+use smallvec::{smallvec, SmallVec};
 use typed_arena::Arena;
 
 use crate::{core_syntax::Term, frontend::syntax::Parser, utilities::Symbol};
@@ -34,9 +33,11 @@ impl<'src> Tag<'src> {
             version: None,
         }
     }
+
     pub fn is_versioned(&self) -> bool {
         self.version.is_some()
     }
+
     pub fn symbol(&self) -> Symbol<'src> {
         self.symbol
     }
@@ -52,23 +53,16 @@ impl<'src> TagAssigner<'src> {
             counters: HashMap::new(),
         }
     }
+
     fn next(&mut self, symbol: Symbol<'src>) -> Tag<'src> {
-        match self.counters.entry(symbol) {
-            Entry::Occupied(mut x) => {
-                let next = x.get().saturating_add(1);
-                x.insert(next);
-                Tag {
-                    symbol,
-                    version: Some(next),
-                }
-            }
-            Entry::Vacant(x) => {
-                x.insert(NonZeroUsize::MIN);
-                Tag {
-                    symbol,
-                    version: Some(NonZeroUsize::MIN),
-                }
-            }
+        let version = *self
+            .counters
+            .entry(symbol)
+            .and_modify(|x| *x = x.saturating_add(1))
+            .or_insert(NonZeroUsize::MIN);
+        Tag {
+            symbol,
+            version: Some(version),
         }
     }
 }
@@ -175,55 +169,42 @@ pub fn semi_normalize<'src, 'p, 'nf>(
     parser: &Parser<'src, 'p>,
 ) {
     match target {
-        crate::core_syntax::Term::Epsilon => {
-            let nf = [arena.alloc(NormalForm::Empty(Default::default())) as &'nf _]
-                .into_iter()
-                .collect();
+        Term::Epsilon => {
+            let nf = smallvec![&*arena.alloc(NormalForm::Empty(Default::default()))];
             nfs.entries.insert(tag, nf);
         }
-        crate::core_syntax::Term::Sequence(x, y) => {
+        Term::Sequence(x, y) => {
             let x_tag = assigner.next(tag.symbol);
             let y_tag = assigner.next(tag.symbol);
             semi_normalize(&x.node, x_tag, arena, nfs, assigner, parser);
             semi_normalize(&y.node, y_tag, arena, nfs, assigner, parser);
-            let result = [NormalForm::Unexpanded(
-                [Action::Subroutine(x_tag), Action::Subroutine(y_tag)]
-                    .into_iter()
-                    .collect(),
-            )]
-            .into_iter()
-            .map(|x| arena.alloc(x) as &'nf _)
-            .collect();
-            nfs.entries.insert(tag, result);
-        }
-        crate::core_syntax::Term::LexerRef(lexer) => {
-            let nf = [arena.alloc(NormalForm::Sequence {
-                terminal: *lexer,
-                nonterminals: SmallVec::new(),
-            }) as &'nf _]
-            .into_iter()
-            .collect();
+            let acts = smallvec![Action::Subroutine(x_tag), Action::Subroutine(y_tag)];
+            let nf = smallvec![&*arena.alloc(NormalForm::Unexpanded(acts))];
             nfs.entries.insert(tag, nf);
         }
-        crate::core_syntax::Term::Bottom => {
+        Term::LexerRef(lexer) => {
+            let nf = smallvec![&*arena.alloc(NormalForm::Sequence {
+                terminal: *lexer,
+                nonterminals: SmallVec::new(),
+            })];
+            nfs.entries.insert(tag, nf);
+        }
+        Term::Bottom => {
             let nf = SmallVec::new();
             nfs.entries.insert(tag, nf);
         }
-        crate::core_syntax::Term::Alternative(x, y) => {
+        Term::Alternative(x, y) => {
             let x_tag = assigner.next(tag.symbol);
             let y_tag = assigner.next(tag.symbol);
             semi_normalize(&x.node, x_tag, arena, nfs, assigner, parser);
             semi_normalize(&y.node, y_tag, arena, nfs, assigner, parser);
-            let result = [
-                NormalForm::Unexpanded([Action::Subroutine(x_tag)].into_iter().collect()),
-                NormalForm::Unexpanded([Action::Subroutine(y_tag)].into_iter().collect()),
-            ]
-            .into_iter()
-            .map(|x| arena.alloc(x) as &'nf _)
-            .collect();
-            nfs.entries.insert(tag, result);
+            let nf = smallvec![
+                &*arena.alloc(NormalForm::Unexpanded(smallvec![Action::Subroutine(x_tag)])),
+                &*arena.alloc(NormalForm::Unexpanded(smallvec![Action::Subroutine(y_tag)])),
+            ];
+            nfs.entries.insert(tag, nf);
         }
-        crate::core_syntax::Term::Fix(var, body) => {
+        Term::Fix(var, body) => {
             let body_tag = Tag::new(*var);
             semi_normalize(&body.node, body_tag, arena, nfs, assigner, parser);
             // copy tag for fixpoint
@@ -232,63 +213,94 @@ pub fn semi_normalize<'src, 'p, 'nf>(
                 nfs.entries.insert(tag, body_nf.clone());
             }
         }
-        crate::core_syntax::Term::ParserRef(x) => {
-            let nf = [arena.alloc(NormalForm::Unexpanded(
-                [Action::Subroutine(Tag::new(*x))]
-                    .into_iter()
-                    .chain(if parser.is_active(&Tag::new(*x)) {
-                        Some(Action::Summarize(*x))
-                    } else {
-                        None
-                    })
-                    .collect(),
-            )) as &'nf _]
-            .into_iter()
-            .collect();
+        Term::ParserRef(x) => {
+            let acts = if parser.is_active(&Tag::new(*x)) {
+                smallvec![Action::Subroutine(Tag::new(*x)), Action::Summarize(*x)]
+            } else {
+                smallvec![Action::Subroutine(Tag::new(*x))]
+            };
+            let nf = smallvec![&*arena.alloc(NormalForm::Unexpanded(acts))];
             nfs.entries.insert(tag, nf);
         }
     }
 }
 
-pub fn dfs_remove_unreachable_rules<'src>(
-    nfs: &mut NormalForms<'src, '_>,
-    parser: &Parser<'src, '_>,
+pub fn fully_normalize<'src, 'nf>(
+    arena: &'nf Arena<NormalForm<'src>>,
+    nfs: &mut NormalForms<'src, 'nf>,
 ) {
-    let mut visited = HashSet::new();
-    fn dfs<'src>(
-        nfs: &NormalForms<'src, '_>,
-        current: Tag<'src>,
-        visited: &mut HashSet<Tag<'src>>,
-    ) {
-        if visited.contains(&current) {
-            return;
-        }
-        visited.insert(current);
-        if let Some(tag) = nfs.entries.get(&current) {
-            for i in tag {
-                match i {
-                    NormalForm::Empty(_) => (),
-                    NormalForm::Unexpanded(_) => (),
-                    NormalForm::Sequence { nonterminals, .. } => {
-                        for i in nonterminals {
-                            if let Action::Subroutine(x) = i {
-                                dfs(nfs, *x, visited);
+    let mut updates = Vec::new();
+    loop {
+        for (tag, i) in nfs.entries.iter() {
+            if !i.iter().any(|x| matches!(x, NormalForm::Unexpanded(..))) {
+                continue;
+            }
+            let mut result = SmallVec::new();
+            for j in i.iter() {
+                let NormalForm::Unexpanded(actions) = j else {
+                    result.push(*j);
+                    continue;
+                };
+                match actions
+                    .iter()
+                    .enumerate()
+                    .find(|(_, x)| matches!(x, Action::Subroutine(..)))
+                {
+                    None => {
+                        let nf = NormalForm::Empty(actions.iter().map(|x| x.symbol()).collect());
+                        result.push(&*arena.alloc(nf));
+                    }
+                    Some((index, Action::Subroutine(x))) => {
+                        let head = &actions[..index];
+                        let tail = &actions[index + 1..];
+                        let variable_nf = nfs.entries.get(x).unwrap();
+                        for k in variable_nf.iter().copied() {
+                            match k {
+                                NormalForm::Empty(trees) => {
+                                    let acts = head
+                                        .iter()
+                                        .cloned()
+                                        .chain(trees.iter().map(|x| Action::Summarize(*x)))
+                                        .chain(tail.iter().cloned())
+                                        .collect();
+                                    result.push(&*arena.alloc(NormalForm::Unexpanded(acts)));
+                                }
+                                NormalForm::Unexpanded(subacts) => {
+                                    let acts = head
+                                        .iter()
+                                        .chain(subacts.iter())
+                                        .chain(tail.iter())
+                                        .cloned()
+                                        .collect();
+                                    result.push(&*arena.alloc(NormalForm::Unexpanded(acts)));
+                                }
+                                NormalForm::Sequence {
+                                    terminal,
+                                    nonterminals,
+                                } => {
+                                    let acts = head
+                                        .iter()
+                                        .chain(nonterminals.iter())
+                                        .chain(tail.iter())
+                                        .cloned()
+                                        .collect();
+                                    result.push(&*arena.alloc(NormalForm::Sequence {
+                                        terminal: *terminal,
+                                        nonterminals: acts,
+                                    }));
+                                }
                             }
                         }
                     }
+                    _ => unreachable!(),
                 }
             }
+            updates.push((*tag, result));
         }
-    }
-    dfs(nfs, Tag::new(parser.entrypoint), &mut visited);
-    let to_remove = nfs
-        .entries
-        .keys()
-        .filter(|x| !visited.contains(x))
-        .copied()
-        .collect::<Vec<_>>();
-    for i in to_remove {
-        nfs.entries.remove(&i);
+        if updates.is_empty() {
+            break;
+        }
+        nfs.entries.extend(updates.drain(..));
     }
 }
 
@@ -304,139 +316,63 @@ pub fn merge_inactive_rules<'src, 'nf>(
     let mut table: HashMap<&[&NormalForm], Tag<'src>> = HashMap::new();
     let mut rename = Vec::new();
     for (tag, nf) in nfs.entries.iter() {
-        if !tag.is_versioned()
-            && parser
-                .bindings
-                .get(&tag.symbol)
-                .map(|x| x.active)
-                .unwrap_or(false)
-        {
+        if !tag.is_versioned() && parser.bindings.get(&tag.symbol).map_or(false, |x| x.active) {
             continue;
         }
-        match table.entry(nf.as_slice()) {
-            Entry::Occupied(x) => {
-                rename.push((*tag, *x.get()));
-            }
-            Entry::Vacant(x) => {
-                x.insert(*tag);
-            }
-        }
+        table
+            .entry(nf.as_slice())
+            .and_modify(|new_tag| rename.push((*tag, *new_tag)))
+            .or_insert(*tag);
     }
     for (tag, new_tag) in rename {
         nfs.entries.remove(&tag);
         for i in nfs.entries.values_mut() {
             for j in i.iter_mut() {
-                if let NormalForm::Sequence {
+                let NormalForm::Sequence {
                     terminal,
                     nonterminals,
-                } = j
-                {
-                    if nonterminals.contains(&Action::Subroutine(tag)) {
-                        *j = arena.alloc(NormalForm::Sequence {
-                            terminal: *terminal,
-                            nonterminals: nonterminals
-                                .iter()
-                                .map(|x| {
-                                    if *x == Action::Subroutine(tag) {
-                                        Action::Subroutine(new_tag)
-                                    } else {
-                                        *x
-                                    }
-                                })
-                                .collect(),
-                        }) as &'nf _;
-                    }
+                } = j else { continue };
+                if nonterminals.contains(&Action::Subroutine(tag)) {
+                    *j = &*arena.alloc(NormalForm::Sequence {
+                        terminal: *terminal,
+                        nonterminals: nonterminals
+                            .iter()
+                            .map(|x| {
+                                if *x == Action::Subroutine(tag) {
+                                    Action::Subroutine(new_tag)
+                                } else {
+                                    *x
+                                }
+                            })
+                            .collect(),
+                    });
                 }
             }
         }
     }
 }
 
-pub fn fully_normalize<'src, 'nf>(
-    arena: &'nf Arena<NormalForm<'src>>,
-    nfs: &mut NormalForms<'src, 'nf>,
-) {
-    loop {
-        let mut updates = Vec::new();
-        for (tag, i) in nfs.entries.iter() {
-            if !i.iter().any(|x| matches!(x, NormalForm::Unexpanded(..))) {
-                continue;
-            }
-            let mut result = SmallVec::new();
-            for j in i.iter() {
-                match j {
-                    NormalForm::Empty(..) | NormalForm::Sequence { .. } => result.push(*j),
-                    NormalForm::Unexpanded(actions) => {
-                        match actions
-                            .iter()
-                            .enumerate()
-                            .find(|(_, x)| matches!(x, Action::Subroutine(..)))
-                        {
-                            None => {
-                                let nf =
-                                    NormalForm::Empty(actions.iter().map(|x| x.symbol()).collect());
-                                result.push(arena.alloc(nf) as &'nf _);
-                            }
-                            Some((index, Action::Subroutine(x))) => {
-                                let head = &actions[..index];
-                                let tail = &actions[index + 1..];
-                                let variable_nf = nfs.entries.get(x).unwrap();
-                                for k in variable_nf.iter().copied() {
-                                    match k {
-                                        NormalForm::Empty(trees) => {
-                                            let acts = head
-                                                .iter()
-                                                .cloned()
-                                                .chain(trees.iter().map(|x| Action::Summarize(*x)))
-                                                .chain(tail.iter().cloned())
-                                                .collect();
-                                            result
-                                                .push(arena.alloc(NormalForm::Unexpanded(acts))
-                                                    as &'nf _);
-                                        }
-                                        NormalForm::Unexpanded(subacts) => {
-                                            let acts = head
-                                                .iter()
-                                                .chain(subacts.iter())
-                                                .chain(tail.iter())
-                                                .cloned()
-                                                .collect();
-                                            result
-                                                .push(arena.alloc(NormalForm::Unexpanded(acts))
-                                                    as &'nf _);
-                                        }
-                                        NormalForm::Sequence {
-                                            terminal,
-                                            nonterminals,
-                                        } => {
-                                            let acts = head
-                                                .iter()
-                                                .chain(nonterminals.iter())
-                                                .chain(tail.iter())
-                                                .cloned()
-                                                .collect();
-                                            result.push(arena.alloc(NormalForm::Sequence {
-                                                terminal: *terminal,
-                                                nonterminals: acts,
-                                            })
-                                                as &'nf _);
-                                        }
-                                    }
-                                }
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                }
-            }
-            updates.push((*tag, result));
+pub fn remove_unreachable_rules<'src>(nfs: &mut NormalForms<'src, '_>, parser: &Parser<'src, '_>) {
+    fn dfs<'src>(
+        nfs: &NormalForms<'src, '_>,
+        current: Tag<'src>,
+        visited: &mut HashSet<Tag<'src>>,
+    ) {
+        if visited.contains(&current) {
+            return;
         }
-        if updates.is_empty() {
-            break;
-        } else {
-            for (tag, i) in updates.into_iter() {
-                nfs.entries.insert(tag, i);
+        visited.insert(current);
+        let Some(tag) = nfs.entries.get(&current) else { return };
+        for i in tag {
+            let NormalForm::Sequence { nonterminals, .. } = i else { continue };
+            for i in nonterminals {
+                let Action::Subroutine(x) = i else { continue };
+                dfs(nfs, *x, visited);
             }
         }
     }
+
+    let mut visited = HashSet::new();
+    dfs(nfs, Tag::new(parser.entrypoint), &mut visited);
+    nfs.entries.retain(|k, _| visited.contains(k));
 }

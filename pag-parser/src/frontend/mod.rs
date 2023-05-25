@@ -645,7 +645,7 @@ pub fn parse(input: &str) -> Result<WithSpan<SurfaceSyntaxTree>, crate::Error> {
 
 #[cfg(test)]
 mod test {
-    use std::{mem::size_of, println};
+    use std::mem::size_of;
 
     use ariadne::Source;
     use pest::Parser;
@@ -656,76 +656,72 @@ mod test {
         frontend::lexical::LexerDatabase,
         fusion::fusion_parser,
         nf::{
-            dfs_remove_unreachable_rules, fully_normalize, merge_inactive_rules, semi_normalize,
+            fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
             NormalForm, NormalForms, Tag, TagAssigner,
         },
         utilities::unreachable_branch,
     };
 
-    use super::syntax::construct_parser;
+    use super::{syntax::construct_parser, *};
 
     const TEST: &str = include_str!("example.pag");
 
     #[test]
     fn it_parses_lexical_expr() {
         println!("{}", size_of::<NormalForm>());
-        match super::GrammarParser::parse(super::Rule::grammar, TEST) {
-            Ok(pairs) => {
-                let tree = super::parse_surface_syntax(pairs, &super::PRATT_PARSER, TEST).unwrap();
-                match &tree.node {
-                    crate::frontend::SurfaceSyntaxTree::Grammar { lexer, parser } => {
-                        let database = LexerDatabase::new(lexer).unwrap();
-                        for (i, rule) in database.entries.iter() {
-                            println!("{i} ::= {}, active = {}", rule.rule, rule.active)
-                        }
-                        println!("----");
-                        let arena = TermArena::new();
-                        let parser = construct_parser(&arena, database, parser).unwrap();
-                        for (i, rule) in parser.bindings.iter() {
-                            println!("{i} ::= {}, active = {}", rule.term, rule.active)
-                        }
-                        let errs = parser.type_check();
-
-                        let liberr = crate::Error::from(errs);
-                        let reports = liberr.to_reports("example.pag");
-                        let mut src = ("example.pag", Source::from(TEST));
-                        for i in reports.iter() {
-                            i.eprint(&mut src).unwrap();
-                        }
-                        assert!(reports.is_empty(),);
-                        println!("----");
-                        let nf_arena = Arena::new();
-                        let mut nfs = NormalForms::new();
-                        let mut assigner = TagAssigner::new();
-                        for (i, rule) in parser.bindings.iter() {
-                            semi_normalize(
-                                &rule.term.node,
-                                Tag::new(*i),
-                                &nf_arena,
-                                &mut nfs,
-                                &mut assigner,
-                                &parser,
-                            )
-                        }
-                        println!("{}", nfs);
-                        println!("----");
-                        fully_normalize(&nf_arena, &mut nfs);
-                        println!("{}", nfs);
-                        println!("----");
-                        merge_inactive_rules(&mut nfs, &parser, &nf_arena);
-                        println!("{}", nfs);
-                        println!("----");
-                        dfs_remove_unreachable_rules(&mut nfs, &parser);
-                        println!("{}", nfs);
-                        println!("----");
-                        let parser = fusion_parser(&nfs, &parser);
-                        println!("{}", parser);
-                    }
-                    _ => unreachable_branch!(),
+        let pairs = GrammarParser::parse(Rule::grammar, TEST).unwrap();
+        let tree = parse_surface_syntax(pairs, &PRATT_PARSER, TEST).unwrap();
+        match &tree.node {
+            crate::frontend::SurfaceSyntaxTree::Grammar { lexer, parser } => {
+                let database = LexerDatabase::new(lexer).unwrap();
+                for (i, rule) in database.entries.iter() {
+                    println!("{i} ::= {}, active = {}", rule.rule, rule.active)
                 }
-                //println!("{:#?}", tree)
+                println!("----");
+                let arena = TermArena::new();
+                let parser = construct_parser(&arena, database, parser).unwrap();
+                for (i, rule) in parser.bindings.iter() {
+                    println!("{i} ::= {}, active = {}", rule.term, rule.active)
+                }
+                let errs = parser.type_check();
+
+                let liberr = crate::Error::from(errs);
+                let reports = liberr.to_reports("example.pag");
+                let mut src = ("example.pag", Source::from(TEST));
+                for i in reports.iter() {
+                    i.eprint(&mut src).unwrap();
+                }
+                assert!(reports.is_empty(),);
+                println!("----");
+                let nf_arena = Arena::new();
+                let mut nfs = NormalForms::new();
+                let mut assigner = TagAssigner::new();
+                for (i, rule) in parser.bindings.iter() {
+                    semi_normalize(
+                        &rule.term.node,
+                        Tag::new(*i),
+                        &nf_arena,
+                        &mut nfs,
+                        &mut assigner,
+                        &parser,
+                    )
+                }
+                println!("{}", nfs);
+                println!("----");
+                fully_normalize(&nf_arena, &mut nfs);
+                println!("{}", nfs);
+                println!("----");
+                merge_inactive_rules(&mut nfs, &parser, &nf_arena);
+                println!("{}", nfs);
+                println!("----");
+                remove_unreachable_rules(&mut nfs, &parser);
+                println!("{}", nfs);
+                println!("----");
+                let parser = fusion_parser(&nfs, &parser);
+                println!("{}", parser);
             }
-            Err(e) => panic!("{}", e),
+            _ => unreachable_branch!(),
         }
+        //println!("{:#?}", tree)
     }
 }
