@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Paguroidea Developpers
+// Copyright (c) 2023 Paguroidea Developers
 //
 // Licensed under the Apache License, Version 2.0
 // <LICENSE-APACHE or http://www.apache.org/licenses/LICENSE-2.0> or the MIT
@@ -179,7 +179,7 @@ fn type_check_impl<'src, 'a>(
                 x_errors
                     .into_iter()
                     .chain(y_errors)
-                    .chain(err.map(Box::into_inner))
+                    .chain(err.map(|e| *e))
                     .collect(),
             )
         }
@@ -198,7 +198,7 @@ fn type_check_impl<'src, 'a>(
                 x_errors
                     .into_iter()
                     .chain(y_errors)
-                    .chain(err.map(Box::into_inner))
+                    .chain(err.map(|e| *e))
                     .collect(),
             )
         }
