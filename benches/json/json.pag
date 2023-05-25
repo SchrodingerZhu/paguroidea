@@ -1,0 +1,38 @@
+lexer {
+    definition DIGIT = '0'..'9';
+    definition NONZERO = '1'..'9';
+    definition HEX_DIGIT = '0' .. '9' | 'a' .. 'f' | 'A' .. 'F';
+    definition ESCAPED = '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't';
+
+    silent token WHITESPACE = ('\n' | '\r' | '\t' | ' ')+;
+    active token LBRACKET = '{';
+    active token RBRACKET = '}';
+    active token COMMA = ',';
+    active token COLON = ':';
+    active token LSQUARE = '[';
+    active token RSQUARE = ']';
+    active token TRUE = 't' ~ 'r' ~ 'u' ~ 'e';
+    active token FALSE = 'f' ~ 'a' ~ 'l' ~ 's' ~ 'e';
+    active token NULL = 'n' ~ 'u' ~ 'l' ~ 'l';
+    active token STRING = '"' ~ (!('\\' | '"') | '\\' ~ (ESCAPED | 'u' ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT) )* ~ '"';
+    active token NUMBER = '-'? ~ ('0' | NONZERO ~ DIGIT*) ~ ('.' ~ DIGIT+)? ~ (('e' | 'E') ~ ('+' | '-')? ~ DIGIT+)?;
+}
+
+parser value {
+    active definition attribute = 
+        string ~ COLON ~ value;
+
+    active definition string = STRING;
+    active definition number = NUMBER;
+    active definition lit_true = TRUE;
+    active definition lit_false = FALSE;
+    active definition lit_null = NULL;
+
+    active fixpoint object = 
+        LBRACKET ~ (attribute ~ (COMMA ~ attribute)*)? ~ RBRACKET;
+    
+    active fixpoint array = 
+        LSQUARE ~ (value ~ (COMMA ~ value)*)? ~ RSQUARE;
+
+    active fixpoint value = string | number | array | object | lit_true | lit_false | lit_null;
+}

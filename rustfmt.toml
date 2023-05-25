@@ -2,4 +2,5 @@ ignore = [
   "/tests/arith-expr/src/parser.rs",
   "/tests/sexpr-calculator/src/parser.rs",  
   "/benches/csv/src/parser.rs",  
+  "/benches/json/src/parser.rs",  
 ]
