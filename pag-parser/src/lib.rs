@@ -20,7 +20,7 @@ use crate::{
     core_syntax::TermArena,
     frontend::syntax::construct_parser,
     nf::{
-        dfs_remove_unreachable_rules, fully_normalize, merge_inactive_rules, semi_normalize,
+        fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
         NormalForms, Tag, TagAssigner,
     },
 };
@@ -77,7 +77,7 @@ impl<'src> Error<'src> {
                         Report::build(ReportKind::Error, input_name, span.start)
                             .with_message("Syntax error in grammar definition")
                             .with_label(ariadne::Label::new((input_name, span))
-                                .with_message(format!("{}", x.variant.message()))   
+                                .with_message(format!("{}", x.variant.message()))
                                 .with_color(Color::Red))
                             .finish()
                     },
@@ -85,7 +85,7 @@ impl<'src> Error<'src> {
                         Report::build(ReportKind::Error, input_name, span.start())
                             .with_message("Format error in grammar definition")
                             .with_label(ariadne::Label::new((input_name, span.start()..span.end()))
-                                .with_message(format!("{}", message))   
+                                .with_message(format!("{}", message))
                                 .with_color(Color::Red))
                             .finish()
                     },
@@ -128,7 +128,7 @@ impl<'src> Error<'src> {
                             Report::build(ReportKind::Error, input_name, e.span.start())
                                 .with_message("Invalid lexical reference")
                                 .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(format!("referencing lexical rule {} is not allowed here", name))   
+                                    .with_message(format!("referencing lexical rule {} is not allowed here", name))
                                     .with_color(Color::Red))
                                 .finish()
                         },
@@ -136,7 +136,7 @@ impl<'src> Error<'src> {
                             Report::build(ReportKind::Error, input_name, e.span.start())
                                 .with_message("Undefined lexical reference")
                                 .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(format!("lexcical rule {} is undefined", name))   
+                                    .with_message(format!("lexcical rule {} is undefined", name))
                                     .with_color(Color::Red))
                                 .finish()
                         },
@@ -144,7 +144,7 @@ impl<'src> Error<'src> {
                             Report::build(ReportKind::Error, input_name, e.span.start())
                                 .with_message("Undefined parser rule reference")
                                 .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(format!("parser rule {} is undefined", name))   
+                                    .with_message(format!("parser rule {} is undefined", name))
                                     .with_color(Color::Red))
                                 .finish()
                         },
@@ -152,7 +152,7 @@ impl<'src> Error<'src> {
                             Report::build(ReportKind::Error, input_name, e.span.start())
                                 .with_message("Skipping lexical rule is already defined")
                                 .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(format!("this definition conflicts with previous definition for {name}"))   
+                                    .with_message(format!("this definition conflicts with previous definition for {name}"))
                                     .with_color(Color::Red))
                                 .finish()
                         },
@@ -160,7 +160,7 @@ impl<'src> Error<'src> {
                             Report::build(ReportKind::Error, input_name, e.span.start())
                                 .with_message("Nullable token detected")
                                 .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(format!("token {} is nullable", name))   
+                                    .with_message(format!("token {} is nullable", name))
                                     .with_color(Color::Red))
                                 .finish()
                         },
@@ -176,13 +176,13 @@ impl<'src> Error<'src> {
                                 .with_message("When type checking a sequence of rules, the following rules are ambiguous")
                                 .with_label(ariadne::Label::new((input_name, lhs.0.start()..lhs.0.end()))
                                     .with_message(format!("type info for left-hand side: nullable: {}, first set: {{{}}}, follow set: {{{}}}",
-                                    lhs.1.nullable, lhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "), 
+                                    lhs.1.nullable, lhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "),
                                     lhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
                                 ))
                                     .with_color(Color::Green))
                                 .with_label(ariadne::Label::new((input_name, rhs.0.start()..rhs.0.end()))
                                     .with_message(format!("type info for right-hand side: nullable: {}, first set: {{{}}}, follow set: {{{}}}",
-                                    rhs.1.nullable, rhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "), 
+                                    rhs.1.nullable, rhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "),
                                     rhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
                                 ))
                                     .with_color(Color::Blue))
@@ -193,13 +193,13 @@ impl<'src> Error<'src> {
                                 .with_message("When type checking an alternation of rules, the following rules are ambiguous")
                                 .with_label(ariadne::Label::new((input_name, lhs.0.start()..lhs.0.end()))
                                     .with_message(format!("type info for left-hand side: nullable {}, first set: {}, follow set: {}",
-                                    lhs.1.nullable, lhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "), 
+                                    lhs.1.nullable, lhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "),
                                     lhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
                                 ))
                                     .with_color(Color::Green))
                                 .with_label(ariadne::Label::new((input_name, rhs.0.start()..rhs.0.end()))
                                     .with_message(format!("type info for right-hand side: nullable {}, first set: {}, follow set: {}",
-                                    rhs.1.nullable, rhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "), 
+                                    rhs.1.nullable, rhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "),
                                     rhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
                                 ))
                                     .with_color(Color::Blue))
@@ -209,7 +209,7 @@ impl<'src> Error<'src> {
                             Report::build(ReportKind::Error, input_name, s.start())
                                 .with_message("Unguarded fixpoint")
                                 .with_label(ariadne::Label::new((input_name,s.start()..s.end()))
-                                    .with_message(format!("fixpoint rule {} is not guarded -- your grammar is left-recursive", sym))   
+                                    .with_message(format!("fixpoint rule {} is not guarded -- your grammar is left-recursive", sym))
                                     .with_color(Color::Red))
                                 .finish()
                         },
@@ -217,7 +217,7 @@ impl<'src> Error<'src> {
                             Report::build(ReportKind::Error, input_name, s.start())
                                 .with_message("Unresolved reference")
                                 .with_label(ariadne::Label::new((input_name,s.start()..s.end()))
-                                    .with_message(format!("cannot resolve parser rule {} within context -- did you forget to put recursive rule into fixpoint", sym))   
+                                    .with_message(format!("cannot resolve parser rule {} within context -- did you forget to put recursive rule into fixpoint", sym))
                                     .with_color(Color::Red))
                                 .finish()
                         },
@@ -258,7 +258,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
             }
             fully_normalize(&nf_arena, &mut nfs);
             merge_inactive_rules(&mut nfs, &parser, &nf_arena);
-            dfs_remove_unreachable_rules(&mut nfs, &parser);
+            remove_unreachable_rules(&mut nfs, &parser);
             let parser_routines = fusion_parser(&nfs, &parser);
             let entrypoint = format_ident!("parse_{}", parser.entrypoint.name());
             Ok(quote::quote! {
