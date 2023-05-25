@@ -15,3 +15,7 @@ members = [
     "tests/arith-expr",
     "benches/csv"
 ]
+
+[profile.release]
+debug = true
+lto = true

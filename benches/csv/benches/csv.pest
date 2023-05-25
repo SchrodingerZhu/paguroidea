@@ -1,0 +1,7 @@
+text = _{ (!("," | "\"" | "\r" | "\n") ~ ANY)+ }
+string = _{ "\"" ~ ( "\"\"" | !"\"" ~ ANY)* ~ "\"" }
+crlf = _{ "\r"? ~ "\n" }
+
+field = { text | string }
+record = { field ~ ("," ~ field)* ~ crlf }
+csv = { record+ }
