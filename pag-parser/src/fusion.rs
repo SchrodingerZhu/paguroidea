@@ -483,8 +483,7 @@ pub fn fusion_parser<'src>(
             && parser
                 .bindings
                 .get(&tag.symbol())
-                .map(|x| x.active)
-                .unwrap_or(false)
+                .map_or(false, |x| x.active)
         {
             generate_active_parser(*tag, parser, &parser.lexer_database, rules)
         } else {

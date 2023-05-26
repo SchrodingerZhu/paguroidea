@@ -137,6 +137,7 @@ impl<'src> Display for NormalForm<'src> {
         }
     }
 }
+
 pub struct NormalForms<'src, 'a> {
     pub entries: HashMap<Tag<'src>, SmallVec<[&'a NormalForm<'src>; 4]>>,
 }
@@ -242,49 +243,40 @@ pub fn fully_normalize<'src, 'nf>(
                     result.push(*j);
                     continue;
                 };
-                match actions
-                    .iter()
-                    .enumerate()
-                    .find(|(_, x)| matches!(x, Action::Subroutine(..)))
-                {
+                let first_subroutine = actions.iter().enumerate().find_map(|(index, act)| {
+                    if let Action::Subroutine(x) = act {
+                        Some((index, x))
+                    } else {
+                        None
+                    }
+                });
+                match first_subroutine {
                     None => {
                         let nf = NormalForm::Empty(actions.iter().map(|x| x.symbol()).collect());
                         result.push(&*arena.alloc(nf));
                     }
-                    Some((index, Action::Subroutine(x))) => {
-                        let head = &actions[..index];
-                        let tail = &actions[index + 1..];
+                    Some((index, x)) => {
                         let variable_nf = nfs.entries.get(x).unwrap();
                         for k in variable_nf.iter().copied() {
+                            let head = actions[..index].iter().cloned();
+                            let tail = actions[index + 1..].iter().cloned();
                             match k {
                                 NormalForm::Empty(trees) => {
-                                    let acts = head
-                                        .iter()
-                                        .cloned()
-                                        .chain(trees.iter().map(|x| Action::Summarize(*x)))
-                                        .chain(tail.iter().cloned())
-                                        .collect();
+                                    let insert = trees.iter().map(|x| Action::Summarize(*x));
+                                    let acts = head.chain(insert).chain(tail).collect();
                                     result.push(&*arena.alloc(NormalForm::Unexpanded(acts)));
                                 }
                                 NormalForm::Unexpanded(subacts) => {
-                                    let acts = head
-                                        .iter()
-                                        .chain(subacts.iter())
-                                        .chain(tail.iter())
-                                        .cloned()
-                                        .collect();
+                                    let insert = subacts.iter().cloned();
+                                    let acts = head.chain(insert).chain(tail).collect();
                                     result.push(&*arena.alloc(NormalForm::Unexpanded(acts)));
                                 }
                                 NormalForm::Sequence {
                                     terminal,
                                     nonterminals,
                                 } => {
-                                    let acts = head
-                                        .iter()
-                                        .chain(nonterminals.iter())
-                                        .chain(tail.iter())
-                                        .cloned()
-                                        .collect();
+                                    let insert = nonterminals.iter().cloned();
+                                    let acts = head.chain(insert).chain(tail).collect();
                                     result.push(&*arena.alloc(NormalForm::Sequence {
                                         terminal: *terminal,
                                         nonterminals: acts,
@@ -293,7 +285,6 @@ pub fn fully_normalize<'src, 'nf>(
                             }
                         }
                     }
-                    _ => unreachable!(),
                 }
             }
             updates.push((*tag, result));
