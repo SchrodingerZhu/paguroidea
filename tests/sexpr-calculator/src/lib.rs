@@ -13,7 +13,7 @@ fn eval(tree: &parser::ParserTree) -> Wrapping<usize> {
         parser::Tag::compound => match tree.children()[0].as_slice() {
             "+" => tree.children()[1..].iter().map(eval).sum(),
             "*" => tree.children()[1..].iter().map(eval).product(),
-            _ => unreachable!("only + and * are supported"),
+            other => unreachable!("only '+' and '*' are supported, found '{other}'"),
         },
     }
 }

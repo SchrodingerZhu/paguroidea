@@ -254,7 +254,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
                     &mut nfs,
                     &mut assigner,
                     &parser,
-                )
+                );
             }
             fully_normalize(&nf_arena, &mut nfs);
             merge_inactive_rules(&mut nfs, &parser, &nf_arena);
