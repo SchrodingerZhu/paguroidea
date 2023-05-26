@@ -161,7 +161,7 @@ impl Vector {
               };
               let mut state = States::#initial;
               let mut longest_match = None;
-              for (idx, c) in input.chars().enumerate() {
+              for (idx, c) in input.char_indices() {
                   match state {
                     #(#actions)*
                   };

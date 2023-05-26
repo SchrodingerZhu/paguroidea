@@ -14,11 +14,11 @@ lexer {
     active token TRUE = 't' ~ 'r' ~ 'u' ~ 'e';
     active token FALSE = 'f' ~ 'a' ~ 'l' ~ 's' ~ 'e';
     active token NULL = 'n' ~ 'u' ~ 'l' ~ 'l';
-    active token STRING = '"' ~ (!('\\' | '"') | '\\' ~ (ESCAPED | 'u' ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT) )* ~ '"';
+    active token STRING = '"' ~ ( !('\\' | '"') | '\\' ~ (ESCAPED | 'u' ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT) )* ~ '"';
     active token NUMBER = '-'? ~ ('0' | NONZERO ~ DIGIT*) ~ ('.' ~ DIGIT+)? ~ (('e' | 'E') ~ ('+' | '-')? ~ DIGIT+)?;
 }
 
-parser value {
+parser json {
     active definition attribute = 
         string ~ COLON ~ value;
 
@@ -34,5 +34,7 @@ parser value {
     active fixpoint array = 
         LSQUARE ~ (value ~ (COMMA ~ value)*)? ~ RSQUARE;
 
-    active fixpoint value = string | number | array | object | lit_true | lit_false | lit_null;
+    silent fixpoint value = string | number | array | object | lit_true | lit_false | lit_null;
+
+    active definition json = value;
 }
