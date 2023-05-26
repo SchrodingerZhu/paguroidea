@@ -659,7 +659,6 @@ mod test {
             fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
             NormalForm, NormalForms, Tag, TagAssigner,
         },
-        utilities::unreachable_branch,
     };
 
     use super::{syntax::construct_parser, *};
@@ -671,61 +670,58 @@ mod test {
         println!("{}", size_of::<NormalForm>());
         let pairs = GrammarParser::parse(Rule::grammar, TEST).unwrap();
         let tree = parse_surface_syntax(pairs, &PRATT_PARSER, TEST).unwrap();
-        match &tree.node {
-            crate::frontend::SurfaceSyntaxTree::Grammar { lexer, parser } => {
-                let database = LexerDatabase::new(lexer).unwrap();
-                for (i, rule) in database.entries.iter() {
-                    println!("{i} ::= {}, active = {}", rule.rule, rule.active)
-                }
-                println!("----");
-                let arena = TermArena::new();
-                let parser = construct_parser(&arena, database, parser).unwrap();
-                for (i, rule) in parser.bindings.iter() {
-                    println!("{i} ::= {}, active = {}", rule.term, rule.active)
-                }
-                let errs = parser.type_check();
+        let SurfaceSyntaxTree::Grammar { lexer, parser } = &tree.node else { unreachable!() };
 
-                let liberr = crate::Error::from(errs);
-                let reports = liberr.to_reports("example.pag");
-                let mut src = ("example.pag", Source::from(TEST));
-                for i in reports.iter() {
-                    i.eprint(&mut src).unwrap();
-                }
-                assert!(reports.is_empty());
-                println!("----");
-                let nf_arena = Arena::new();
-                let mut nfs = NormalForms::new();
-                let mut assigner = TagAssigner::new();
-                for (i, rule) in parser.bindings.iter() {
-                    semi_normalize(
-                        &rule.term.node,
-                        Tag::new(*i),
-                        &nf_arena,
-                        &mut nfs,
-                        &mut assigner,
-                        &parser,
-                    )
-                }
-                println!("size of nfs.entries: {}", nfs.entries.len());
-                println!("{}", nfs);
-                println!("----");
-                fully_normalize(&nf_arena, &mut nfs);
-                println!("size of nfs.entries: {}", nfs.entries.len());
-                println!("{}", nfs);
-                println!("----");
-                merge_inactive_rules(&mut nfs, &parser, &nf_arena);
-                println!("size of nfs.entries: {}", nfs.entries.len());
-                println!("{}", nfs);
-                println!("----");
-                remove_unreachable_rules(&mut nfs, &parser);
-                println!("size of nfs.entries: {}", nfs.entries.len());
-                println!("{}", nfs);
-                println!("----");
-                let parser = fusion_parser(&nfs, &parser);
-                println!("{}", parser);
-            }
-            _ => unreachable_branch!(),
+        let database = LexerDatabase::new(lexer).unwrap();
+        for (i, rule) in database.entries.iter() {
+            println!("{i} ::= {}, active = {}", rule.rule, rule.active)
         }
+        println!("----");
+        let arena = TermArena::new();
+        let parser = construct_parser(&arena, database, parser).unwrap();
+        for (i, rule) in parser.bindings.iter() {
+            println!("{i} ::= {}, active = {}", rule.term, rule.active)
+        }
+        let errs = parser.type_check();
+
+        let liberr = crate::Error::from(errs);
+        let reports = liberr.to_reports("example.pag");
+        let mut src = ("example.pag", Source::from(TEST));
+        for i in reports.iter() {
+            i.eprint(&mut src).unwrap();
+        }
+        assert!(reports.is_empty());
+        println!("----");
+        let nf_arena = Arena::new();
+        let mut nfs = NormalForms::new();
+        let mut assigner = TagAssigner::new();
+        for (i, rule) in parser.bindings.iter() {
+            semi_normalize(
+                &rule.term.node,
+                Tag::new(*i),
+                &nf_arena,
+                &mut nfs,
+                &mut assigner,
+                &parser,
+            );
+        }
+        println!("size of nfs.entries: {}", nfs.entries.len());
+        println!("{}", nfs);
+        println!("----");
+        fully_normalize(&nf_arena, &mut nfs);
+        println!("size of nfs.entries: {}", nfs.entries.len());
+        println!("{}", nfs);
+        println!("----");
+        merge_inactive_rules(&mut nfs, &parser, &nf_arena);
+        println!("size of nfs.entries: {}", nfs.entries.len());
+        println!("{}", nfs);
+        println!("----");
+        remove_unreachable_rules(&mut nfs, &parser);
+        println!("size of nfs.entries: {}", nfs.entries.len());
+        println!("{}", nfs);
+        println!("----");
+        let parser = fusion_parser(&nfs, &parser);
+        println!("{}", parser);
         //println!("{:#?}", tree)
     }
 }
