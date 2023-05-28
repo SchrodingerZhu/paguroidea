@@ -6,7 +6,7 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use std::{collections::HashMap, matches};
+use std::collections::HashMap;
 
 use pag_lexer::vector::Vector;
 use proc_macro2::TokenStream;
@@ -121,6 +121,7 @@ fn generate_inactive_to_active_call(target: &Tag<'_>) -> TokenStream {
         }
     }
 }
+
 fn generate_active_to_active_call(target: &Tag<'_>) -> TokenStream {
     let target_function = format_ident!("parse_{}", format!("{}", target));
     quote! {

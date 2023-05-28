@@ -21,4 +21,3 @@ parser sexpr {
     active definition sexpr
         = compound | int;
 }
-
