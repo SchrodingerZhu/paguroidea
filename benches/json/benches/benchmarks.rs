@@ -1,6 +1,16 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use pag_json::{generate_random_json, parse};
+use pest::Parser;
+use pest_json::{JSONParser, Rule};
 use serde_json::Value;
+
+mod pest_json {
+    use pest_derive::Parser;
+
+    #[derive(Parser)]
+    #[grammar = "benches/json.pest"]
+    pub struct JSONParser;
+}
 
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
@@ -19,6 +29,11 @@ fn criterion_benchmark(c: &mut Criterion) {
             serde_json::from_str::<Value>(&data).unwrap();
         })
     });
+    g.bench_function("pest-json", |b| {
+        b.iter(|| {
+            JSONParser::parse(Rule::json, &data).unwrap();
+        })
+    });
     g.finish();
     let mut g = c.benchmark_group("twitter-json");
     let data = include_str!("twitter.json");
@@ -31,6 +46,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     g.bench_function("serde-json", |b| {
         b.iter(|| {
             serde_json::from_str::<Value>(&data).unwrap();
+        })
+    });
+    g.bench_function("pest-json", |b| {
+        b.iter(|| {
+            JSONParser::parse(Rule::json, &data).unwrap();
         })
     });
     g.finish();

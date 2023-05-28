@@ -1,0 +1,15 @@
+WHITESPACE = _{ (" " | "\t" | "\r" | "\n")+ }
+escape = _{ "\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t" }
+non_zero = _{'1' .. '9'}
+digit    = _{'0' .. '9'}
+hex_digit = _{ '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' }
+string = @{ "\"" ~ ( (!("\"" | "\\") ~ ANY) | "\\" ~ (escape | ("u" ~ hex_digit ~ hex_digit ~ hex_digit ~ hex_digit )) )* ~ "\"" }
+number = @{ "-"? ~ ("0" | non_zero ~ digit*) ~ ("." ~ digit+)? ~ (("e" | "E") ~ ("+" | "-")? ~ digit+)? }
+lit_true = @{ "true" }
+lit_false = @{ "false" }
+lit_null = @{ "null" }
+attribute = { string ~ ":" ~ value }
+object    = { "{" ~ (attribute ~ ("," ~ attribute)*)? ~ "}" }
+array     = { "[" ~ (value ~ ("," ~ value)*)? ~ "]" }
+value     = _{string | number | array | object | lit_true | lit_false | lit_null}
+json      = { SOI ~ value ~ EOI }
