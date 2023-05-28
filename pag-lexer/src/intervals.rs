@@ -92,8 +92,7 @@ impl Intervals {
         format!("S{}{}", result.len(), result)
     }
     pub fn is_full_set(&self) -> bool {
-        if self.0.len() == 1 &&
-            let Some(x) = self.0.first() {
+        if let (1, Some(x)) = (self.0.len(), self.0.first()) {
             x.0 == 0 && x.1 == 0x10FFFF
         } else {
             false
@@ -196,20 +195,21 @@ impl Intervals {
                     _ => break,
                 };
             }
-            current = {
+            current = 'block: {
                 let current = unsafe { current.unwrap_unchecked() };
-                if let Some(ix) = x &&
-                    (current.overlaps(&ix) || current.is_consecutive(&ix)) {
-                    x = i.next();
-                    Some(current.merge(&ix))
-                } else if let Some(iy) = y &&
-                    (current.overlaps(&iy) || current.is_consecutive(&iy)) {
-                    y = j.next();
-                    Some(current.merge(&iy))
-                } else {
-                    result.push(current);
-                    None
+                if let Some(ix) = x {
+                    if current.overlaps(&ix) || current.is_consecutive(&ix) {
+                        x = i.next();
+                        break 'block Some(current.merge(&ix));
+                    }
+                } else if let Some(iy) = y {
+                    if (current.overlaps(&iy) || current.is_consecutive(&iy)) {
+                        y = j.next();
+                        break 'block Some(current.merge(&iy));
+                    }
                 }
+                result.push(current);
+                None
             }
         }
         Self(result)

@@ -50,12 +50,11 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
             if ordering.is_eq() {
                 return r;
             }
-            if let RegexTree::Set(r) = r.as_ref()
-                && let RegexTree::Set(s) = s.as_ref() {
+            if let (RegexTree::Set(r), RegexTree::Set(s)) = (r.as_ref(), s.as_ref()) {
                 return match r.intersection(s) {
                     Some(set) => Rc::new(RegexTree::Set(set)),
                     None => Rc::new(RegexTree::Bottom),
-                }
+                };
             }
             // always right heavy
             if let RegexTree::Intersection(r1, r2) = r.as_ref() {
@@ -150,8 +149,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
             if ordering.is_eq() {
                 return r;
             }
-            if let RegexTree::Set(r) = r.as_ref()
-                && let RegexTree::Set(s) = s.as_ref() {
+            if let (RegexTree::Set(r), RegexTree::Set(s)) = (r.as_ref(), s.as_ref()) {
                 return Rc::new(RegexTree::Set(r.union(s)));
             }
             // always right heavy
