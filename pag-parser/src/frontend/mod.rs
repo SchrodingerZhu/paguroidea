@@ -667,7 +667,9 @@ mod test {
 
     #[test]
     fn it_parses_lexical_expr() {
-        println!("{}", size_of::<NormalForm>());
+        let nfs_size = |nfs: &NormalForms| nfs.entries.values().map(|v| v.len()).sum::<usize>();
+
+        dbg!(size_of::<NormalForm>());
         let pairs = GrammarParser::parse(Rule::grammar, TEST).unwrap();
         let tree = parse_surface_syntax(pairs, &PRATT_PARSER, TEST).unwrap();
         let SurfaceSyntaxTree::Grammar { lexer, parser } = &tree.node else { unreachable!() };
@@ -677,6 +679,7 @@ mod test {
             println!("{i} ::= {}, active = {}", rule.rule, rule.active)
         }
         println!("----");
+
         let arena = TermArena::new();
         let parser = construct_parser(&arena, database, parser).unwrap();
         for (i, rule) in parser.bindings.iter() {
@@ -692,9 +695,11 @@ mod test {
         }
         assert!(reports.is_empty());
         println!("----");
+
         let nf_arena = Arena::new();
         let mut nfs = NormalForms::new();
         let mut assigner = TagAssigner::new();
+
         for (i, rule) in parser.bindings.iter() {
             semi_normalize(
                 &rule.term.node,
@@ -705,21 +710,25 @@ mod test {
                 &parser,
             );
         }
-        println!("size of nfs.entries: {}", nfs.entries.len());
+        dbg!(nfs_size(&nfs));
         println!("{}", nfs);
         println!("----");
+
         fully_normalize(&nf_arena, &mut nfs);
-        println!("size of nfs.entries: {}", nfs.entries.len());
+        dbg!(nfs_size(&nfs));
         println!("{}", nfs);
         println!("----");
+
         merge_inactive_rules(&mut nfs, &parser, &nf_arena);
-        println!("size of nfs.entries: {}", nfs.entries.len());
+        dbg!(nfs_size(&nfs));
         println!("{}", nfs);
         println!("----");
+
         remove_unreachable_rules(&mut nfs, &parser);
-        println!("size of nfs.entries: {}", nfs.entries.len());
+        dbg!(nfs_size(&nfs));
         println!("{}", nfs);
         println!("----");
+
         let parser = fusion_parser(&nfs, &parser);
         println!("{}", parser);
         //println!("{:#?}", tree)
