@@ -105,6 +105,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
                     Rc::new(RegexTree::Concat(r2.clone(), ns)),
                 )));
             }
+
             if Rc::ptr_eq(&nr, r) && Rc::ptr_eq(&ns, s) {
                 return tree;
             }
@@ -154,6 +155,24 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
                 && let RegexTree::Set(s) = s.as_ref() {
                 return Rc::new(RegexTree::Set(r.union(s)));
             }
+
+            // distributive
+            if let RegexTree::Concat(r1, r2) = r.as_ref() &&
+                let RegexTree::Concat(s1, s2) = s.as_ref() {
+                if r1 == s1 {
+                    return normalize(Rc::new(RegexTree::Concat(
+                        r1.clone(),
+                        Rc::new(RegexTree::Union(r2.clone(), s2.clone())),
+                    )));
+                }
+                if r2 == s2 {
+                    return normalize(Rc::new(RegexTree::Concat(
+                        Rc::new(RegexTree::Union(r1.clone(), s1.clone())),
+                        r2.clone(),
+                    )));
+                }
+            }
+
             // always right heavy
             if let RegexTree::Union(r1, r2) = r.as_ref() {
                 return normalize(Rc::new(RegexTree::Union(
@@ -161,6 +180,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
                     Rc::new(RegexTree::Union(r2.clone(), s)),
                 )));
             }
+
             // will not fall in any of the above cases -- it is safe to return
             if ordering.is_lt() || matches!(s.as_ref(), RegexTree::Union(..)) {
                 Rc::new(RegexTree::Union(r, s))

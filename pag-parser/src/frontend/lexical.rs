@@ -112,10 +112,7 @@ where
             let inner = construct_regex_tree(inner, reference_handler)?;
             Ok(Rc::new(RegexTree::Complement(inner)))
         }
-        // TODO: support real char
-        SurfaceSyntaxTree::Range { start, end } => Ok(Rc::new(RegexTree::range(
-            (*start as u32 as u8)..=(*end as u32 as u8),
-        ))),
+        SurfaceSyntaxTree::Range { start, end } => Ok(unicode::encode_range(*start, *end)),
         SurfaceSyntaxTree::String(x) => {
             if x.is_empty() {
                 Ok(Rc::new(RegexTree::Epsilon))
@@ -129,8 +126,7 @@ where
         }
         SurfaceSyntaxTree::Bottom => Ok(Rc::new(RegexTree::Bottom)),
         SurfaceSyntaxTree::Empty => Ok(Rc::new(RegexTree::Epsilon)),
-        // TODO: support real char
-        SurfaceSyntaxTree::Char { value } => Ok(Rc::new(unicode::encode_char(value.node))),
+        SurfaceSyntaxTree::Char { value } => Ok(unicode::encode_char(value.node)),
         SurfaceSyntaxTree::LexicalRuleRef { name } => reference_handler(name.clone()),
         _ => unreachable_branch!(
             "lexer translation is called with unsupported code: {}",

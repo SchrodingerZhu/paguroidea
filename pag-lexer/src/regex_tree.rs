@@ -67,11 +67,12 @@ impl RegexTree {
         }
     }
     pub fn range(x: RangeInclusive<u8>) -> Self {
-        unsafe {
-            RegexTree::Set(
-                Intervals::new([ClosedInterval(*x.start(), *x.end())].into_iter())
-                    .unwrap_unchecked(),
-            )
+        if x.is_empty() {
+            return RegexTree::Bottom;
+        }
+        match Intervals::new([ClosedInterval(*x.start(), *x.end())].into_iter()) {
+            Some(set) => RegexTree::Set(set),
+            None => RegexTree::Bottom,
         }
     }
     pub fn mangle(&self) -> String {
