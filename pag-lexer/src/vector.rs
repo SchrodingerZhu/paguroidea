@@ -110,66 +110,77 @@ impl Vector {
         let mut state_map = HashMap::new();
         let dfa = build_dfa(normalized.clone(), &mut statdid, &mut state_map);
         let name = format_ident!("{}", name);
-        let states = dfa.keys().map(|x| beautify_mangle!(x, state_map));
+        let states = dfa.keys().filter_map(|x| {
+            if x.is_rejecting_state() {
+                None
+            } else {
+                Some(beautify_mangle!(x, state_map))
+            }
+        });
         let initial = beautify_mangle!(normalized, state_map);
         let actions = dfa
             .iter()
-            .map(|(state, transitions)| {
+            .filter_map(|(state, transitions)| {
                 let state_enum = beautify_mangle!(state, state_map);
                 if state.is_rejecting_state() {
-                    quote! {
-                        States::#state_enum => return longest_match,
-                    }
+                    None
                 } else {
-                    let transitions = transitions.iter().map(|x| {
+                    let transitions = transitions.iter().filter_map(|x| {
+                        if x.1.is_rejecting_state() {
+                            return None;
+                        }
                         let condition = x.0.to_tokens();
                         let target = beautify_mangle!(&x.1, state_map);
-                        quote!(#condition => States::#target)
+                        Some(quote!(#condition => state = State::#target))
                     });
                     match optimizer.generate_lookahead(&dfa, state) {
                         Some(lookahead) => match state.accepting_state() {
-                            Some(x) => quote! {
-                                States::#state_enum => {
+                            Some(x) => Some(quote! {
+                                State::#state_enum => {
                                     #lookahead
                                     longest_match.replace((#x, idx));
                                     if let Some(c) = input.get(idx) {
-                                        state = match c {
+                                        match c {
                                             #(#transitions,)*
+                                            _ => return longest_match,
                                         }
                                     } else {
                                         break;
                                     }
                                 },
-                            },
-                            None => quote! {
-                                States::#state_enum => {
+                            }),
+                            None => Some(quote! {
+                                State::#state_enum => {
                                     #lookahead
                                     if let Some(c) = input.get(idx) {
-                                        state = match c {
+                                        match c {
                                             #(#transitions,)*
+                                            _ => return longest_match,
                                         }
                                     } else {
                                         break;
                                     }
                                 },
-                            },
+                            }),
                         },
                         None => match state.accepting_state() {
-                            Some(x) => quote! {
-                                States::#state_enum => {
+                            Some(x) => Some(quote! {
+                                State::#state_enum => {
                                     longest_match.replace((#x, idx));
-                                    state = match c {
+                                    match c {
                                         #(#transitions,)*
+                                        _ => return longest_match,
                                     }
                                 },
-                            },
-                            None => quote! {
-                                States::#state_enum => {
-                                    state = match c {
-                                         #(#transitions,)*
+                            }),
+                            None => Some(quote! {
+                                State::#state_enum => {
+                                    match c {
+                                        #(#transitions,)*
+                                        _ => return longest_match,
                                     };
                                 },
-                            },
+                            }),
                         },
                     }
                 }
@@ -179,33 +190,33 @@ impl Vector {
             state.accepting_state().map(|rule| {
                 let label = beautify_mangle!(state, state_map);
                 quote! {
-                    States::#label => {
+                    State::#label => {
                         longest_match.replace((#rule, input.len()));
                     }
                 }
             })
         });
         quote! {
-          fn #name(input: &[u8]) -> Option<(usize, usize)> {
-              enum States {
+            fn #name(input: &[u8]) -> Option<(usize, usize)> {
+                enum State {
                     #(#states,)*
-              };
-              let mut state = States::#initial;
-              let mut longest_match = None;
-              let mut idx = 0;
-              while idx < input.len() {
-                  let c = unsafe { *input.get_unchecked(idx) };
-                  match state {
-                    #(#actions)*
-                  };
-                  idx += 1;
-              }
-              match state {
-                  #(#accepting_actions,)*
-                  _ => ()
-              }
-              longest_match
-          }
+                };
+                let mut state = State::#initial;
+                let mut longest_match = None;
+                let mut idx = 0;
+                while idx < input.len() {
+                    let c = unsafe { *input.get_unchecked(idx) };
+                    match state {
+                        #(#actions)*
+                    };
+                    idx += 1;
+                }
+                match state {
+                    #(#accepting_actions,)*
+                    _ => ()
+                }
+                longest_match
+            }
         }
     }
 }
