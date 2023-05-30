@@ -139,7 +139,7 @@ fn encode_le_expanded(level: usize, fst_bound: u8, tuple: &[u8]) -> Rc<RegexTree
     if level == 1 {
         return Rc::new(RegexTree::range(fst_bound..=tuple[0]));
     }
-    normalize(Rc::new(RegexTree::Union(
+    Rc::new(RegexTree::Union(
         Rc::new(RegexTree::Concat(
             Rc::new(RegexTree::single(tuple[0])),
             encode_le_expanded(level - 1, 0x80, &tuple[1..]),
@@ -148,14 +148,14 @@ fn encode_le_expanded(level: usize, fst_bound: u8, tuple: &[u8]) -> Rc<RegexTree
             Rc::new(RegexTree::range(fst_bound..=tuple[0] - 1)),
             encode_le_expanded(level - 1, 0x80, &ALL_BF),
         )),
-    )))
+    ))
 }
 
 fn encode_ge_expanded(level: usize, fst_bound: u8, tuple: &[u8]) -> Rc<RegexTree> {
     if level == 1 {
         return Rc::new(RegexTree::range(tuple[0]..=fst_bound));
     }
-    normalize(Rc::new(RegexTree::Union(
+    Rc::new(RegexTree::Union(
         Rc::new(RegexTree::Concat(
             Rc::new(RegexTree::single(tuple[0])),
             encode_ge_expanded(level - 1, 0xBF, &tuple[1..]),
@@ -164,7 +164,7 @@ fn encode_ge_expanded(level: usize, fst_bound: u8, tuple: &[u8]) -> Rc<RegexTree
             Rc::new(RegexTree::range(tuple[0] + 1..=fst_bound)),
             encode_ge_expanded(level - 1, 0xBF, &ALL_80),
         )),
-    )))
+    ))
 }
 
 fn encode_ge1(x: char) -> Rc<RegexTree> {
