@@ -8,6 +8,10 @@ fn eval(tree: &parser::ParserTree) -> Wrapping<usize> {
         parser::Tag::expr => tree.children()[..].iter().map(eval).sum(),
         parser::Tag::mult => tree.children()[..].iter().map(eval).product(),
         parser::Tag::int => Wrapping(tree.as_slice().parse::<usize>().unwrap()),
+        parser::Tag::special => {
+            assert_eq!(tree.as_slice().chars().count(), 1);
+            Wrapping(tree.as_slice().chars().nth(0).unwrap() as usize)
+        }
     }
 }
 
@@ -17,12 +21,19 @@ fn generate_random_expr<G: rand::Rng>(rng: &mut G, depth: usize) -> (Wrapping<us
         let x = rng.gen_range(0..100);
         return (Wrapping(x), format!("{}", x));
     }
-    match rng.gen_range(0..3) {
+    match rng.gen_range(0..4) {
         0 => {
             let x = rng.gen_range(0..100);
             (Wrapping(x), format!("{}", x))
         }
         1 => {
+            let x = rng.gen_range(0xFF..=0xD7FF);
+            (
+                Wrapping(x),
+                format!("{}", char::from_u32(x as u32).unwrap()),
+            )
+        }
+        2 => {
             let (a, s1) = generate_random_expr(rng, depth - 1);
             let (b, s2) = generate_random_expr(rng, depth - 1);
             (a + b, format!("({} + {})", s1, s2))

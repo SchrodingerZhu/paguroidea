@@ -5,6 +5,7 @@ lexer {
     active token PLUS     = '+';
     active token MULT     = '*';
     active token INT       = DIGIT+;
+    active token SPECIAL  = '\u{FF}' .. '\u{D7FF}';
     silent token WHITESPACE = (' ' | '\t' | '\n' | '\r')+;
 }
 
@@ -16,9 +17,11 @@ parser expr {
         = primary ~ (MULT ~ primary)*;
 
     silent fixpoint primary
-        = int | LPAREN ~ expr ~ RPAREN;
+        = special | int | LPAREN ~ expr ~ RPAREN;
 
     active definition int
         = INT;
 
+    active definition special
+        = SPECIAL;
 }

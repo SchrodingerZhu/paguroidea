@@ -250,11 +250,11 @@ mod test {
     #[test]
     fn basic_format() {
         let interval = super::ClosedInterval::new(0x41, 0x5A);
-        assert_eq!(format!("{}", interval), "'A'..'Z'");
+        assert_eq!(format!("{}", interval), "['A', 'Z']");
         let interval = super::ClosedInterval::new(0x41, 0x7A);
-        assert_eq!(format!("{}", interval), "'A'..'z'");
+        assert_eq!(format!("{}", interval), "['A', 'z']");
         let interval = super::ClosedInterval::new(0x41, 0x7B);
-        assert_eq!(format!("{}", interval), "'A'..'{'");
+        assert_eq!(format!("{}", interval), "['A', '{']");
         // whitespace
         let interval = super::ClosedInterval::new(b'\t', b'\t');
         assert_eq!(format!("{}", interval), "'\\t'");
