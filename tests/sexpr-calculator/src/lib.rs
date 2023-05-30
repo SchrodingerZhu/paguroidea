@@ -11,8 +11,8 @@ fn eval(tree: &parser::ParserTree) -> Wrapping<usize> {
             unreachable!("op should be handled by sexpr")
         }
         parser::Tag::compound => match tree.children()[0].as_slice() {
-            "+" => tree.children()[1..].iter().map(eval).sum(),
-            "*" => tree.children()[1..].iter().map(eval).product(),
+            "+" | "加" => tree.children()[1..].iter().map(eval).sum(),
+            "*" | "乘" => tree.children()[1..].iter().map(eval).product(),
             other => unreachable!("only '+' and '*' are supported, found '{other}'"),
         },
     }
@@ -31,7 +31,11 @@ fn generate_sexpr<G: rand::Rng>(mut limit: usize, gen: &mut G) -> (usize, Wrappi
         }
         1..=15 => {
             let width = 2 + gen.next_u64() % (limit as u64).min(10);
-            let mut buffer = "(+".to_string();
+            let mut buffer = if gen.gen_bool(0.5) {
+                "(+".to_string()
+            } else {
+                "(加".to_string()
+            };
             let mut cnt = 0;
             let mut sum = Wrapping(0);
             for _ in 0..width {
@@ -46,7 +50,12 @@ fn generate_sexpr<G: rand::Rng>(mut limit: usize, gen: &mut G) -> (usize, Wrappi
         }
         _ => {
             let width = 2 + gen.next_u64() % (limit as u64).min(10);
-            let mut buffer = "(*".to_string();
+            let mut buffer = if gen.gen_bool(0.5) {
+                "(*".to_string()
+            } else {
+                "(乘".to_string()
+            };
+
             let mut cnt = 0;
             let mut prod = Wrapping(1);
             for _ in 0..width {
@@ -64,7 +73,7 @@ fn generate_sexpr<G: rand::Rng>(mut limit: usize, gen: &mut G) -> (usize, Wrappi
 
 #[test]
 fn simple_test() {
-    let test = "(+ 1 (* 5 55))";
+    let test = "(加 1 (* 5 55))";
     let tree = parser::parse(test).unwrap();
     assert_eq!(276, eval(&tree).0);
     let test = "(+ 1 (# 5 5))";
