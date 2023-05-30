@@ -20,12 +20,20 @@ pub struct ClosedInterval(pub u8, pub u8);
 
 impl Display for ClosedInterval {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match (char::from_u32(self.0 as u32), char::from_u32(self.1 as u32)) {
-            (Some(start), Some(end)) if start == end => write!(f, "'{}'", start.escape_debug()),
-            (Some(start), Some(end)) => {
-                write!(f, "'{}'..'{}'", start.escape_debug(), end.escape_debug())
-            }
-            _ => write!(f, "'\\u{{{:6X}}}'-'\\u{{{:6X}}}'", self.0, self.1),
+        let l = if self.0 <= 0x7F {
+            format!("{:?}", char::from_u32(self.0 as u32).unwrap())
+        } else {
+            format!("0x{:X}", self.0)
+        };
+        let r = if self.1 <= 0x7F {
+            format!("{:?}", char::from_u32(self.1 as u32).unwrap())
+        } else {
+            format!("0x{:X}", self.1)
+        };
+        if self.0 == self.1 {
+            write!(f, "{}", l)
+        } else {
+            write!(f, "[{}, {}]", l, r)
         }
     }
 }
