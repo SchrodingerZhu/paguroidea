@@ -10,6 +10,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use pag_lexer::{normalization::normalize, regex_tree::RegexTree};
 
+use crate::frontend::unicode;
 use crate::span_errors;
 use crate::{utilities::unreachable_branch, utilities::Symbol};
 
@@ -129,9 +130,7 @@ where
         SurfaceSyntaxTree::Bottom => Ok(Rc::new(RegexTree::Bottom)),
         SurfaceSyntaxTree::Empty => Ok(Rc::new(RegexTree::Epsilon)),
         // TODO: support real char
-        SurfaceSyntaxTree::Char { value } => {
-            Ok(Rc::new(RegexTree::single(value.node as u32 as u8)))
-        }
+        SurfaceSyntaxTree::Char { value } => Ok(Rc::new(unicode::encode_char(value.node))),
         SurfaceSyntaxTree::LexicalRuleRef { name } => reference_handler(name.clone()),
         _ => unreachable_branch!(
             "lexer translation is called with unsupported code: {}",

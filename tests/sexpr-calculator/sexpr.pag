@@ -2,8 +2,8 @@ lexer {
     definition DIGIT     = '0' .. '9';
     active token LPAREN     = '(';
     active token RPAREN     = ')';
-    active token PLUS     = '+';
-    active token MULT     = '*';
+    active token PLUS     = '+' | '加';
+    active token MULT     = '*' | '乘';
     active token INT       = DIGIT+;
     silent token WHITESPACE = (' ' | '\t' | '\n' | '\r')+;
 }

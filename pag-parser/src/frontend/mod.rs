@@ -15,6 +15,7 @@ use std::fmt::Display;
 use thiserror::Error;
 pub mod lexical;
 pub mod syntax;
+pub mod unicode;
 
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum Error<'a> {
