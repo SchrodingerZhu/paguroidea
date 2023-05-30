@@ -14,13 +14,13 @@ use std::{
     write,
 };
 
-// A closed interval of u32s.
+// A closed interval of u8s.
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Copy, Clone)]
-pub struct ClosedInterval(pub u32, pub u32);
+pub struct ClosedInterval(pub u8, pub u8);
 
 impl Display for ClosedInterval {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match (char::from_u32(self.0), char::from_u32(self.1)) {
+        match (char::from_u32(self.0 as u32), char::from_u32(self.1 as u32)) {
             (Some(start), Some(end)) if start == end => write!(f, "'{}'", start.escape_debug()),
             (Some(start), Some(end)) => {
                 write!(f, "'{}'..'{}'", start.escape_debug(), end.escape_debug())
@@ -33,19 +33,19 @@ impl Display for ClosedInterval {
 #[macro_export]
 macro_rules! interval {
     ($start:expr, $end:expr) => {
-        $crate::intervals::ClosedInterval::new($start as u32, $end as u32)
+        $crate::intervals::ClosedInterval::new($start as u8, $end as u8)
     };
 }
 
 #[macro_export]
 macro_rules! intervals {
     ($(($start:expr, $end:expr)),*) => {
-        $crate::intervals::Intervals::new(vec![$($crate::intervals::ClosedInterval::new($start as u32, $end as u32)),*].into_iter())
+        $crate::intervals::Intervals::new(vec![$($crate::intervals::ClosedInterval::new($start as u8, $end as u8)),*].into_iter())
     };
 }
 
 impl ClosedInterval {
-    pub fn new(start: u32, end: u32) -> Self {
+    pub fn new(start: u8, end: u8) -> Self {
         Self(start, end)
     }
     pub fn mangle(&self) -> String {
@@ -61,7 +61,8 @@ impl ClosedInterval {
     }
     // Check if two intervals are consecutive.
     pub fn is_consecutive(&self, other: &Self) -> bool {
-        self.1 + 1 == other.0 || other.1 + 1 == self.0
+        (self.1 != u8::MAX && self.1 + 1 == other.0)
+            || (other.1 != u8::MAX && other.1 + 1 == self.0)
     }
     // Merge two intervals.
     pub fn merge(&self, other: &Self) -> Self {
@@ -81,7 +82,7 @@ impl ClosedInterval {
 pub struct Intervals(SmallVec<[ClosedInterval; 2]>);
 
 impl Intervals {
-    pub fn representative(&self) -> u32 {
+    pub fn representative(&self) -> u8 {
         self.0[0].0
     }
     pub fn mangle(&self) -> String {
@@ -94,7 +95,7 @@ impl Intervals {
     pub fn is_full_set(&self) -> bool {
         if self.0.len() == 1 &&
             let Some(x) = self.0.first() {
-            x.0 == 0 && x.1 == 0x10FFFF
+            x.0 == 0 && x.1 == u8::MAX
         } else {
             false
         }
@@ -128,16 +129,16 @@ impl Intervals {
     }
     // it is okay is contains non-unicode code points; they will never be read anyway.
     pub fn complement(&self) -> Option<Self> {
-        let mut current = 0u32;
+        let mut current = Some(0u8);
         let mut result = SmallVec::new();
         for i in self.0.iter() {
-            if current < i.0 {
+            if let Some(current) = current && current < i.0 {
                 result.push(ClosedInterval::new(current, i.0 - 1));
             }
-            current = i.1 + 1;
+            current = i.1.checked_add(1);
         }
-        if current <= 0x10FFFF {
-            result.push(ClosedInterval::new(current, 0x10FFFF));
+        if let Some(current) = current {
+            result.push(ClosedInterval::new(current, u8::MAX));
         }
         if result.is_empty() {
             None
@@ -146,7 +147,7 @@ impl Intervals {
         }
     }
 
-    pub fn contains(&self, target: u32) -> bool {
+    pub fn contains(&self, target: u8) -> bool {
         match self.0.binary_search_by_key(&target, |x| x.0) {
             Ok(_) => true,
             Err(idx) => {
@@ -247,11 +248,8 @@ mod test {
         let interval = super::ClosedInterval::new(0x41, 0x7B);
         assert_eq!(format!("{}", interval), "'A'..'{'");
         // whitespace
-        let interval = super::ClosedInterval::new('\t' as _, '\t' as _);
+        let interval = super::ClosedInterval::new(b'\t', b'\t');
         assert_eq!(format!("{}", interval), "'\\t'");
-        // unicode
-        let interval = super::ClosedInterval::new(0x1F600, 0x1F600);
-        assert_eq!(format!("{}", interval), "'😀'");
     }
 
     #[test]
@@ -276,17 +274,14 @@ mod test {
     #[test]
     fn complement() {
         let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
-        let y = intervals!((0, 47), (58, 64), (91, 96), (123, 0x10FFFF)).unwrap();
+        let y = intervals!((0, 47), (58, 64), (91, 96), (123, u8::MAX)).unwrap();
         assert_eq!(x.complement(), Some(y));
         let z = intervals!(('\0', '7')).unwrap();
-        assert_eq!(
-            z.complement().unwrap(),
-            intervals!(('8', 0x10FFFF)).unwrap()
-        );
+        assert_eq!(z.complement().unwrap(), intervals!(('8', u8::MAX)).unwrap());
         assert_eq!(x.complement().unwrap().complement().unwrap(), x);
         assert_eq!(
             x.union(&x.complement().unwrap()),
-            intervals!((0, 0x10FFFF)).unwrap()
+            intervals!((0, u8::MAX)).unwrap()
         );
     }
 
@@ -297,7 +292,7 @@ mod test {
         assert_eq!(x.intersection(&z), Some(intervals!(('0', '7')).unwrap()));
         assert!(x.intersection(&x.complement().unwrap()).is_none());
         assert_eq!(
-            x.intersection(&intervals!((0, 0x10FFFF)).unwrap()).unwrap(),
+            x.intersection(&intervals!((0, u8::MAX)).unwrap()).unwrap(),
             x
         );
         let a = intervals!(('E', 'c')).unwrap();

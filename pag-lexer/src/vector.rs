@@ -63,7 +63,7 @@ impl Vector {
         }
         s
     }
-    pub fn derivative(&self, x: u32) -> Self {
+    pub fn derivative(&self, x: u8) -> Self {
         Vector {
             regex_trees: self
                 .regex_trees
@@ -127,17 +127,15 @@ impl Vector {
                     Some(x) => quote! {
                         States::#state_enum => {
                             longest_match.replace((#x, idx));
-                            state = match c as u32 {
+                            state = match c {
                                 #(#transitions,)*
-                                _ => unsafe { ::core::hint::unreachable_unchecked() }
                             }
                         },
                     },
                     None => quote! {
                         States::#state_enum => {
-                            state = match c as u32 {
+                            state = match c {
                                  #(#transitions,)*
-                                _ => unsafe { ::core::hint::unreachable_unchecked() }
                             };
                         },
                     },
@@ -155,13 +153,13 @@ impl Vector {
             })
         });
         quote! {
-          fn #name(input: &str) -> Option<(usize, usize)> {
+          fn #name(input: &[u8]) -> Option<(usize, usize)> {
               enum States {
                     #(#states,)*
               };
               let mut state = States::#initial;
               let mut longest_match = None;
-              for (idx, c) in input.char_indices() {
+              for (idx, c) in input.iter().copied().enumerate() {
                   match state {
                     #(#actions)*
                   };

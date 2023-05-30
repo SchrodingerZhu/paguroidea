@@ -393,7 +393,7 @@ fn generate_inactive_parser<'src>(
             let mut cursor;
             loop {
                 cursor = offset;
-                match #lexer_name(&src[offset..]) {
+                match #lexer_name(src[offset..].as_bytes()) {
                     #none_action,
                     #(#parser_rules,)*
                     _ => unsafe { ::core::hint::unreachable_unchecked() },
@@ -460,7 +460,7 @@ fn generate_active_parser<'src>(
             let mut cursor;
             loop {
                 cursor = offset;
-                match #lexer_name(&src[offset..]) {
+                match #lexer_name(src[offset..].as_bytes()) {
                     #none_action,
                     #(#parser_rules,)*
                     _ => unsafe { ::core::hint::unreachable_unchecked() },

@@ -26,12 +26,12 @@ pub fn meet(a: &[Intervals], b: &[Intervals]) -> Vec<Intervals> {
 
 pub fn approximate_congruence_class(tree: &RegexTree) -> Vec<Intervals> {
     match tree {
-        RegexTree::Epsilon => vec![unsafe { intervals!((0, 0x10FFFF)).unwrap_unchecked() }],
+        RegexTree::Epsilon => vec![unsafe { intervals!((0, u8::MAX)).unwrap_unchecked() }],
         RegexTree::Top => {
-            vec![unsafe { intervals!((0, 0x10FFFF)).unwrap_unchecked() }]
+            vec![unsafe { intervals!((0, u8::MAX)).unwrap_unchecked() }]
         }
         RegexTree::Bottom => {
-            vec![unsafe { intervals!((0, 0x10FFFF)).unwrap_unchecked() }]
+            vec![unsafe { intervals!((0, u8::MAX)).unwrap_unchecked() }]
         }
         RegexTree::Set(x) => {
             let x = x.clone();

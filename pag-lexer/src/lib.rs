@@ -26,12 +26,12 @@ mod tests {
 
     #[test]
     fn it_prints_basic() {
-        let a = Rc::new(RegexTree::single('a'));
-        let b = Rc::new(RegexTree::single('b'));
+        let a = Rc::new(RegexTree::single(b'a'));
+        let b = Rc::new(RegexTree::single(b'b'));
         let ab = Rc::new(Concat(a, b));
         let alt = Rc::new(Union(ab.clone(), ab));
         println!("{}", alt);
-        let derivative = derivative(alt, 'a' as u32);
+        let derivative = derivative(alt, b'a');
         println!("{}", derivative);
         let normalized = normalize(Rc::new(derivative));
         println!("{}", normalized);
@@ -41,8 +41,8 @@ mod tests {
     #[test]
     fn renormalize_tests() {
         // concat
-        let a = Rc::new(RegexTree::single('a'));
-        let b = Rc::new(RegexTree::single('b'));
+        let a = Rc::new(RegexTree::single(b'a'));
+        let b = Rc::new(RegexTree::single(b'b'));
         let concat = Rc::new(Concat(a.clone(), b));
         let normalized = normalize(concat.clone());
         assert!(Rc::ptr_eq(&concat, &normalized));
@@ -55,10 +55,10 @@ mod tests {
     #[test]
     fn beautify_mangle_tests() {
         // generate huge test for me
-        let a = Rc::new(RegexTree::single('a'));
-        let b = Rc::new(RegexTree::single('b'));
-        let c = Rc::new(RegexTree::single('c'));
-        let d = Rc::new(RegexTree::single('d'));
+        let a = Rc::new(RegexTree::single(b'a'));
+        let b = Rc::new(RegexTree::single(b'b'));
+        let c = Rc::new(RegexTree::single(b'c'));
+        let d = Rc::new(RegexTree::single(b'd'));
         let ba = Rc::new(Concat(b, a.clone()));
         let a_or_ba = Rc::new(Union(a, ba));
         let a_or_ba_or_c = Rc::new(Union(a_or_ba, c));
@@ -72,9 +72,9 @@ mod tests {
 
     #[test]
     fn approximate_congruence_class_test() {
-        let a = Rc::new(RegexTree::single('a'));
-        let b = Rc::new(RegexTree::single('b'));
-        let c = Rc::new(RegexTree::single('c'));
+        let a = Rc::new(RegexTree::single(b'a'));
+        let b = Rc::new(RegexTree::single(b'b'));
+        let c = Rc::new(RegexTree::single(b'c'));
         let ba = Rc::new(Concat(b, a.clone()));
         let a_or_ba = Rc::new(Union(a, ba));
         let a_or_ba_or_c = Rc::new(KleeneClosure(Rc::new(Union(a_or_ba, c))));

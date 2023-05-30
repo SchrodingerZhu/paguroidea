@@ -61,17 +61,15 @@ impl Display for RegexTree {
 }
 
 impl RegexTree {
-    pub fn single(x: char) -> Self {
+    pub fn single(x: u8) -> Self {
         unsafe {
-            RegexTree::Set(
-                Intervals::new([ClosedInterval(x as u32, x as u32)].into_iter()).unwrap_unchecked(),
-            )
+            RegexTree::Set(Intervals::new([ClosedInterval(x, x)].into_iter()).unwrap_unchecked())
         }
     }
-    pub fn range(x: RangeInclusive<char>) -> Self {
+    pub fn range(x: RangeInclusive<u8>) -> Self {
         unsafe {
             RegexTree::Set(
-                Intervals::new([ClosedInterval(*x.start() as u32, *x.end() as u32)].into_iter())
+                Intervals::new([ClosedInterval(*x.start(), *x.end())].into_iter())
                     .unwrap_unchecked(),
             )
         }

@@ -63,5 +63,5 @@ fn test_random() {
 #[test]
 fn test_twitter() {
     let json = include_str!("../benches/twitter.json");
-    parser::parse(&json).unwrap();
+    parser::parse(json).unwrap();
 }

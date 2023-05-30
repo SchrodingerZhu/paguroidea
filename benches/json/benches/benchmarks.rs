@@ -40,17 +40,17 @@ fn criterion_benchmark(c: &mut Criterion) {
     g.throughput(criterion::Throughput::Bytes(data.bytes().len() as u64));
     g.bench_function("pag-json", |b| {
         b.iter(|| {
-            parse(&data).unwrap();
+            parse(data).unwrap();
         })
     });
     g.bench_function("serde-json", |b| {
         b.iter(|| {
-            serde_json::from_str::<Value>(&data).unwrap();
+            serde_json::from_str::<Value>(data).unwrap();
         })
     });
     g.bench_function("pest-json", |b| {
         b.iter(|| {
-            JSONParser::parse(Rule::json, &data).unwrap();
+            JSONParser::parse(Rule::json, data).unwrap();
         })
     });
     g.finish();
