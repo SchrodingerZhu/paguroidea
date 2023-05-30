@@ -10,7 +10,7 @@ fn eval(tree: &parser::ParserTree) -> Wrapping<usize> {
         parser::Tag::int => Wrapping(tree.as_slice().parse::<usize>().unwrap()),
         parser::Tag::special => {
             assert_eq!(tree.as_slice().chars().count(), 1);
-            Wrapping(tree.as_slice().chars().nth(0).unwrap() as usize)
+            Wrapping(tree.as_slice().chars().next().unwrap() as usize)
         }
     }
 }
