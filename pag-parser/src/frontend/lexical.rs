@@ -111,12 +111,15 @@ where
             let inner = construct_regex_tree(inner, reference_handler)?;
             Ok(Rc::new(RegexTree::Complement(inner)))
         }
-        SurfaceSyntaxTree::Range { start, end } => Ok(Rc::new(RegexTree::range(*start..=*end))),
+        // TODO: support real char
+        SurfaceSyntaxTree::Range { start, end } => Ok(Rc::new(RegexTree::range(
+            (*start as u32 as u8)..=(*end as u32 as u8),
+        ))),
         SurfaceSyntaxTree::String(x) => {
             if x.is_empty() {
                 Ok(Rc::new(RegexTree::Epsilon))
             } else {
-                let mut iter = x.chars();
+                let mut iter = x.bytes();
                 let fst = Rc::new(RegexTree::single(unsafe { iter.next().unwrap_unchecked() }));
                 Ok(iter.fold(fst, |acc, c| {
                     Rc::new(RegexTree::Concat(acc, Rc::new(RegexTree::single(c))))
@@ -125,7 +128,10 @@ where
         }
         SurfaceSyntaxTree::Bottom => Ok(Rc::new(RegexTree::Bottom)),
         SurfaceSyntaxTree::Empty => Ok(Rc::new(RegexTree::Epsilon)),
-        SurfaceSyntaxTree::Char { value } => Ok(Rc::new(RegexTree::single(value.node))),
+        // TODO: support real char
+        SurfaceSyntaxTree::Char { value } => {
+            Ok(Rc::new(RegexTree::single(value.node as u32 as u8)))
+        }
         SurfaceSyntaxTree::LexicalRuleRef { name } => reference_handler(name.clone()),
         _ => unreachable_branch!(
             "lexer translation is called with unsupported code: {}",

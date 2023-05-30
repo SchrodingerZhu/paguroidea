@@ -9,7 +9,7 @@
 use crate::regex_tree::RegexTree;
 use std::rc::Rc;
 
-pub fn derivative(tree: Rc<RegexTree>, x: u32) -> RegexTree {
+pub fn derivative(tree: Rc<RegexTree>, x: u8) -> RegexTree {
     match tree.as_ref() {
         RegexTree::Set(set) => {
             if set.contains(x) {
