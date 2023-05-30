@@ -19,17 +19,6 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
-#[macro_export]
-macro_rules! beautify_mangle {
-    ($mangle:expr, $mangle_map:ident) => {
-        if let Some(res) = $mangle_map.get(&$mangle) {
-            format_ident!("{}", res)
-        } else {
-            unreachable!("state not in mangle map")
-        }
-    };
-}
-
 #[derive(Hash, PartialEq, Eq, Debug, Clone, Ord, PartialOrd)]
 pub struct Vector {
     regex_trees: Vec<Rc<RegexTree>>,
@@ -51,11 +40,12 @@ impl Display for Vector {
 impl Vector {
     pub fn new<I>(iter: I) -> Self
     where
-        I: Iterator<Item = Rc<RegexTree>>,
+        I: IntoIterator<Item = Rc<RegexTree>>,
     {
-        let regex_trees = iter.collect();
+        let regex_trees = iter.into_iter().collect();
         Self { regex_trees }
     }
+
     pub fn mangle(&self) -> String {
         let mut s = "V".to_string();
         for regex_tree in &self.regex_trees {
@@ -64,6 +54,7 @@ impl Vector {
         }
         s
     }
+
     pub fn derivative(&self, x: u8) -> Self {
         Vector {
             regex_trees: self
@@ -73,18 +64,23 @@ impl Vector {
                 .collect(),
         }
     }
+
     pub fn accepting_state(&self) -> Option<usize> {
-        self.regex_trees
-            .iter()
-            .enumerate()
-            .filter_map(|t| if t.1.is_nullable() { Some(t.0) } else { None })
-            .next()
+        self.regex_trees.iter().enumerate().find_map(|t| {
+            if t.1.is_nullable() {
+                Some(t.0)
+            } else {
+                None
+            }
+        })
     }
+
     pub fn is_rejecting_state(&self) -> bool {
         self.regex_trees
             .iter()
             .all(|t| matches!(t.as_ref(), RegexTree::Bottom))
     }
+
     pub fn approximate_congruence_class(&self) -> Vec<Intervals> {
         // meet all congruence classes for each regex tree
         self.regex_trees
@@ -96,6 +92,7 @@ impl Vector {
             })
             .unwrap_or_default()
     }
+
     pub fn normalize(&self) -> Self {
         let regex_trees = self
             .regex_trees
@@ -105,93 +102,58 @@ impl Vector {
         Self { regex_trees }
     }
     pub fn generate_dfa(&self, name: String, optimizer: &mut LoopOptimizer) -> TokenStream {
-        let normalized = self.normalize();
-        let mut statdid = 0;
-        let mut state_map = HashMap::new();
-        let dfa = build_dfa(normalized.clone(), &mut statdid, &mut state_map);
-        let name = format_ident!("{}", name);
-        let states = dfa.keys().filter_map(|x| {
-            if x.is_rejecting_state() {
-                None
-            } else {
-                Some(beautify_mangle!(x, state_map))
+        let initial_state = self.normalize();
+        let dfa = build_dfa(initial_state.clone());
+        let initial_label = format_ident!("S{}", dfa.get(&initial_state).unwrap().0);
+        let name = format_ident!("{name}");
+        let labels = dfa
+            .iter()
+            .map(|(_, (state_id, _))| format_ident!("S{state_id}"));
+        let actions = dfa.iter().map(|(state, (state_id, transitions))| {
+            let label = format_ident!("S{state_id}");
+            let accepting_state = state
+                .accepting_state()
+                .map(|x| quote! { longest_match = Some((#x, idx)); });
+            let transitions = transitions.iter().filter_map(|(interval, target)| {
+                if target.is_rejecting_state() {
+                    return None;
+                }
+                let condition = interval.to_tokens();
+                let target_label = format_ident!("S{}", dfa.get(target).unwrap().0);
+                Some(quote! { #condition => state = State::#target_label })
+            });
+            match optimizer.generate_lookahead(&dfa, state) {
+                Some(lookahead) => quote! {
+                    State::#label => {
+                        #lookahead
+                        #accepting_state
+                        if let Some(c) = input.get(idx) {
+                            match c {
+                                #(#transitions,)*
+                                _ => return longest_match,
+                            }
+                        } else {
+                            break;
+                        }
+                    },
+                },
+                None => quote! {
+                    State::#label => {
+                        #accepting_state
+                        match c {
+                            #(#transitions,)*
+                            _ => return longest_match,
+                        }
+                    },
+                },
             }
         });
-        let initial = beautify_mangle!(normalized, state_map);
-        let actions = dfa
-            .iter()
-            .filter_map(|(state, transitions)| {
-                let state_enum = beautify_mangle!(state, state_map);
-                if state.is_rejecting_state() {
-                    None
-                } else {
-                    let transitions = transitions.iter().filter_map(|x| {
-                        if x.1.is_rejecting_state() {
-                            return None;
-                        }
-                        let condition = x.0.to_tokens();
-                        let target = beautify_mangle!(&x.1, state_map);
-                        Some(quote!(#condition => state = State::#target))
-                    });
-                    match optimizer.generate_lookahead(&dfa, state) {
-                        Some(lookahead) => match state.accepting_state() {
-                            Some(x) => Some(quote! {
-                                State::#state_enum => {
-                                    #lookahead
-                                    longest_match.replace((#x, idx));
-                                    if let Some(c) = input.get(idx) {
-                                        match c {
-                                            #(#transitions,)*
-                                            _ => return longest_match,
-                                        }
-                                    } else {
-                                        break;
-                                    }
-                                },
-                            }),
-                            None => Some(quote! {
-                                State::#state_enum => {
-                                    #lookahead
-                                    if let Some(c) = input.get(idx) {
-                                        match c {
-                                            #(#transitions,)*
-                                            _ => return longest_match,
-                                        }
-                                    } else {
-                                        break;
-                                    }
-                                },
-                            }),
-                        },
-                        None => match state.accepting_state() {
-                            Some(x) => Some(quote! {
-                                State::#state_enum => {
-                                    longest_match.replace((#x, idx));
-                                    match c {
-                                        #(#transitions,)*
-                                        _ => return longest_match,
-                                    }
-                                },
-                            }),
-                            None => Some(quote! {
-                                State::#state_enum => {
-                                    match c {
-                                        #(#transitions,)*
-                                        _ => return longest_match,
-                                    };
-                                },
-                            }),
-                        },
-                    }
-                }
-            })
-            .collect::<Vec<_>>();
-        let accepting_actions = dfa.iter().filter_map(|(state, _)| {
+        let accepting_actions = dfa.iter().filter_map(|(state, (state_id, _))| {
             state.accepting_state().map(|rule| {
-                let label = beautify_mangle!(state, state_map);
+                let label = format_ident!("S{state_id}");
                 quote! {
                     State::#label => {
-                        longest_match.replace((#rule, input.len()));
+                        longest_match = Some((#rule, input.len()));
                     }
                 }
             })
@@ -199,9 +161,9 @@ impl Vector {
         quote! {
             fn #name(input: &[u8]) -> Option<(usize, usize)> {
                 enum State {
-                    #(#states,)*
+                    #(#labels,)*
                 };
-                let mut state = State::#initial;
+                let mut state = State::#initial_label;
                 let mut longest_match = None;
                 let mut idx = 0;
                 while idx < input.len() {
@@ -213,7 +175,7 @@ impl Vector {
                 }
                 match state {
                     #(#accepting_actions,)*
-                    _ => ()
+                    _ => {}
                 }
                 longest_match
             }
@@ -221,50 +183,30 @@ impl Vector {
     }
 }
 
-fn make_dfa_transition(
-    dfa: &mut HashMap<Vector, Vec<(Intervals, Vector)>>,
-    transition: Intervals,
-    vector: Vector,
-    stateid: &mut usize,
-    state_map: &mut HashMap<Vector, String>,
-) {
-    let c = transition.representative();
-    let derivative = vector.derivative(c).normalize();
-    unsafe {
-        dfa.get_mut(&vector)
-            .unwrap_unchecked()
-            .push((transition, derivative.clone()));
+pub type DfaTable = HashMap<Vector, (usize /* ID */, Vec<(Intervals, Vector)>)>;
+
+fn explore_dfa_node(dfa: &mut DfaTable, state: Vector, state_id: &mut usize) {
+    dfa.insert(state.clone(), (*state_id, vec![]));
+    *state_id += 1;
+
+    let intervals = state.approximate_congruence_class();
+    let mut transitions = Vec::with_capacity(intervals.len());
+
+    for interval in intervals {
+        let char = interval.representative();
+        let target = state.derivative(char).normalize();
+        transitions.push((interval, target.clone()));
+        if !target.is_rejecting_state() && !dfa.contains_key(&target) {
+            explore_dfa_node(dfa, target, state_id)
+        }
     }
-    if !dfa.contains_key(&derivative) {
-        dfa.insert(derivative.clone(), vec![]);
-        state_map.insert(derivative.clone(), format!("S{}", *stateid));
-        *stateid += 1;
-        explore_dfa_node(dfa, derivative, stateid, state_map)
-    }
+
+    dfa.get_mut(&state).unwrap().1 = transitions;
 }
 
-fn explore_dfa_node(
-    dfa: &mut HashMap<Vector, Vec<(Intervals, Vector)>>,
-    state: Vector,
-    stateid: &mut usize,
-    state_map: &mut HashMap<Vector, String>,
-) {
-    let transitions = state.approximate_congruence_class();
-    for transition in transitions {
-        make_dfa_transition(dfa, transition, state.clone(), stateid, state_map);
-    }
-}
-
-fn build_dfa(
-    initial_state: Vector,
-    stateid: &mut usize,
-    state_map: &mut HashMap<Vector, String>,
-) -> HashMap<Vector, Vec<(Intervals, Vector)>> {
+fn build_dfa(initial_state: Vector) -> DfaTable {
+    let mut state_id = 0;
     let mut dfa = HashMap::new();
-    state_map.insert(initial_state.clone(), format!("S{}", *stateid));
-    *stateid += 1;
-    dfa.insert(initial_state.clone(), vec![]);
-    explore_dfa_node(&mut dfa, initial_state, stateid, state_map);
-    *stateid = 0;
+    explore_dfa_node(&mut dfa, initial_state, &mut state_id);
     dfa
 }

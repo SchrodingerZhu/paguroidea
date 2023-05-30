@@ -71,7 +71,7 @@ mod tests {
         let normalized = normalize(a_or_ba_or_c_con_d);
         let congruence = approximate_congruence_class(&normalized);
         println!("{:?}", congruence);
-        let vectorized = Vector::new([normalized].into_iter());
+        let vectorized = Vector::new([normalized]);
         let mut optimizer = LoopOptimizer::new();
         println!(
             "{}",
@@ -93,7 +93,7 @@ mod tests {
         let congruence = approximate_congruence_class(&normalized);
         println!("{:?}", congruence);
         println!();
-        let vectorized = Vector::new([normalized].into_iter());
+        let vectorized = Vector::new([normalized]);
         let mut optimizer = LoopOptimizer::new();
         println!(
             "{}",

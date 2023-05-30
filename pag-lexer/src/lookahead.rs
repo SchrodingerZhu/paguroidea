@@ -1,8 +1,7 @@
 use crate::intervals::Intervals;
-use crate::vector::Vector;
+use crate::vector::{DfaTable, Vector};
 use proc_macro2::TokenStream;
 use quote::quote;
-use std::collections::HashMap;
 
 #[derive(Copy, Clone)]
 enum LookAheadEdge {
@@ -187,7 +186,7 @@ impl LoopOptimizer {
             const GLOBAL_LUT : [[u8;256]; #table_size] = [ #(#table,)* ];
         })
     }
-    pub fn generate_lookahead(&mut self, dfa: &DFATable, state: &Vector) -> Option<TokenStream> {
+    pub fn generate_lookahead(&mut self, dfa: &DfaTable, state: &Vector) -> Option<TokenStream> {
         let limit = if cfg!(target_arch = "aarch64") { 2 } else { 4 };
         if let Some(intervals) = direct_self_loops(dfa, state) {
             let positives = convert_interval_to_edges(&intervals);
@@ -207,11 +206,9 @@ impl LoopOptimizer {
     }
 }
 
-type DFATable = HashMap<Vector, Vec<(Intervals, Vector)>>;
-
-fn direct_self_loops(dfa: &DFATable, state: &Vector) -> Option<Intervals> {
+fn direct_self_loops(dfa: &DfaTable, state: &Vector) -> Option<Intervals> {
     let mut intervals = None;
-    if let Some(transitions) = dfa.get(state) {
+    if let Some((_, transitions)) = dfa.get(state) {
         for (edge, target) in transitions {
             if target == state {
                 intervals =

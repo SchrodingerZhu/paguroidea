@@ -113,19 +113,14 @@ impl Intervals {
     }
     pub fn to_tokens(&self) -> TokenStream {
         debug_assert!(!self.0.is_empty());
-        let mut iter = self.0.iter().map(|x| {
-            let start = x.0;
-            let end = x.1;
+        let iter = self.0.iter().map(|ClosedInterval(start, end)| {
             if start == end {
                 quote! { #start }
             } else {
                 quote! { #start ..= #end }
             }
         });
-        let first = unsafe { iter.next().unwrap_unchecked() };
-        quote! {
-            #first #(|#iter)*
-        }
+        quote! { #(#iter)|* }
     }
     pub fn new<I>(mut data: I) -> Option<Self>
     where
