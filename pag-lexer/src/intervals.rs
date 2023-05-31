@@ -34,12 +34,12 @@ pub struct Interval(pub u8, pub u8);
 
 impl Display for Interval {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let l = escape_default(self.0);
-        let r = escape_default(self.1);
+        let start = escape_default(self.0);
+        let end = escape_default(self.1);
         if self.0 == self.1 {
-            write!(f, "{l}")
+            write!(f, "{start}")
         } else {
-            write!(f, "[{l}, {r}]")
+            write!(f, "[{start}, {end}]")
         }
     }
 }
@@ -97,7 +97,7 @@ impl Intervals {
     pub fn is_single_byte(&self) -> bool {
         self.0.len() == 1 && self.0[0].0 == self.0[0].1
     }
-    
+
     pub fn representative(&self) -> u8 {
         self.0[0].0
     }
@@ -224,10 +224,17 @@ impl ToTokens for Intervals {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         debug_assert!(!self.0.is_empty());
         let iter = self.0.iter().map(|Interval(start, end)| {
+            let to_byte_char = |c: u8| {
+                format!("b'{}'", escape_default(c))
+                    .parse::<proc_macro2::Literal>()
+                    .unwrap()
+            };
+            let start_lit = to_byte_char(*start);
+            let end_lit = to_byte_char(*end);
             if start == end {
-                quote! { #start }
+                quote! { #start_lit }
             } else {
-                quote! { #start ..= #end }
+                quote! { #start_lit ..= #end_lit }
             }
         });
         tokens.extend(quote! { #(#iter)|* });

@@ -13,8 +13,11 @@ fn generate_lut_routine(index: usize) -> TokenStream {
     let table = index / 8;
     let shift = index % 8;
     quote! {
-        idx = idx + input[idx..].iter().position(|x| (GLOBAL_LUT[#table][*x as usize] >> #shift) & 1 > 0)
-            .unwrap_or(input.len() - idx);
+        idx = idx
+            + input[idx..]
+                .iter()
+                .position(|x| (GLOBAL_LUT[#table][*x as usize] >> #shift) & 1 > 0)
+                .unwrap_or(input.len() - idx);
     }
 }
 

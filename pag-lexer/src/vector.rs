@@ -113,13 +113,13 @@ impl Vector {
             let label = format_ident!("S{state_id}");
             let accepting_state = state
                 .accepting_state()
-                .map(|x| quote! { longest_match = Some((#x, idx)); });
+                .map(|rule_idx| quote! { longest_match = Some((#rule_idx, idx)); });
             let transitions = transitions.iter().filter_map(|(interval, target)| {
                 if target.is_rejecting_state() {
                     return None;
                 }
                 let target_label = format_ident!("S{}", dfa.get(target).unwrap().0);
-                Some(quote! { #interval => state = State::#target_label })
+                Some(quote! { #interval => state = State::#target_label, })
             });
             match optimizer.generate_lookahead(&dfa, state) {
                 Some(lookahead) => quote! {
@@ -128,7 +128,7 @@ impl Vector {
                         #accepting_state
                         if let Some(c) = input.get(idx) {
                             match c {
-                                #(#transitions,)*
+                                #(#transitions)*
                                 _ => return longest_match,
                             }
                         } else {
@@ -140,7 +140,7 @@ impl Vector {
                     State::#label => {
                         #accepting_state
                         match c {
-                            #(#transitions,)*
+                            #(#transitions)*
                             _ => return longest_match,
                         }
                     },
@@ -148,12 +148,10 @@ impl Vector {
             }
         });
         let accepting_actions = dfa.iter().filter_map(|(state, (state_id, _))| {
-            state.accepting_state().map(|rule| {
+            state.accepting_state().map(|rule_idx| {
                 let label = format_ident!("S{state_id}");
                 quote! {
-                    State::#label => {
-                        longest_match = Some((#rule, input.len()));
-                    }
+                    State::#label => longest_match = Some((#rule_idx, input.len())),
                 }
             })
         });
@@ -173,7 +171,7 @@ impl Vector {
                     idx += 1;
                 }
                 match state {
-                    #(#accepting_actions,)*
+                    #(#accepting_actions)*
                     _ => {}
                 }
                 longest_match
