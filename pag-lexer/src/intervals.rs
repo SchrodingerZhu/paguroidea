@@ -7,52 +7,44 @@
 // modified, or distributed except according to those terms.
 
 use proc_macro2::TokenStream;
-use quote::quote;
-use smallvec::SmallVec;
-use std::{
-    fmt::{Display, Formatter},
-    write,
-};
-
-// A closed interval of u8s.
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Copy, Clone)]
-pub struct ClosedInterval(pub u8, pub u8);
-
-impl Display for ClosedInterval {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let l = if self.0 <= 0x7F {
-            format!("{:?}", char::from_u32(self.0 as u32).unwrap())
-        } else {
-            format!("0x{:X}", self.0)
-        };
-        let r = if self.1 <= 0x7F {
-            format!("{:?}", char::from_u32(self.1 as u32).unwrap())
-        } else {
-            format!("0x{:X}", self.1)
-        };
-        if self.0 == self.1 {
-            write!(f, "{}", l)
-        } else {
-            write!(f, "[{}, {}]", l, r)
-        }
-    }
-}
+use quote::{quote, ToTokens};
+use smallvec::{smallvec, SmallVec};
+use std::ascii::escape_default;
+use std::fmt::{Display, Formatter};
 
 #[macro_export]
 macro_rules! interval {
     ($start:expr, $end:expr) => {
-        $crate::intervals::ClosedInterval::new($start as u8, $end as u8)
+        $crate::intervals::Interval::new($start as u8, $end as u8)
     };
 }
 
 #[macro_export]
 macro_rules! intervals {
     ($(($start:expr, $end:expr)),*) => {
-        $crate::intervals::Intervals::new(vec![$($crate::intervals::ClosedInterval::new($start as u8, $end as u8)),*].into_iter())
+        $crate::intervals::Intervals::new(
+            vec![$($crate::interval!($start, $end)),*]
+        )
     };
 }
 
-impl ClosedInterval {
+// A closed interval of u8s.
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Copy, Clone)]
+pub struct Interval(pub u8, pub u8);
+
+impl Display for Interval {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let l = escape_default(self.0);
+        let r = escape_default(self.1);
+        if self.0 == self.1 {
+            write!(f, "{l}")
+        } else {
+            write!(f, "[{l}, {r}]")
+        }
+    }
+}
+
+impl Interval {
     pub fn new(start: u8, end: u8) -> Self {
         Self(start, end)
     }
@@ -87,15 +79,29 @@ impl ClosedInterval {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Intervals(SmallVec<[ClosedInterval; 2]>);
+pub struct Intervals(SmallVec<[Interval; 2]>);
 
 impl Intervals {
+    pub fn new<I>(data: I) -> Option<Self>
+    where
+        I: IntoIterator<Item = Interval>,
+    {
+        let mut data = data.into_iter();
+        let mut ret = Self(smallvec![data.next()?]);
+        for x in data {
+            ret = ret.union(&Self(smallvec![x]));
+        }
+        Some(ret)
+    }
+
     pub fn is_single_byte(&self) -> bool {
         self.0.len() == 1 && self.0[0].0 == self.0[0].1
     }
+    
     pub fn representative(&self) -> u8 {
         self.0[0].0
     }
+
     pub fn mangle(&self) -> String {
         let mut result = String::new();
         for i in self.0.iter() {
@@ -103,6 +109,7 @@ impl Intervals {
         }
         format!("S{}{}", result.len(), result)
     }
+
     pub fn is_full_set(&self) -> bool {
         if self.0.len() == 1 &&
             let Some(x) = self.0.first() {
@@ -111,40 +118,19 @@ impl Intervals {
             false
         }
     }
-    pub fn to_tokens(&self) -> TokenStream {
-        debug_assert!(!self.0.is_empty());
-        let iter = self.0.iter().map(|ClosedInterval(start, end)| {
-            if start == end {
-                quote! { #start }
-            } else {
-                quote! { #start ..= #end }
-            }
-        });
-        quote! { #(#iter)|* }
-    }
-    pub fn new<I>(mut data: I) -> Option<Self>
-    where
-        I: Iterator<Item = ClosedInterval>,
-    {
-        data.next().map(|first| {
-            data.fold(Self([first].into_iter().collect()), |acc, x| {
-                let temp = Self([x].into_iter().collect());
-                acc.union(&temp)
-            })
-        })
-    }
+
     // it is okay is contains non-unicode code points; they will never be read anyway.
     pub fn complement(&self) -> Option<Self> {
         let mut current = Some(0u8);
         let mut result = SmallVec::new();
         for i in self.0.iter() {
             if let Some(current) = current && current < i.0 {
-                result.push(ClosedInterval::new(current, i.0 - 1));
+                result.push(Interval::new(current, i.0 - 1));
             }
             current = i.1.checked_add(1);
         }
         if let Some(current) = current {
-            result.push(ClosedInterval::new(current, u8::MAX));
+            result.push(Interval::new(current, u8::MAX));
         }
         if result.is_empty() {
             None
@@ -174,10 +160,8 @@ impl Intervals {
                 if i.overlaps(&j) {
                     let temp = i.intersection(&j);
                     result = match result {
-                        None => Self::new([temp].into_iter()),
-                        Some(x) => unsafe {
-                            Some(x.union(&Self::new([temp].into_iter()).unwrap_unchecked()))
-                        },
+                        None => Self::new([temp]),
+                        Some(x) => Some(x.union(&Self::new([temp])?)),
                     };
                 } else if j.0 > i.1 {
                     break 'inner;
@@ -225,21 +209,28 @@ impl Intervals {
 
 impl Display for Intervals {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.0.iter();
-        if self.0.len() > 1 {
-            write!(f, "(")?;
-        }
-        if let Some(first) = iter.next() {
-            write!(f, "{}", first)?;
-            for i in iter {
-                write!(f, " | {}", i)?;
+        match self.0.as_slice() {
+            [] => Ok(()),
+            [single] => write!(f, "{single}"),
+            multiple => {
+                let iter = multiple.iter().map(|i| i.to_string());
+                write!(f, "({})", iter.collect::<Vec<_>>().join(" | "))
             }
         }
-        if self.0.len() > 1 {
-            write!(f, ")")
-        } else {
-            Ok(())
-        }
+    }
+}
+
+impl ToTokens for Intervals {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        debug_assert!(!self.0.is_empty());
+        let iter = self.0.iter().map(|Interval(start, end)| {
+            if start == end {
+                quote! { #start }
+            } else {
+                quote! { #start ..= #end }
+            }
+        });
+        tokens.extend(quote! { #(#iter)|* });
     }
 }
 
@@ -247,21 +238,21 @@ impl Display for Intervals {
 mod test {
     #[test]
     fn basic_format() {
-        let interval = super::ClosedInterval::new(0x41, 0x5A);
-        assert_eq!(format!("{}", interval), "['A', 'Z']");
-        let interval = super::ClosedInterval::new(0x41, 0x7A);
-        assert_eq!(format!("{}", interval), "['A', 'z']");
-        let interval = super::ClosedInterval::new(0x41, 0x7B);
-        assert_eq!(format!("{}", interval), "['A', '{']");
+        let interval = super::Interval::new(0x41, 0x5A);
+        assert_eq!(format!("{interval}"), "[A, Z]");
+        let interval = super::Interval::new(0x41, 0x7A);
+        assert_eq!(format!("{interval}"), "[A, z]");
+        let interval = super::Interval::new(0x41, 0x7B);
+        assert_eq!(format!("{interval}"), "[A, {]");
         // whitespace
-        let interval = super::ClosedInterval::new(b'\t', b'\t');
-        assert_eq!(format!("{}", interval), "'\\t'");
+        let interval = super::Interval::new(b'\t', b'\t');
+        assert_eq!(format!("{interval}"), r"\t");
     }
 
     #[test]
     fn intervals_format() {
         let intervals = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
-        println!("{}", intervals);
+        assert_eq!(format!("{intervals}"), "([0, 9] | [A, Z] | [a, z])");
     }
 
     #[test]
