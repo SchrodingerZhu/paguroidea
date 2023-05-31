@@ -272,6 +272,8 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
                     unreachable_code,
                     clippy::identity_op,
                     clippy::single_match,
+                    clippy::never_loop,
+                    clippy::match_single_binding,
                 )]
                 #parser_routines
                 pub fn parse(input: &str) -> Result<ParserTree, Error> {
