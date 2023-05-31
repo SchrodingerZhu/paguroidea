@@ -114,7 +114,7 @@ impl Vector {
             let label = format_ident!("S{state_id}");
             let accepting_state = state
                 .accepting_state()
-                .map(|rule_idx| quote! { longest_match = Some((#rule_idx, idx)); });
+                .map(|rule_idx| quote! { longest_match = (#rule_idx, idx); });
             let transitions = transitions.iter().filter_map(|(interval, target)| {
                 if target.is_rejecting_state() {
                     return None;
@@ -152,17 +152,17 @@ impl Vector {
             state.accepting_state().map(|rule_idx| {
                 let label = format_ident!("S{state_id}");
                 quote! {
-                    State::#label => longest_match = Some((#rule_idx, input.len())),
+                    State::#label => longest_match = (#rule_idx, input.len()),
                 }
             })
         });
         quote! {
-            fn #name(input: &[u8]) -> Option<(usize, usize)> {
+            fn #name(input: &[u8]) -> (usize, usize) {
                 enum State {
                     #(#labels,)*
                 };
                 let mut state = State::#initial_label;
-                let mut longest_match = None;
+                let mut longest_match = (usize::MAX, 0);
                 let mut idx = 0;
                 while idx < input.len() {
                     let c = unsafe { *input.get_unchecked(idx) };
