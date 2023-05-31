@@ -14,7 +14,7 @@ fn generate_lut_routine(index: usize) -> TokenStream {
     let table = index / 8;
     let shift = index % 8;
     quote! {
-        idx = idx + input[idx..].iter().position(|x| (LUT[#table][*x as usize] >> #shift) & 1 > 0)
+        idx = idx + input[idx..].iter().position(|x| (GLOBAL_LUT[#table][*x as usize] >> #shift) & 1 > 0)
             .unwrap_or(input.len() - idx);
     }
 }
@@ -120,6 +120,7 @@ fn generate_negative_lookaheads(edges: &[LookAheadEdge]) -> TokenStream {
     }
 }
 
+#[derive(Default)]
 pub struct LoopOptimizer {
     global_lut: Vec<[u8; 256]>,
     assigned_table: usize,
@@ -183,7 +184,7 @@ impl LoopOptimizer {
         let table_size = self.global_lut.len();
         let table = self.global_lut.iter().map(|x| quote!([#(#x,)*]));
         Some(quote! {
-            const LUT : [[u8;256]; #table_size] = [ #(#table,)* ];
+            const GLOBAL_LUT : [[u8;256]; #table_size] = [ #(#table,)* ];
         })
     }
     pub fn generate_lookahead(&mut self, dfa: &DFATable, state: &Vector) -> Option<TokenStream> {

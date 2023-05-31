@@ -104,7 +104,7 @@ impl Vector {
             .collect();
         Self { regex_trees }
     }
-    pub fn generate_dfa(&self, name: String) -> TokenStream {
+    pub fn generate_dfa(&self, name: String, optimizer: &mut LoopOptimizer) -> TokenStream {
         let normalized = self.normalize();
         let mut statdid = 0;
         let mut state_map = HashMap::new();
@@ -112,7 +112,6 @@ impl Vector {
         let name = format_ident!("{}", name);
         let states = dfa.keys().map(|x| beautify_mangle!(x, state_map));
         let initial = beautify_mangle!(normalized, state_map);
-        let mut optimizer = LoopOptimizer::new();
         let actions = dfa
             .iter()
             .map(|(state, transitions)| {
@@ -186,10 +185,8 @@ impl Vector {
                 }
             })
         });
-        let lut = optimizer.generate_lut().into_iter();
         quote! {
           fn #name(input: &[u8]) -> Option<(usize, usize)> {
-              #(#lut)*
               enum States {
                     #(#states,)*
               };
