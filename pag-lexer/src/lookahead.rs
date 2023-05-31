@@ -187,11 +187,7 @@ impl LoopOptimizer {
         })
     }
     pub fn generate_lookahead(&mut self, dfa: &DFATable, state: &Vector) -> Option<TokenStream> {
-        let limit = if cfg!(target_arch = "aarch64") {
-            2
-        } else {
-            4
-        };
+        let limit = if cfg!(target_arch = "aarch64") { 2 } else { 4 };
         if let Some(intervals) = direct_self_loops(dfa, state) {
             let positives = convert_interval_to_edges(&intervals);
             if positives.len() <= limit {
