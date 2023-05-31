@@ -15,7 +15,7 @@ use crate::regex_tree::RegexTree;
 use crate::lookahead::LoopOptimizer;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
@@ -104,7 +104,8 @@ impl Vector {
 
     pub fn generate_dfa(&self, name: String, optimizer: &mut LoopOptimizer) -> TokenStream {
         let initial_state = self.normalize();
-        let dfa = build_dfa(initial_state.clone());
+        let mut dfa = build_dfa(initial_state.clone());
+        let leaf_states = extract_leaf_states(&mut dfa);
         let initial_label = format_ident!("S{}", dfa.get(&initial_state).unwrap().0);
         let name = format_ident!("{name}");
         let labels = dfa
@@ -116,8 +117,9 @@ impl Vector {
                 .accepting_state()
                 .map(|rule_idx| quote! { longest_match = (#rule_idx, idx); });
             let transitions = transitions.iter().filter_map(|(interval, target)| {
-                if target.is_rejecting_state() {
-                    return None;
+                if leaf_states.contains(target) {
+                    let rule_idx = target.accepting_state().unwrap();
+                    return Some(quote! { #interval => return (#rule_idx, idx + 1), });
                 }
                 let target_label = format_ident!("S{}", dfa.get(target).unwrap().0);
                 Some(quote! { #interval => state = State::#target_label, })
@@ -193,9 +195,11 @@ fn explore_dfa_node(dfa: &mut DfaTable, state: Vector, state_id: &mut usize) {
     for interval in intervals {
         let char = interval.representative();
         let target = state.derivative(char).normalize();
-        transitions.push((interval, target.clone()));
-        if !target.is_rejecting_state() && !dfa.contains_key(&target) {
-            explore_dfa_node(dfa, target, state_id)
+        if !target.is_rejecting_state() {
+            transitions.push((interval, target.clone()));
+            if !dfa.contains_key(&target) {
+                explore_dfa_node(dfa, target, state_id)
+            }
         }
     }
 
@@ -207,4 +211,22 @@ fn build_dfa(initial_state: Vector) -> DfaTable {
     let mut dfa = HashMap::new();
     explore_dfa_node(&mut dfa, initial_state, &mut state_id);
     dfa
+}
+
+fn extract_leaf_states(dfa: &mut DfaTable) -> HashSet<Vector> {
+    // TODO: switch to `drain_filter` (nightly) / `extract_if` (hashbrown)
+    let leaf_states = dfa
+        .iter()
+        .filter_map(|(state, (_, transitions))| {
+            if transitions.len() == 0 && state.accepting_state().is_some() {
+                Some(state.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    for s in &leaf_states {
+        dfa.remove(s);
+    }
+    leaf_states
 }
