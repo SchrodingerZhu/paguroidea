@@ -118,9 +118,8 @@ impl Vector {
                 if target.is_rejecting_state() {
                     return None;
                 }
-                let condition = interval.to_tokens();
                 let target_label = format_ident!("S{}", dfa.get(target).unwrap().0);
-                Some(quote! { #condition => state = State::#target_label })
+                Some(quote! { #interval => state = State::#target_label })
             });
             match optimizer.generate_lookahead(&dfa, state) {
                 Some(lookahead) => quote! {

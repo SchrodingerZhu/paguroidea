@@ -238,49 +238,51 @@ pub fn encode_range(x: char, y: char) -> Rc<RegexTree> {
 
 #[cfg(test)]
 mod test {
+    use super::*;
+
     #[test]
-    fn encode_char() {
-        assert_eq!(super::encode_char('a').to_string(), "'a'");
-        assert_eq!(super::encode_char('b').to_string(), "'b'");
-        assert_eq!(super::encode_char('æ').to_string(), r#"(0xC3 ~ 0xA6)"#);
-        assert_eq!(
-            super::encode_char('我').to_string(),
-            r#"((0xE6 ~ 0x88) ~ 0x91)"#
-        );
+    fn test_encode_char() {
+        assert_eq!(encode_char('a').to_string(), "a");
+        assert_eq!(encode_char('b').to_string(), "b");
+        assert_eq!(encode_char('æ').to_string(), r"(\xc3 ~ \xa6)");
+        assert_eq!(encode_char('我').to_string(), r"((\xe6 ~ \x88) ~ \x91)");
     }
 
     #[test]
-    fn encode_range() {
-        assert_eq!(super::encode_range('a', 'a').to_string(), "'a'");
-        assert_eq!(super::encode_range('a', 'b').to_string(), r#"['a', 'b']"#);
+    fn test_encode_range() {
+        assert_eq!(encode_range('a', 'a').to_string(), "a");
+        assert_eq!(encode_range('a', 'b').to_string(), "[a, b]");
         assert_eq!(
-            super::encode_range('\u{80}', '\u{88}').to_string(),
-            r#"(0xC2 ~ [0x80, 0x88])"#
+            encode_range('\u{80}', '\u{88}').to_string(),
+            r"(\xc2 ~ [\x80, \x88])"
         );
         assert_eq!(
-            super::encode_range('\u{81}', '\u{7FA}').to_string(),
-            r#"((0xC2 ~ [0x81, 0xBF]) ∪ (([0xC3, 0xDE] ~ [0x80, 0xBF]) ∪ (0xDF ~ [0x80, 0xBA])))"#
+            encode_range('\u{81}', '\u{7FA}').to_string(),
+            r"((\xc2 ~ [\x81, \xbf]) ∪ (([\xc3, \xde] ~ [\x80, \xbf]) ∪ (\xdf ~ [\x80, \xba])))"
         );
         assert_eq!(
-            super::encode_range('\u{800}', '\u{808}').to_string(),
-            r#"(0xE0 ~ (0xA0 ~ [0x80, 0x88]))"#
+            encode_range('\u{800}', '\u{808}').to_string(),
+            r"(\xe0 ~ (\xa0 ~ [\x80, \x88]))"
         );
         assert_eq!(
-            super::encode_range('\u{881}', '\u{FFA}').to_string(),
-            r#"(0xE0 ~ ((0xA2 ~ [0x81, 0xBF]) ∪ (([0xA3, 0xBE] ~ [0x80, 0xBF]) ∪ (0xBF ~ [0x80, 0xBA]))))"#
+            encode_range('\u{881}', '\u{FFA}').to_string(),
+            r"(\xe0 ~ ((\xa2 ~ [\x81, \xbf]) ∪ (([\xa3, \xbe] ~ [\x80, \xbf]) ∪ (\xbf ~ [\x80, \xba]))))"
         );
         assert_eq!(
-            super::encode_range('\u{901}', '\u{FF00}').to_string(),
-            r#"((0xE0 ~ ((0xA4 ~ [0x81, 0xBF]) ∪ ([0xA5, 0xBF] ~ [0x80, 0xBF]))) ∪ (([0xE1, 0xEE] ~ ([0x80, 0xBF] ~ [0x80, 0xBF])) ∪ (0xEF ~ (([0x80, 0xBB] ~ [0x80, 0xBF]) ∪ (0xBC ~ 0x80)))))"#
+            encode_range('\u{901}', '\u{FF00}').to_string(),
+            r"((\xe0 ~ ((\xa4 ~ [\x81, \xbf]) ∪ ([\xa5, \xbf] ~ [\x80, \xbf]))) ∪ (([\xe1, \xee] ~ ([\x80, \xbf] ~ [\x80, \xbf])) ∪ (\xef ~ (([\x80, \xbb] ~ [\x80, \xbf]) ∪ (\xbc ~ \x80)))))"
         );
         assert_eq!(
-            super::encode_range('a', '\u{90}').to_string(),
-            r#"(['a', '\u{7f}'] ∪ (([0xC0, 0xC1] ~ [0x80, 0xBF]) ∪ (0xC2 ~ [0x80, 0x90])))"#
+            encode_range('a', '\u{90}').to_string(),
+            r"([a, \x7f] ∪ (([\xc0, \xc1] ~ [\x80, \xbf]) ∪ (\xc2 ~ [\x80, \x90])))"
         );
         assert_eq!(
-            super::encode_range('a', '\u{801}').to_string(),
-            r#"(['a', '\u{7f}'] ∪ (([0xC0, 0xDF] ~ [0x80, 0xBF]) ∪ (0xE0 ~ (([0x80, 0x9F] ~ [0x80, 0xBF]) ∪ (0xA0 ~ [0x80, 0x81])))))"#
+            encode_range('a', '\u{801}').to_string(),
+            r"([a, \x7f] ∪ (([\xc0, \xdf] ~ [\x80, \xbf]) ∪ (\xe0 ~ (([\x80, \x9f] ~ [\x80, \xbf]) ∪ (\xa0 ~ [\x80, \x81])))))"
         );
-        assert_eq!(super::encode_range('\u{99}', '\u{2771}').to_string(), "((0xC2 ~ [0x99, 0xBF]) ∪ (([0xC3, 0xDF] ~ [0x80, 0xBF]) ∪ (([0xE0, 0xE1] ~ ([0x80, 0xBF] ~ [0x80, 0xBF])) ∪ (0xE2 ~ (([0x80, 0x9C] ~ [0x80, 0xBF]) ∪ (0x9D ~ [0x80, 0xB1]))))))")
+        assert_eq!(
+            encode_range('\u{99}', '\u{2771}').to_string(),
+            r"((\xc2 ~ [\x99, \xbf]) ∪ (([\xc3, \xdf] ~ [\x80, \xbf]) ∪ (([\xe0, \xe1] ~ ([\x80, \xbf] ~ [\x80, \xbf])) ∪ (\xe2 ~ (([\x80, \x9c] ~ [\x80, \xbf]) ∪ (\x9d ~ [\x80, \xb1]))))))"
+        )
     }
 }

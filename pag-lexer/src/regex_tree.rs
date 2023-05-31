@@ -6,7 +6,7 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use crate::intervals::{ClosedInterval, Intervals};
+use crate::intervals::{Interval, Intervals};
 use std::fmt::{Display, Formatter};
 use std::ops::RangeInclusive;
 use std::rc::Rc;
@@ -62,15 +62,13 @@ impl Display for RegexTree {
 
 impl RegexTree {
     pub fn single(x: u8) -> Self {
-        unsafe {
-            RegexTree::Set(Intervals::new([ClosedInterval(x, x)].into_iter()).unwrap_unchecked())
-        }
+        unsafe { RegexTree::Set(Intervals::new([Interval(x, x)]).unwrap_unchecked()) }
     }
     pub fn range(x: RangeInclusive<u8>) -> Self {
         if x.is_empty() {
             return RegexTree::Bottom;
         }
-        match Intervals::new([ClosedInterval(*x.start(), *x.end())].into_iter()) {
+        match Intervals::new([Interval(*x.start(), *x.end())]) {
             Some(set) => RegexTree::Set(set),
             None => RegexTree::Bottom,
         }
