@@ -152,7 +152,7 @@ impl Vector {
             state.accepting_state().map(|rule_idx| {
                 let label = format_ident!("S{state_id}");
                 quote! {
-                    State::#label => longest_match = (#rule_idx, input.len()),
+                    State::#label => longest_match = (#rule_idx, idx),
                 }
             })
         });
