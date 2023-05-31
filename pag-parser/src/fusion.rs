@@ -273,7 +273,7 @@ fn generate_children<'src>(
             }
             if add_continue {
                 quote! {
-                    Some((#index, shift)) => {
+                    (#index, shift) => {
                         cursor += shift;
                         #(#actions)*
                         offset = cursor;
@@ -282,7 +282,7 @@ fn generate_children<'src>(
                 }
             } else {
                 quote! {
-                    Some((#index, shift)) => {
+                    (#index, shift) => {
                         cursor += shift;
                         #(#actions)*
                         break;
@@ -295,7 +295,7 @@ fn generate_children<'src>(
 
 fn generate_skip(index: usize) -> TokenStream {
     quote! {
-        Some((#index, shift)) => {
+        (#index, shift) => {
             offset += shift;
             continue;
         }
@@ -351,14 +351,14 @@ fn generate_inactive_parser<'src>(
         Some(e) => {
             let actions = generate_empty_actions(false, e);
             quote! {
-                None => {
+                (usize::MAX, _) => {
                     #(#actions)*
                     break;
                 }
             }
         }
         None => quote! {
-            None => {
+            (usize::MAX, _) => {
                 return Err(Error {
                     active_rule: parent.tag,
                     expecting: EXPECTING,
@@ -422,14 +422,14 @@ fn generate_active_parser<'src>(
         Some(e) => {
             let actions = generate_empty_actions(true, e);
             quote! {
-                None => {
+                (usize::MAX, _) => {
                     #(#actions)*
                     break;
                 }
             }
         }
         None => quote! {
-            None => {
+            (usize::MAX, _) => {
                 return Err(Error{
                     active_rule: tree.tag,
                     expecting: EXPECTING,
