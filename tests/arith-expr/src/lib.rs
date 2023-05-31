@@ -1,3 +1,6 @@
+#![feature(portable_simd)]
+#![feature(core_intrinsics)]
+#![feature(array_chunks)]
 use std::num::Wrapping;
 
 mod parser;

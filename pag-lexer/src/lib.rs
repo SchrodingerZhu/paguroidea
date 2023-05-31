@@ -7,9 +7,13 @@
 // modified, or distributed except according to those terms.
 
 #![feature(let_chains)]
+#![feature(array_chunks)]
+#![feature(portable_simd)]
+
 pub mod congruence;
 pub mod derivative;
 pub mod intervals;
+pub mod lookahead;
 pub mod normalization;
 pub mod regex_tree;
 pub mod vector;

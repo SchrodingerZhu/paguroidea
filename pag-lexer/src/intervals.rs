@@ -90,6 +90,9 @@ impl ClosedInterval {
 pub struct Intervals(SmallVec<[ClosedInterval; 2]>);
 
 impl Intervals {
+    pub fn is_single_byte(&self) -> bool {
+        self.0.len() == 1 && self.0[0].0 == self.0[0].1
+    }
     pub fn representative(&self) -> u8 {
         self.0[0].0
     }

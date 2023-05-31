@@ -12,6 +12,7 @@ use crate::intervals::Intervals;
 use crate::normalization::normalize;
 use crate::regex_tree::RegexTree;
 
+use crate::lookahead::LoopOptimizer;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::HashMap;
@@ -111,37 +112,70 @@ impl Vector {
         let name = format_ident!("{}", name);
         let states = dfa.keys().map(|x| beautify_mangle!(x, state_map));
         let initial = beautify_mangle!(normalized, state_map);
-        let actions = dfa.iter().map(|(state, transitions)| {
-            let state_enum = beautify_mangle!(state, state_map);
-            if state.is_rejecting_state() {
-                quote! {
-                    States::#state_enum => return longest_match,
-                }
-            } else {
-                let transitions = transitions.iter().map(|x| {
-                    let condition = x.0.to_tokens();
-                    let target = beautify_mangle!(&x.1, state_map);
-                    quote!(#condition => States::#target)
-                });
-                match state.accepting_state() {
-                    Some(x) => quote! {
-                        States::#state_enum => {
-                            longest_match.replace((#x, idx));
-                            state = match c {
-                                #(#transitions,)*
-                            }
+        let mut optimizer = LoopOptimizer::new();
+        let actions = dfa
+            .iter()
+            .map(|(state, transitions)| {
+                let state_enum = beautify_mangle!(state, state_map);
+                if state.is_rejecting_state() {
+                    quote! {
+                        States::#state_enum => return longest_match,
+                    }
+                } else {
+                    let transitions = transitions.iter().map(|x| {
+                        let condition = x.0.to_tokens();
+                        let target = beautify_mangle!(&x.1, state_map);
+                        quote!(#condition => States::#target)
+                    });
+                    match optimizer.generate_lookahead(&dfa, state) {
+                        Some(lookahead) => match state.accepting_state() {
+                            Some(x) => quote! {
+                                States::#state_enum => {
+                                    #lookahead
+                                    longest_match.replace((#x, idx));
+                                    if let Some(c) = input.get(idx) {
+                                        state = match c {
+                                            #(#transitions,)*
+                                        }
+                                    } else {
+                                        break;
+                                    }
+                                },
+                            },
+                            None => quote! {
+                                States::#state_enum => {
+                                    #lookahead
+                                    if let Some(c) = input.get(idx) {
+                                        state = match c {
+                                            #(#transitions,)*
+                                        }
+                                    } else {
+                                        break;
+                                    }
+                                },
+                            },
                         },
-                    },
-                    None => quote! {
-                        States::#state_enum => {
-                            state = match c {
-                                 #(#transitions,)*
-                            };
+                        None => match state.accepting_state() {
+                            Some(x) => quote! {
+                                States::#state_enum => {
+                                    longest_match.replace((#x, idx));
+                                    state = match c {
+                                        #(#transitions,)*
+                                    }
+                                },
+                            },
+                            None => quote! {
+                                States::#state_enum => {
+                                    state = match c {
+                                         #(#transitions,)*
+                                    };
+                                },
+                            },
                         },
-                    },
+                    }
                 }
-            }
-        });
+            })
+            .collect::<Vec<_>>();
         let accepting_actions = dfa.iter().filter_map(|(state, _)| {
             state.accepting_state().map(|rule| {
                 let label = beautify_mangle!(state, state_map);
@@ -152,17 +186,22 @@ impl Vector {
                 }
             })
         });
+        let lut = optimizer.generate_lut().into_iter();
         quote! {
           fn #name(input: &[u8]) -> Option<(usize, usize)> {
+              #(#lut)*
               enum States {
                     #(#states,)*
               };
               let mut state = States::#initial;
               let mut longest_match = None;
-              for (idx, c) in input.iter().copied().enumerate() {
+              let mut idx = 0;
+              while idx < input.len() {
+                  let c = unsafe { *input.get_unchecked(idx) };
                   match state {
                     #(#actions)*
                   };
+                  idx += 1;
               }
               match state {
                   #(#accepting_actions,)*
