@@ -8,6 +8,7 @@
 
 use std::collections::HashMap;
 
+use pag_lexer::lookahead::LoopOptimizer;
 use pag_lexer::vector::Vector;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -343,11 +344,13 @@ fn generate_inactive_parser<'src>(
     parser: &Parser<'src, '_>,
     lexer_database: &LexerDatabase<'src>,
     rules: &[&NormalForm<'src>],
+    loop_optimizer: &mut LoopOptimizer,
 ) -> TokenStream {
     let tag_name = format!("{}", tag);
     let parser_name = format_ident!("parse_{}", tag_name);
     let expect = generate_expect(rules, lexer_database);
-    let lexer = fusion_lexer(rules, lexer_database).generate_dfa(format!("lexer_{}", tag_name));
+    let lexer = fusion_lexer(rules, lexer_database)
+        .generate_dfa(format!("lexer_{}", tag_name), loop_optimizer);
     let lexer_name = format_ident!("lexer_{}", tag_name);
     let parser_rules = generate_children(&tag, false, parser, rules)
         .into_iter()
@@ -409,12 +412,14 @@ fn generate_active_parser<'src>(
     parser: &Parser<'src, '_>,
     lexer_database: &LexerDatabase<'src>,
     rules: &[&NormalForm<'src>],
+    loop_optimizer: &mut LoopOptimizer,
 ) -> TokenStream {
     let tag_name = format!("{}", tag);
     let tag_ident = format_ident!("{}", tag_name);
     let parser_name = format_ident!("parse_{}", tag_name);
     let expect = generate_expect(rules, lexer_database);
-    let lexer = fusion_lexer(rules, lexer_database).generate_dfa(format!("lexer_{}", tag_name));
+    let lexer = fusion_lexer(rules, lexer_database)
+        .generate_dfa(format!("lexer_{}", tag_name), loop_optimizer);
     let lexer_name = format_ident!("lexer_{}", tag_name);
     let parser_rules = generate_children(&tag, true, parser, rules)
         .into_iter()
@@ -479,24 +484,44 @@ pub fn fusion_parser<'src>(
     let tag = generate_tag_enum(parser);
     let tree = generate_parse_tree();
     let error = generate_error();
-    let parsers = rules.entries.iter().map(|(tag, rules)| {
-        if !tag.is_versioned()
-            && parser
-                .bindings
-                .get(&tag.symbol())
-                .map_or(false, |x| x.active)
-        {
-            generate_active_parser(*tag, parser, &parser.lexer_database, rules)
-        } else {
-            generate_inactive_parser(*tag, parser, &parser.lexer_database, rules)
-        }
-    });
+    let mut loop_optimizer = LoopOptimizer::new();
+    let parsers = rules
+        .entries
+        .iter()
+        .map(|(tag, rules)| {
+            if !tag.is_versioned()
+                && parser
+                    .bindings
+                    .get(&tag.symbol())
+                    .map_or(false, |x| x.active)
+            {
+                generate_active_parser(
+                    *tag,
+                    parser,
+                    &parser.lexer_database,
+                    rules,
+                    &mut loop_optimizer,
+                )
+            } else {
+                generate_inactive_parser(
+                    *tag,
+                    parser,
+                    &parser.lexer_database,
+                    rules,
+                    &mut loop_optimizer,
+                )
+            }
+        })
+        .collect::<Vec<_>>()
+        .into_iter();
+    let lut = loop_optimizer.generate_lut().into_iter();
     quote! {
         extern crate alloc;
         #tag
         #tree
         #error
         #(#parsers)*
+        #(#lut)*
     }
 }
 

@@ -1,3 +1,6 @@
+#![feature(portable_simd)]
+#![feature(core_intrinsics)]
+#![feature(array_chunks)]
 mod parser;
 
 pub use parser::parse;

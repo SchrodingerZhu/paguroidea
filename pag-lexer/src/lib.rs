@@ -7,9 +7,13 @@
 // modified, or distributed except according to those terms.
 
 #![feature(let_chains)]
+#![feature(array_chunks)]
+#![feature(portable_simd)]
+
 pub mod congruence;
 pub mod derivative;
 pub mod intervals;
+pub mod lookahead;
 pub mod normalization;
 pub mod regex_tree;
 pub mod vector;
@@ -18,6 +22,7 @@ pub mod vector;
 mod tests {
     use crate::congruence::approximate_congruence_class;
     use crate::derivative::derivative;
+    use crate::lookahead::LoopOptimizer;
     use crate::normalization::normalize;
     use crate::regex_tree::*;
     use crate::vector::Vector;
@@ -67,7 +72,11 @@ mod tests {
         let congruence = approximate_congruence_class(&normalized);
         println!("{:?}", congruence);
         let vectorized = Vector::new([normalized].into_iter());
-        println!("{}", vectorized.generate_dfa("polo".to_string()));
+        let mut optimizer = LoopOptimizer::new();
+        println!(
+            "{}",
+            vectorized.generate_dfa("polo".to_string(), &mut optimizer)
+        );
     }
 
     #[test]
@@ -85,6 +94,10 @@ mod tests {
         println!("{:?}", congruence);
         println!();
         let vectorized = Vector::new([normalized].into_iter());
-        println!("{}", vectorized.generate_dfa("test".to_string()));
+        let mut optimizer = LoopOptimizer::new();
+        println!(
+            "{}",
+            vectorized.generate_dfa("test".to_string(), &mut optimizer)
+        );
     }
 }
