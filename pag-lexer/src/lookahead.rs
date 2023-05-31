@@ -2,6 +2,8 @@ use crate::intervals::Intervals;
 use crate::vector::{DfaTable, Vector};
 use proc_macro2::TokenStream;
 use quote::quote;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 #[derive(Copy, Clone)]
 enum LookAheadEdge {
@@ -12,11 +14,12 @@ enum LookAheadEdge {
 fn generate_lut_routine(index: usize) -> TokenStream {
     let table = index / 8;
     let shift = index % 8;
+    let bit = 1u8 << shift;
     quote! {
         idx = idx
             + input[idx..]
                 .iter()
-                .position(|x| (GLOBAL_LUT[#table][*x as usize] >> #shift) & 1 > 0)
+                .position(|x| GLOBAL_LUT[#table][*x as usize] & #bit > 0)
                 .unwrap_or(input.len() - idx);
     }
 }
@@ -125,7 +128,7 @@ fn generate_negative_lookaheads(edges: &[LookAheadEdge]) -> TokenStream {
 #[derive(Default)]
 pub struct LoopOptimizer {
     global_lut: Vec<[u8; 256]>,
-    assigned_table: usize,
+    assigned: HashMap<Intervals, usize>,
 }
 
 fn convert_interval_to_edges(intervals: &Intervals) -> Vec<LookAheadEdge> {
@@ -162,13 +165,21 @@ impl LoopOptimizer {
     pub fn new() -> Self {
         Self {
             global_lut: Vec::new(),
-            assigned_table: 0,
+            assigned: HashMap::new(),
         }
     }
     fn assign_table(&mut self, negatives: &Intervals) -> usize {
-        let table = self.assigned_table / 8;
-        let offset = self.assigned_table % 8;
-        self.assigned_table += 1;
+        let assigned_table = self.assigned.len();
+        match self.assigned.entry(negatives.clone()) {
+            Entry::Occupied(x) => {
+                return *x.get();
+            }
+            Entry::Vacant(x) => {
+                x.insert(assigned_table);
+            }
+        };
+        let table = assigned_table / 8;
+        let offset = assigned_table % 8;
         if self.global_lut.len() <= table {
             self.global_lut.push([0; 256]);
         }
@@ -177,10 +188,10 @@ impl LoopOptimizer {
                 self.global_lut[table][i as usize] |= 1u8 << offset;
             }
         }
-        table * 8 + offset
+        assigned_table
     }
     pub fn generate_lut(&self) -> Option<TokenStream> {
-        if self.assigned_table == 0 {
+        if self.assigned.is_empty() {
             return None;
         }
         let table_size = self.global_lut.len();
