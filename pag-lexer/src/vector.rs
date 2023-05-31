@@ -14,10 +14,34 @@ use crate::regex_tree::RegexTree;
 
 use crate::lookahead::LoopOptimizer;
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
+
+#[derive(Clone, Copy)]
+pub enum LexerOutput<'a> {
+    Tag(&'a str),
+    Rule(usize),
+    Skip,
+}
+
+impl ToTokens for LexerOutput<'_> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let result = match self {
+            Self::Tag(tag) => {
+                let label = format_ident!("{tag}");
+                quote! { LexerOutput::Tag(Tag::#label) }
+            }
+            Self::Rule(index) => {
+                let label = format_ident!("R{index}");
+                quote! { LexerOutput::#label }
+            }
+            Self::Skip => quote! { LexerOutput::Skip },
+        };
+        tokens.extend(result);
+    }
+}
 
 #[derive(Hash, PartialEq, Eq, Debug, Clone, Ord, PartialOrd)]
 pub struct Vector {
@@ -102,7 +126,12 @@ impl Vector {
         Self { regex_trees }
     }
 
-    pub fn generate_dfa(&self, name: String, optimizer: &mut LoopOptimizer) -> TokenStream {
+    pub fn generate_dfa(
+        &self,
+        name: String,
+        optimizer: &mut LoopOptimizer,
+        rule_map: &Vec<LexerOutput>,
+    ) -> TokenStream {
         let initial_state = self.normalize();
         let dfa = build_dfa(initial_state.clone());
         let initial_label = format_ident!("S{}", dfa.get(&initial_state).unwrap().0);
@@ -112,9 +141,10 @@ impl Vector {
             .map(|(_, (state_id, _))| format_ident!("S{state_id}"));
         let actions = dfa.iter().map(|(state, (state_id, transitions))| {
             let label = format_ident!("S{state_id}");
-            let accepting_state = state
-                .accepting_state()
-                .map(|rule_idx| quote! { longest_match = Some((#rule_idx, idx)); });
+            let accepting_state = state.accepting_state().map(|rule_idx| {
+                let output = rule_map[rule_idx];
+                quote! { longest_match = (#output, idx); }
+            });
             let transitions = transitions.iter().filter_map(|(interval, target)| {
                 if target.is_rejecting_state() {
                     return None;
@@ -150,19 +180,20 @@ impl Vector {
         });
         let accepting_actions = dfa.iter().filter_map(|(state, (state_id, _))| {
             state.accepting_state().map(|rule_idx| {
+                let output = rule_map[rule_idx];
                 let label = format_ident!("S{state_id}");
                 quote! {
-                    State::#label => longest_match = Some((#rule_idx, input.len())),
+                    State::#label => longest_match = (#output, input.len()),
                 }
             })
         });
         quote! {
-            fn #name(input: &[u8]) -> Option<(usize, usize)> {
+            fn #name(input: &[u8]) -> (LexerOutput, usize) {
                 enum State {
                     #(#labels,)*
                 };
                 let mut state = State::#initial_label;
-                let mut longest_match = None;
+                let mut longest_match = (LexerOutput::None, 0);
                 let mut idx = 0;
                 while idx < input.len() {
                     let c = unsafe { *input.get_unchecked(idx) };

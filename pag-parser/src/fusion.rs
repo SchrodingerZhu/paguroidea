@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use pag_lexer::lookahead::LoopOptimizer;
-use pag_lexer::vector::Vector;
+use pag_lexer::vector::{LexerOutput, Vector};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
@@ -177,11 +177,9 @@ fn generate_empty_actions(active: bool, symbols: &[Symbol<'_>]) -> Vec<TokenStre
                 format_ident!("parent")
             };
             quote! {
-                {
-                    let mut subtree = ParserTree::new(Tag::#tag, src);
-                    subtree.set_span(cursor..cursor);
-                    #target.add_child(subtree);
-                }
+                let mut subtree = ParserTree::new(Tag::#tag, src);
+                subtree.set_span(cursor..cursor);
+                #target.add_child(subtree);
             }
         })
         .collect()
@@ -204,6 +202,7 @@ fn generate_children<'src>(
     active: bool,
     parser: &Parser<'src, '_>,
     rules: &[&NormalForm<'src>],
+    rule_map: &Vec<LexerOutput<'src>>,
 ) -> Vec<TokenStream> {
     rules
         .iter()
@@ -271,9 +270,11 @@ fn generate_children<'src>(
                     },
                 }
             }
+
+            let label = rule_map[index];
             if add_continue {
                 quote! {
-                    Some((#index, shift)) => {
+                    (#label, shift) => {
                         cursor += shift;
                         #(#actions)*
                         offset = cursor;
@@ -282,7 +283,7 @@ fn generate_children<'src>(
                 }
             } else {
                 quote! {
-                    Some((#index, shift)) => {
+                    (#label, shift) => {
                         cursor += shift;
                         #(#actions)*
                         break;
@@ -293,9 +294,9 @@ fn generate_children<'src>(
         .collect()
 }
 
-fn generate_skip(index: usize) -> TokenStream {
+fn generate_skip() -> TokenStream {
     quote! {
-        Some((#index, shift)) => {
+        (LexerOutput::Skip, shift) => {
             offset += shift;
             continue;
         }
@@ -319,6 +320,36 @@ fn generate_expect<'src>(
     }
 }
 
+fn create_rule_map<'src>(rules: &[&NormalForm<'src>]) -> Vec<LexerOutput<'src>> {
+    let mut rule_map = Vec::new();
+    for nf in rules {
+        let NormalForm::Sequence { nonterminals, .. } = nf else { continue };
+        let first_summarize = nonterminals.iter().find(|act| matches!(act, Action::Summarize(_)));
+        if let Some(Action::Summarize(sym)) = first_summarize {
+            rule_map.push(LexerOutput::Tag(sym.name()));
+        } else {
+            rule_map.push(LexerOutput::Rule(rule_map.len()));
+        }
+    }
+    rule_map.push(LexerOutput::Skip);
+    rule_map
+}
+
+fn generate_lexer_output<'src>(rule_map: &Vec<LexerOutput<'src>>) -> TokenStream {
+    let rule_enums = rule_map.iter().filter_map(|out| match out {
+        LexerOutput::Rule(index) => Some(format_ident!("R{index}")),
+        _ => None,
+    });
+    quote! {
+        enum LexerOutput {
+            Tag(Tag),
+            #(#rule_enums,)*
+            Skip,
+            None,
+        }
+    }
+}
+
 fn generate_inactive_parser<'src>(
     tag: Tag<'src>,
     parser: &Parser<'src, '_>,
@@ -330,20 +361,18 @@ fn generate_inactive_parser<'src>(
     let parser_name = format_ident!("parse_{tag_name}");
     let expect = generate_expect(rules, lexer_database);
 
-    let lexer = fusion_lexer(rules, lexer_database)
-        .generate_dfa(format!("lexer_{tag_name}"), loop_optimizer);
+    let rule_map = create_rule_map(rules);
+    let lexer_output = generate_lexer_output(&rule_map);
+
+    let lexer = fusion_lexer(rules, lexer_database).generate_dfa(
+        format!("lexer_{tag_name}"),
+        loop_optimizer,
+        &rule_map,
+    );
     let lexer_name = format_ident!("lexer_{tag_name}");
 
-    let parser_rules = generate_children(&tag, false, parser, rules)
-        .into_iter()
-        .chain(lexer_database.skip.map(|_| {
-            generate_skip(
-                rules
-                    .iter()
-                    .filter(|x| !matches!(x, NormalForm::Empty(..)))
-                    .count(),
-            )
-        }));
+    let parser_rules = generate_children(&tag, false, parser, rules, &rule_map);
+    let skip_action = generate_skip();
     let none_action = match rules.iter().find_map(|x| match x {
         NormalForm::Empty(e) => Some(e),
         _ => None,
@@ -351,14 +380,14 @@ fn generate_inactive_parser<'src>(
         Some(e) => {
             let actions = generate_empty_actions(false, e);
             quote! {
-                None => {
+                (LexerOutput::None, _) => {
                     #(#actions)*
                     break;
                 }
             }
         }
         None => quote! {
-            None => {
+            (LexerOutput::None, _) => {
                 return Err(Error {
                     active_rule: parent.tag,
                     expecting: EXPECTING,
@@ -367,6 +396,7 @@ fn generate_inactive_parser<'src>(
             }
         },
     };
+
     quote! {
         fn #parser_name<'a>(
             src: &'a str,
@@ -374,14 +404,16 @@ fn generate_inactive_parser<'src>(
             parent: &mut ParserTree<'a>,
         ) -> Result<usize, Error> {
             #expect
+            #lexer_output
             #lexer
             let mut cursor;
             loop {
                 cursor = offset;
                 match #lexer_name(src[offset..].as_bytes()) {
+                    #(#parser_rules)*
+                    #skip_action,
                     #none_action,
-                    #(#parser_rules,)*
-                    _ => unsafe { ::core::hint::unreachable_unchecked() },
+                    (LexerOutput::Tag(_), _) => unsafe { core::hint::unreachable_unchecked() },
                 }
             }
             Ok(cursor)
@@ -401,20 +433,18 @@ fn generate_active_parser<'src>(
     let parser_name = format_ident!("parse_{tag_name}");
     let expect = generate_expect(rules, lexer_database);
 
-    let lexer = fusion_lexer(rules, lexer_database)
-        .generate_dfa(format!("lexer_{tag_name}"), loop_optimizer);
+    let rule_map = create_rule_map(rules);
+    let lexer_output = generate_lexer_output(&rule_map);
+
+    let lexer = fusion_lexer(rules, lexer_database).generate_dfa(
+        format!("lexer_{tag_name}"),
+        loop_optimizer,
+        &rule_map,
+    );
     let lexer_name = format_ident!("lexer_{tag_name}");
 
-    let parser_rules = generate_children(&tag, true, parser, rules)
-        .into_iter()
-        .chain(lexer_database.skip.map(|_| {
-            generate_skip(
-                rules
-                    .iter()
-                    .filter(|x| !matches!(x, NormalForm::Empty(..)))
-                    .count(),
-            )
-        }));
+    let parser_rules = generate_children(&tag, true, parser, rules, &rule_map);
+    let skip_action = generate_skip();
     let none_action = match rules.iter().find_map(|x| match x {
         NormalForm::Empty(e) => Some(e),
         _ => None,
@@ -422,14 +452,14 @@ fn generate_active_parser<'src>(
         Some(e) => {
             let actions = generate_empty_actions(true, e);
             quote! {
-                None => {
+                (LexerOutput::None, _) => {
                     #(#actions)*
                     break;
                 }
             }
         }
         None => quote! {
-            None => {
+            (LexerOutput::None, _) => {
                 return Err(Error{
                     active_rule: tree.tag,
                     expecting: EXPECTING,
@@ -438,21 +468,24 @@ fn generate_active_parser<'src>(
             }
         },
     };
+
     quote! {
         fn #parser_name(
             src: &str,
             mut offset: usize,
         ) -> Result<ParserTree, Error> {
             #expect
+            #lexer_output
             #lexer
             let mut tree = ParserTree::new(Tag::#tag_ident, src);
             let mut cursor;
             loop {
                 cursor = offset;
                 match #lexer_name(src[offset..].as_bytes()) {
+                    #(#parser_rules)*
+                    #skip_action,
                     #none_action,
-                    #(#parser_rules,)*
-                    _ => unsafe { ::core::hint::unreachable_unchecked() },
+                    (LexerOutput::Tag(_), _) => unsafe { core::hint::unreachable_unchecked() },
                 }
             }
             tree.set_span(offset..cursor);

@@ -25,7 +25,7 @@ mod tests {
     use crate::lookahead::LoopOptimizer;
     use crate::normalization::normalize;
     use crate::regex_tree::*;
-    use crate::vector::Vector;
+    use crate::vector::{Vector, LexerOutput};
     use std::rc::Rc;
     use RegexTree::*;
 
@@ -73,9 +73,10 @@ mod tests {
         println!("{:?}", congruence);
         let vectorized = Vector::new([normalized]);
         let mut optimizer = LoopOptimizer::new();
+        let rule_map = vec![LexerOutput::Skip];
         println!(
             "{}",
-            vectorized.generate_dfa("polo".to_string(), &mut optimizer)
+            vectorized.generate_dfa("polo".to_string(), &mut optimizer, &rule_map)
         );
     }
 
@@ -95,9 +96,10 @@ mod tests {
         println!();
         let vectorized = Vector::new([normalized]);
         let mut optimizer = LoopOptimizer::new();
+        let rule_map = vec![LexerOutput::Skip];
         println!(
             "{}",
-            vectorized.generate_dfa("test".to_string(), &mut optimizer)
+            vectorized.generate_dfa("test".to_string(), &mut optimizer, &rule_map)
         );
     }
 }
