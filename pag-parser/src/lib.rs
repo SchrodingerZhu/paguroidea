@@ -269,6 +269,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
                     unused_variables,
                     unused_mut,
                     unreachable_patterns,
+                    unreachable_code,
                     clippy::identity_op,
                     clippy::single_match,
                 )]
