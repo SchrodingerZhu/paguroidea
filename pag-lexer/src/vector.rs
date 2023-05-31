@@ -113,9 +113,11 @@ impl Vector {
             .map(|(_, (state_id, _))| format_ident!("S{state_id}"));
         let actions = dfa.iter().map(|(state, (state_id, transitions))| {
             let label = format_ident!("S{state_id}");
+
             let accepting_state = state
                 .accepting_state()
                 .map(|rule_idx| quote! { longest_match = (#rule_idx, idx); });
+
             let transitions = transitions.iter().filter_map(|(interval, target)| {
                 if leaf_states.contains(target) {
                     let rule_idx = target.accepting_state().unwrap();
@@ -124,6 +126,7 @@ impl Vector {
                 let target_label = format_ident!("S{}", dfa.get(target).unwrap().0);
                 Some(quote! { #interval => state = State::#target_label, })
             });
+
             match optimizer.generate_lookahead(&dfa, state) {
                 Some(lookahead) => quote! {
                     State::#label => {
@@ -150,6 +153,7 @@ impl Vector {
                 },
             }
         });
+
         let accepting_actions = dfa.iter().filter_map(|(state, (state_id, _))| {
             state.accepting_state().map(|rule_idx| {
                 let label = format_ident!("S{state_id}");
@@ -158,6 +162,7 @@ impl Vector {
                 }
             })
         });
+
         quote! {
             fn #name(input: &[u8]) -> (usize, usize) {
                 enum State {
