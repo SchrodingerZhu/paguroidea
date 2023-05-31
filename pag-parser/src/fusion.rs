@@ -16,7 +16,7 @@ use quote::{format_ident, quote};
 use crate::{
     frontend::{lexical::LexerDatabase, syntax::Parser},
     nf::{Action, NormalForm, NormalForms, Tag},
-    utilities::{unreachable_branch, Symbol},
+    utilities::Symbol,
 };
 
 fn generate_tag_enum(parser: &Parser<'_, '_>) -> TokenStream {
@@ -209,78 +209,68 @@ fn generate_children<'src>(
         .iter()
         .filter(|x| !matches!(x, NormalForm::Empty(..)))
         .enumerate()
-        .map(|(index, subroutines)| {
+        .map(|(index, nf)| {
+            let NormalForm::Sequence { nonterminals, .. } = nf else { unreachable!() };
+
             let mut add_continue = false;
-            let actions = match subroutines {
-                NormalForm::Unexpanded(..) => unreachable_branch!("should be fully normalized"),
-                NormalForm::Empty(symbols) => generate_empty_actions(active, symbols),
-                NormalForm::Sequence { nonterminals, .. } => {
-                    let mut result = Vec::new();
-                    let mut subtree = false;
-                    let next_tree_indices = create_next_tree_indices(nonterminals);
-                    if let Some(sym) = next_tree_indices.get(&0) {
-                        let tag = format_ident!("{}", sym.name());
-                        result.push(quote! {
-                            let mut subtree = ParserTree::new(Tag::#tag, src);
-                        });
-                        subtree = true;
-                    }
-                    for i in 0..nonterminals.len() {
-                        match &nonterminals[i] {
-                            Action::Subroutine(routine) => {
-                                match (subtree, parser.is_active(routine)) {
-                                    (false, false) => {
-                                        if active {
-                                            result.push(generate_active_to_inactive_call(routine))
-                                        } else if current == routine && i == nonterminals.len() - 1
-                                        {
-                                            add_continue = true;
-                                        } else {
-                                            result.push(generate_inactive_to_inactive_call(routine))
-                                        }
-                                    }
-                                    (false, true) => {
-                                        if active {
-                                            result.push(generate_active_to_active_call(routine))
-                                        } else {
-                                            result.push(generate_inactive_to_active_call(routine))
-                                        }
-                                    }
-                                    (true, false) => {
-                                        result.push(generate_subtree_to_inactive_call(routine))
-                                    }
-                                    (true, true) => {
-                                        result.push(generate_subtree_to_active_call(routine))
-                                    }
-                                }
+            let mut actions = Vec::new();
+            let mut subtree = false;
+
+            let next_tree_indices = create_next_tree_indices(nonterminals);
+            if let Some(sym) = next_tree_indices.get(&0) {
+                let tag = format_ident!("{}", sym.name());
+                actions.push(quote! {
+                    let mut subtree = ParserTree::new(Tag::#tag, src);
+                });
+                subtree = true;
+            }
+
+            for i in 0..nonterminals.len() {
+                match &nonterminals[i] {
+                    Action::Subroutine(routine) => match (subtree, parser.is_active(routine)) {
+                        (false, false) => {
+                            if active {
+                                actions.push(generate_active_to_inactive_call(routine))
+                            } else if current == routine && i == nonterminals.len() - 1 {
+                                add_continue = true;
+                            } else {
+                                actions.push(generate_inactive_to_inactive_call(routine))
                             }
-                            Action::Summarize(..) => match next_tree_indices.get(&(i + 1)) {
-                                Some(sym) => {
-                                    let tag = format_ident!("{}", sym.name());
-                                    result.push(quote! {
-                                        subtree = subtree.next_level(Tag::#tag, offset..cursor);
-                                    });
-                                }
-                                None => {
-                                    subtree = false;
-                                    if active {
-                                        result.push(quote! {
-                                            subtree.set_span(offset..cursor);
-                                            tree.add_child(subtree);
-                                        });
-                                    } else {
-                                        result.push(quote! {
-                                            subtree.set_span(offset..cursor);
-                                            parent.add_child(subtree);
-                                        });
-                                    }
-                                }
-                            },
                         }
-                    }
-                    result
+                        (false, true) => {
+                            if active {
+                                actions.push(generate_active_to_active_call(routine))
+                            } else {
+                                actions.push(generate_inactive_to_active_call(routine))
+                            }
+                        }
+                        (true, false) => actions.push(generate_subtree_to_inactive_call(routine)),
+                        (true, true) => actions.push(generate_subtree_to_active_call(routine)),
+                    },
+                    Action::Summarize(..) => match next_tree_indices.get(&(i + 1)) {
+                        Some(sym) => {
+                            let tag = format_ident!("{}", sym.name());
+                            actions.push(quote! {
+                                subtree = subtree.next_level(Tag::#tag, offset..cursor);
+                            });
+                        }
+                        None => {
+                            subtree = false;
+                            if active {
+                                actions.push(quote! {
+                                    subtree.set_span(offset..cursor);
+                                    tree.add_child(subtree);
+                                });
+                            } else {
+                                actions.push(quote! {
+                                    subtree.set_span(offset..cursor);
+                                    parent.add_child(subtree);
+                                });
+                            }
+                        }
+                    },
                 }
-            };
+            }
             if add_continue {
                 quote! {
                     Some((#index, shift)) => {
@@ -316,26 +306,16 @@ fn generate_expect<'src>(
     rules: &[&NormalForm<'src>],
     lexer_database: &LexerDatabase<'src>,
 ) -> TokenStream {
-    let mut length1 = 0;
-    let mut length2 = 0;
     let elements: Vec<&str> = rules
         .iter()
         .filter_map(|x| match x {
-            NormalForm::Empty(..) => None,
-            NormalForm::Unexpanded(..) => None,
-            NormalForm::Sequence { terminal, .. } => {
-                length1 += 1;
-                Some(terminal.name())
-            }
+            NormalForm::Sequence { terminal, .. } => Some(terminal.name()),
+            _ => None,
         })
-        .chain(lexer_database.skip.map(|x| {
-            length2 += 1;
-            x.name()
-        }))
+        .chain(lexer_database.skip.map(|x| x.name()))
         .collect();
-    let length = (length1 + length2) as usize;
     quote! {
-        const EXPECTING: [&str; #length] = [#(#elements),*];
+        const EXPECTING: &[&str] = &[#(#elements),*];
     }
 }
 
@@ -346,12 +326,14 @@ fn generate_inactive_parser<'src>(
     rules: &[&NormalForm<'src>],
     loop_optimizer: &mut LoopOptimizer,
 ) -> TokenStream {
-    let tag_name = format!("{}", tag);
-    let parser_name = format_ident!("parse_{}", tag_name);
+    let tag_name = format!("{tag}");
+    let parser_name = format_ident!("parse_{tag_name}");
     let expect = generate_expect(rules, lexer_database);
+
     let lexer = fusion_lexer(rules, lexer_database)
-        .generate_dfa(format!("lexer_{}", tag_name), loop_optimizer);
-    let lexer_name = format_ident!("lexer_{}", tag_name);
+        .generate_dfa(format!("lexer_{tag_name}"), loop_optimizer);
+    let lexer_name = format_ident!("lexer_{tag_name}");
+
     let parser_rules = generate_children(&tag, false, parser, rules)
         .into_iter()
         .chain(lexer_database.skip.map(|_| {
@@ -379,7 +361,7 @@ fn generate_inactive_parser<'src>(
             None => {
                 return Err(Error {
                     active_rule: parent.tag,
-                    expecting: &EXPECTING,
+                    expecting: EXPECTING,
                     offset,
                 });
             }
@@ -414,13 +396,15 @@ fn generate_active_parser<'src>(
     rules: &[&NormalForm<'src>],
     loop_optimizer: &mut LoopOptimizer,
 ) -> TokenStream {
-    let tag_name = format!("{}", tag);
-    let tag_ident = format_ident!("{}", tag_name);
-    let parser_name = format_ident!("parse_{}", tag_name);
+    let tag_name = format!("{tag}");
+    let tag_ident = format_ident!("{tag_name}");
+    let parser_name = format_ident!("parse_{tag_name}");
     let expect = generate_expect(rules, lexer_database);
+
     let lexer = fusion_lexer(rules, lexer_database)
-        .generate_dfa(format!("lexer_{}", tag_name), loop_optimizer);
-    let lexer_name = format_ident!("lexer_{}", tag_name);
+        .generate_dfa(format!("lexer_{tag_name}"), loop_optimizer);
+    let lexer_name = format_ident!("lexer_{tag_name}");
+
     let parser_rules = generate_children(&tag, true, parser, rules)
         .into_iter()
         .chain(lexer_database.skip.map(|_| {
@@ -448,7 +432,7 @@ fn generate_active_parser<'src>(
             None => {
                 return Err(Error{
                     active_rule: tree.tag,
-                    expecting: &EXPECTING,
+                    expecting: EXPECTING,
                     offset,
                 });
             }

@@ -101,6 +101,7 @@ impl Vector {
             .collect();
         Self { regex_trees }
     }
+
     pub fn generate_dfa(&self, name: String, optimizer: &mut LoopOptimizer) -> TokenStream {
         let initial_state = self.normalize();
         let dfa = build_dfa(initial_state.clone());
