@@ -86,10 +86,7 @@ impl Vector {
         self.regex_trees
             .iter()
             .map(|x| approximate_congruence_class(x))
-            .fold(None, |acc, x| match acc {
-                None => Some(x),
-                Some(acc) => Some(meet(acc.as_slice(), x.as_slice())),
-            })
+            .reduce(|acc, x| meet(acc.as_slice(), x.as_slice()))
             .unwrap_or_default()
     }
 
@@ -127,29 +124,21 @@ impl Vector {
                 Some(quote! { #interval => state = State::#target_label, })
             });
 
-            match optimizer.generate_lookahead(&dfa, state) {
-                Some(lookahead) => quote! {
-                    State::#label => {
-                        #lookahead
-                        #accepting_state
-                        if let Some(c) = input.get(idx) {
-                            match c {
-                                #(#transitions)*
-                                _ => return longest_match,
-                            }
-                        } else {
-                            break;
-                        }
-                    },
-                },
-                None => quote! {
-                    State::#label => {
-                        #accepting_state
-                        match c {
-                            #(#transitions)*
-                            _ => return longest_match,
-                        }
-                    },
+            let lookahead = optimizer.generate_lookahead(&dfa, state);
+            let get_char = if lookahead.is_some() {
+                Some(quote! { let Some(c) = input.get(idx) else { break }; })
+            } else {
+                None
+            };
+            quote! {
+                State::#label => {
+                    #lookahead
+                    #accepting_state
+                    #get_char
+                    match c {
+                        #(#transitions)*
+                        _ => return longest_match,
+                    }
                 },
             }
         });
@@ -194,14 +183,14 @@ fn explore_dfa_node(dfa: &mut DfaTable, state: Vector, state_id: &mut usize) {
     dfa.insert(state.clone(), (*state_id, vec![]));
     *state_id += 1;
 
-    let intervals = state.approximate_congruence_class();
-    let mut transitions = Vec::with_capacity(intervals.len());
+    let classes = state.approximate_congruence_class();
+    let mut transitions = Vec::with_capacity(classes.len());
 
-    for interval in intervals {
-        let char = interval.representative();
+    for intervals in classes {
+        let char = intervals.representative();
         let target = state.derivative(char).normalize();
         if !target.is_rejecting_state() {
-            transitions.push((interval, target.clone()));
+            transitions.push((intervals, target.clone()));
             if !dfa.contains_key(&target) {
                 explore_dfa_node(dfa, target, state_id)
             }

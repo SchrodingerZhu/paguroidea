@@ -6,7 +6,8 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use crate::intervals::{Interval, Intervals};
+use crate::intervals;
+use crate::intervals::Intervals;
 use std::fmt::{Display, Formatter};
 use std::ops::RangeInclusive;
 use std::rc::Rc;
@@ -26,79 +27,60 @@ pub enum RegexTree {
     Complement(Rc<RegexTree>),
 }
 
+use RegexTree::*;
+
 impl Display for RegexTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            RegexTree::Top => {
-                write!(f, "⊤")
-            }
-            RegexTree::Bottom => {
-                write!(f, "⊥")
-            }
-            RegexTree::Set(x) => {
-                write!(f, "{}", x)
-            }
-            RegexTree::Epsilon => {
-                write!(f, "ε")
-            }
-            RegexTree::Concat(x, y) => {
-                write!(f, "({} ~ {})", x, y)
-            }
-            RegexTree::KleeneClosure(x) => {
-                write!(f, "{}*", x)
-            }
-            RegexTree::Union(x, y) => {
-                write!(f, "({} ∪ {})", x, y)
-            }
-            RegexTree::Intersection(x, y) => {
-                write!(f, "({} ∩ {})", x, y)
-            }
-            RegexTree::Complement(x) => {
-                write!(f, "¬({})", x)
-            }
+            Top => write!(f, "⊤"),
+            Bottom => write!(f, "⊥"),
+            Set(x) => write!(f, "{x}"),
+            Epsilon => write!(f, "ε"),
+            Concat(x, y) => write!(f, "({x} ~ {y})"),
+            KleeneClosure(x) => write!(f, "{x}*"),
+            Union(x, y) => write!(f, "({x} ∪ {y})"),
+            Intersection(x, y) => write!(f, "({x} ∩ {y})"),
+            Complement(x) => write!(f, "¬({x})"),
         }
     }
 }
 
 impl RegexTree {
     pub fn single(x: u8) -> Self {
-        unsafe { RegexTree::Set(Intervals::new([Interval(x, x)]).unwrap_unchecked()) }
+        Set(intervals!((x, x)))
     }
     pub fn range(x: RangeInclusive<u8>) -> Self {
         if x.is_empty() {
-            return RegexTree::Bottom;
+            return Bottom;
         }
-        match Intervals::new([Interval(*x.start(), *x.end())]) {
-            Some(set) => RegexTree::Set(set),
-            None => RegexTree::Bottom,
-        }
+        Set(intervals!((*x.start(), *x.end())))
     }
     pub fn mangle(&self) -> String {
         match self {
-            RegexTree::Top => "T".to_string(),
-            RegexTree::Bottom => "B".to_string(),
-            RegexTree::Set(x) => x.mangle(),
-            RegexTree::Epsilon => "E".to_string(),
-            RegexTree::Concat(x, y) => {
+            Top => "T".to_string(),
+            Bottom => "B".to_string(),
+            Set(x) => x.mangle(),
+            Epsilon => "E".to_string(),
+            Concat(x, y) => {
                 let x = x.mangle();
                 let y = y.mangle();
                 format!("C{}{}{}{}", x.len(), x, y.len(), y)
             }
-            RegexTree::KleeneClosure(x) => {
+            KleeneClosure(x) => {
                 let x = x.mangle();
                 format!("K{}{}", x.len(), x)
             }
-            RegexTree::Union(x, y) => {
+            Union(x, y) => {
                 let x = x.mangle();
                 let y = y.mangle();
                 format!("U{}{}{}{}", x.len(), x, y.len(), y)
             }
-            RegexTree::Intersection(x, y) => {
+            Intersection(x, y) => {
                 let x = x.mangle();
                 let y = y.mangle();
                 format!("I{}{}{}{}", x.len(), x, y.len(), y)
             }
-            RegexTree::Complement(x) => {
+            Complement(x) => {
                 let x = x.mangle();
                 format!("N{}{}", x.len(), x)
             }
@@ -106,15 +88,15 @@ impl RegexTree {
     }
     pub fn is_nullable(&self) -> bool {
         match self {
-            RegexTree::Top => false,
-            RegexTree::Bottom => false,
-            RegexTree::Set(_) => false,
-            RegexTree::Epsilon => true,
-            RegexTree::Concat(left, right) => left.is_nullable() && right.is_nullable(),
-            RegexTree::KleeneClosure(_) => true,
-            RegexTree::Union(left, right) => left.is_nullable() || right.is_nullable(),
-            RegexTree::Intersection(left, right) => left.is_nullable() && right.is_nullable(),
-            RegexTree::Complement(r) => !r.is_nullable(),
+            Top => false,
+            Bottom => false,
+            Set(_) => false,
+            Epsilon => true,
+            Concat(left, right) => left.is_nullable() && right.is_nullable(),
+            KleeneClosure(_) => true,
+            Union(left, right) => left.is_nullable() || right.is_nullable(),
+            Intersection(left, right) => left.is_nullable() && right.is_nullable(),
+            Complement(r) => !r.is_nullable(),
         }
     }
 }

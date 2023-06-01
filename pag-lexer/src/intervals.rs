@@ -21,10 +21,12 @@ macro_rules! interval {
 
 #[macro_export]
 macro_rules! intervals {
-    ($(($start:expr, $end:expr)),*) => {
-        $crate::intervals::Intervals::new(
-            vec![$($crate::interval!($start, $end)),*]
-        )
+    ($(($start:expr, $end:expr)),+) => {
+        unsafe {
+            $crate::intervals::Intervals::new(
+                vec![$($crate::interval!($start, $end)),+]
+            ).unwrap_unchecked()
+        }
     };
 }
 
@@ -67,11 +69,11 @@ impl Interval {
     // Merge two intervals.
     pub fn merge(&self, other: &Self) -> Self {
         debug_assert!(self.overlaps(other) || self.is_consecutive(other));
-        Self::new(self.0.min(other.0), self.1.max(other.1))
+        Self(self.0.min(other.0), self.1.max(other.1))
     }
     pub fn intersection(&self, other: &Self) -> Self {
         debug_assert!(self.overlaps(other));
-        Self::new(self.0.max(other.0), self.1.min(other.1))
+        Self(self.0.max(other.0), self.1.min(other.1))
     }
     pub fn contains(&self, other: &Self) -> bool {
         self.0 <= other.0 && other.1 <= self.1
@@ -79,19 +81,16 @@ impl Interval {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Intervals(SmallVec<[Interval; 2]>);
+pub struct Intervals(SmallVec<[Interval; 8]>);
 
 impl Intervals {
     pub fn new<I>(data: I) -> Option<Self>
     where
         I: IntoIterator<Item = Interval>,
     {
-        let mut data = data.into_iter();
-        let mut ret = Self(smallvec![data.next()?]);
-        for x in data {
-            ret = ret.union(&Self(smallvec![x]));
-        }
-        Some(ret)
+        data.into_iter()
+            .map(|x| Self(smallvec![x]))
+            .reduce(|acc, x| acc.union(&x))
     }
 
     pub fn is_single_byte(&self) -> bool {
@@ -111,26 +110,23 @@ impl Intervals {
     }
 
     pub fn is_full_set(&self) -> bool {
-        if self.0.len() == 1 &&
-            let Some(x) = self.0.first() {
-            x.0 == 0 && x.1 == u8::MAX
-        } else {
-            false
-        }
+        self.0.len() == 1 && self.0[0] == interval!(0, u8::MAX)
     }
 
     // it is okay is contains non-unicode code points; they will never be read anyway.
     pub fn complement(&self) -> Option<Self> {
-        let mut current = Some(0u8);
+        let mut current = Some(0);
         let mut result = SmallVec::new();
         for i in self.0.iter() {
-            if let Some(current) = current && current < i.0 {
-                result.push(Interval::new(current, i.0 - 1));
+            if let Some(c) = current {
+                if c < i.0 {
+                    result.push(interval!(c, i.0 - 1));
+                }
             }
             current = i.1.checked_add(1);
         }
         if let Some(current) = current {
-            result.push(Interval::new(current, u8::MAX));
+            result.push(interval!(current, u8::MAX));
         }
         if result.is_empty() {
             None
@@ -156,15 +152,15 @@ impl Intervals {
     pub fn intersection(&self, other: &Self) -> Option<Self> {
         let mut result: Option<Self> = None;
         for i in self.0.iter().copied() {
-            'inner: for j in other.0.iter().copied() {
+            for j in other.0.iter().copied() {
                 if i.overlaps(&j) {
-                    let temp = i.intersection(&j);
+                    let temp = Self(smallvec![i.intersection(&j)]);
                     result = match result {
-                        None => Self::new([temp]),
-                        Some(x) => Some(x.union(&Self::new([temp])?)),
+                        None => Some(temp),
+                        Some(x) => Some(x.union(&temp)),
                     };
                 } else if j.0 > i.1 {
-                    break 'inner;
+                    break;
                 }
             }
         }
@@ -173,35 +169,27 @@ impl Intervals {
 
     pub fn union(&self, other: &Self) -> Self {
         let mut result = SmallVec::new();
-        let mut i = self.0.iter().copied();
-        let mut j = other.0.iter().copied();
-        let mut x = i.next();
-        let mut y = j.next();
-        let mut current = None;
+        let mut i = self.0.iter().copied().peekable();
+        let mut j = other.0.iter().copied().peekable();
         loop {
-            if current.is_none() {
-                current = match (x, y) {
-                    (Some(x), Some(y)) if x.0 < y.0 => Some(x),
-                    (_, Some(y)) => Some(y),
-                    (Some(x), _) => Some(x),
+            let mut current = match (i.peek(), j.peek()) {
+                (Some(&x), Some(&y)) if x.0 < y.0 => i.next().unwrap(),
+                (_, Some(_)) => j.next().unwrap(),
+                (Some(_), _) => i.next().unwrap(),
+                _ => break,
+            };
+            loop {
+                match (i.peek(), j.peek()) {
+                    (Some(x), _) if current.overlaps(x) || current.is_consecutive(x) => {
+                        current = current.merge(&i.next().unwrap());
+                    }
+                    (_, Some(y)) if current.overlaps(y) || current.is_consecutive(y) => {
+                        current = current.merge(&j.next().unwrap());
+                    }
                     _ => break,
-                };
-            }
-            current = {
-                let current = unsafe { current.unwrap_unchecked() };
-                if let Some(ix) = x &&
-                    (current.overlaps(&ix) || current.is_consecutive(&ix)) {
-                    x = i.next();
-                    Some(current.merge(&ix))
-                } else if let Some(iy) = y &&
-                    (current.overlaps(&iy) || current.is_consecutive(&iy)) {
-                    y = j.next();
-                    Some(current.merge(&iy))
-                } else {
-                    result.push(current);
-                    None
                 }
             }
+            result.push(current);
         }
         Self(result)
     }
@@ -244,64 +232,52 @@ impl ToTokens for Intervals {
 mod test {
     #[test]
     fn basic_format() {
-        let interval = super::Interval::new(0x41, 0x5A);
+        let interval = interval!(0x41, 0x5A);
         assert_eq!(format!("{interval}"), "[A, Z]");
-        let interval = super::Interval::new(0x41, 0x7A);
+        let interval = interval!(0x41, 0x7A);
         assert_eq!(format!("{interval}"), "[A, z]");
-        let interval = super::Interval::new(0x41, 0x7B);
+        let interval = interval!(0x41, 0x7B);
         assert_eq!(format!("{interval}"), "[A, {]");
         // whitespace
-        let interval = super::Interval::new(b'\t', b'\t');
+        let interval = interval!(b'\t', b'\t');
         assert_eq!(format!("{interval}"), r"\t");
     }
 
     #[test]
     fn intervals_format() {
-        let intervals = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
+        let intervals = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9'));
         assert_eq!(format!("{intervals}"), "([0, 9] | [A, Z] | [a, z])");
     }
 
     #[test]
     fn union() {
-        let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
+        let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9'));
         assert_eq!(x.union(&x), x);
-        let y = intervals!(('!', '7')).unwrap();
-        assert_eq!(
-            intervals!(('!', '9'), ('A', 'Z'), ('a', 'z')).unwrap(),
-            x.union(&y)
-        );
-        let z = intervals!(('!', '7'), ('C', 'e')).unwrap();
-        assert_eq!(intervals!(('!', '9'), ('A', 'z')).unwrap(), x.union(&z));
+        let y = intervals!(('!', '7'));
+        assert_eq!(intervals!(('!', '9'), ('A', 'Z'), ('a', 'z')), x.union(&y));
+        let z = intervals!(('!', '7'), ('C', 'e'));
+        assert_eq!(intervals!(('!', '9'), ('A', 'z')), x.union(&z));
     }
 
     #[test]
     fn complement() {
-        let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
-        let y = intervals!((0, 47), (58, 64), (91, 96), (123, u8::MAX)).unwrap();
+        let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9'));
+        let y = intervals!((0, 47), (58, 64), (91, 96), (123, u8::MAX));
         assert_eq!(x.complement(), Some(y));
-        let z = intervals!(('\0', '7')).unwrap();
-        assert_eq!(z.complement().unwrap(), intervals!(('8', u8::MAX)).unwrap());
+        let z = intervals!(('\0', '7'));
+        assert_eq!(z.complement().unwrap(), intervals!(('8', u8::MAX)));
         assert_eq!(x.complement().unwrap().complement().unwrap(), x);
-        assert_eq!(
-            x.union(&x.complement().unwrap()),
-            intervals!((0, u8::MAX)).unwrap()
-        );
+        assert_eq!(x.union(&x.complement().unwrap()), intervals!((0, u8::MAX)));
     }
 
     #[test]
     fn intersection() {
-        let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9')).unwrap();
-        let z = intervals!(('\0', '7')).unwrap();
-        assert_eq!(x.intersection(&z), Some(intervals!(('0', '7')).unwrap()));
+        let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9'));
+        let z = intervals!(('\0', '7'));
+        assert_eq!(x.intersection(&z), Some(intervals!(('0', '7'))));
         assert!(x.intersection(&x.complement().unwrap()).is_none());
-        assert_eq!(
-            x.intersection(&intervals!((0, u8::MAX)).unwrap()).unwrap(),
-            x
-        );
-        let a = intervals!(('E', 'c')).unwrap();
-        assert_eq!(
-            x.intersection(&a),
-            Some(intervals!(('E', 'Z'), ('a', 'c')).unwrap())
-        );
+        assert_eq!(x.intersection(&intervals!((0, u8::MAX))).unwrap(), x);
+        let a = intervals!(('E', 'c'));
+        assert_eq!(x.intersection(&a), Some(intervals!(('E', 'Z'), ('a', 'c'))));
     }
 }

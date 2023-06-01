@@ -26,4 +26,4 @@ readme = "README.md"
 [dependencies]
 quote = "1.0.26"
 proc-macro2 = "1.0"
-smallvec = "1"
+smallvec = { version = "1", features = ["union"] }
