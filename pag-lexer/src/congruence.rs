@@ -20,20 +20,15 @@ pub fn meet(a: &[Intervals], b: &[Intervals]) -> Vec<Intervals> {
         }
     }
     result.sort();
-    result.dedup_by(|x, y| x == y);
+    result.dedup();
     result
 }
 
 pub fn approximate_congruence_class(tree: &RegexTree) -> Vec<Intervals> {
+    use RegexTree::*;
     match tree {
-        RegexTree::Epsilon => vec![unsafe { intervals!((0, u8::MAX)).unwrap_unchecked() }],
-        RegexTree::Top => {
-            vec![unsafe { intervals!((0, u8::MAX)).unwrap_unchecked() }]
-        }
-        RegexTree::Bottom => {
-            vec![unsafe { intervals!((0, u8::MAX)).unwrap_unchecked() }]
-        }
-        RegexTree::Set(x) => {
+        Epsilon | Top | Bottom => vec![intervals!((0, u8::MAX))],
+        Set(x) => {
             let x = x.clone();
             match x.complement() {
                 Some(y) => {
@@ -46,7 +41,7 @@ pub fn approximate_congruence_class(tree: &RegexTree) -> Vec<Intervals> {
                 None => vec![x],
             }
         }
-        RegexTree::Concat(r, s) => {
+        Concat(r, s) => {
             if !r.is_nullable() {
                 approximate_congruence_class(r)
             } else {
@@ -56,15 +51,10 @@ pub fn approximate_congruence_class(tree: &RegexTree) -> Vec<Intervals> {
                 )
             }
         }
-        RegexTree::KleeneClosure(r) => approximate_congruence_class(r),
-        RegexTree::Union(r, s) => meet(
+        KleeneClosure(r) | Complement(r) => approximate_congruence_class(r),
+        Union(r, s) | Intersection(r, s) => meet(
             &approximate_congruence_class(r),
             &approximate_congruence_class(s),
         ),
-        RegexTree::Intersection(r, s) => meet(
-            &approximate_congruence_class(r),
-            &approximate_congruence_class(s),
-        ),
-        RegexTree::Complement(r) => approximate_congruence_class(r),
     }
 }

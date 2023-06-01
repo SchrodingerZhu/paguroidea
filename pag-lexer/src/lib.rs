@@ -6,10 +6,6 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-#![feature(let_chains)]
-#![feature(array_chunks)]
-#![feature(portable_simd)]
-
 pub mod congruence;
 pub mod derivative;
 pub mod intervals;
