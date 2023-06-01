@@ -155,7 +155,7 @@ twitter-json/pest-json  time:   [5.2977 ms 5.3055 ms 5.3148 ms]
 </details>
 
 ## Diagnostic Grammar Error Check
-We provide diagnostic information "type errors" in your grammar definitions. Here are some examples:
+We provide diagnostic information for "type errors" in your grammar definitions. Here are some examples:
 
 **Left-recursion**
 ```
