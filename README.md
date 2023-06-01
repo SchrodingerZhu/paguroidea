@@ -114,3 +114,87 @@ should be annotated with
 #![feature(array_chunks)]
 ```
 </details>
+
+## Performance
+
+We are continuously working on improvement the quality of our generated parser. For now, on workloads of CSV/JSON,
+the performance is close to or even better than those specialized parsers.
+```
+=== Random Generated CSV ===
+throughput/pag          time:   [635.88 µs 637.64 µs 639.46 µs]                           
+                        thrpt:  [622.63 MiB/s 624.41 MiB/s 626.14 MiB/s]
+throughput/csv          time:   [528.36 µs 541.72 µs 559.54 µs]                           
+                        thrpt:  [711.56 MiB/s 734.97 MiB/s 753.55 MiB/s]
+throughput/pest         time:   [3.7278 ms 3.7364 ms 3.7460 ms]                             
+                        thrpt:  [106.29 MiB/s 106.56 MiB/s 106.80 MiB/s]
+=== Random Generated JSON ===
+random-json/pag-json    time:   [22.634 ns 22.650 ns 22.666 ns]                                  
+                        thrpt:  [84.149 MiB/s 84.209 MiB/s 84.271 MiB/s]
+random-json/serde-json  time:   [12.493 ns 12.587 ns 12.694 ns]                                    
+                        thrpt:  [150.26 MiB/s 151.54 MiB/s 152.67 MiB/s]
+random-json/pest-json   time:   [177.38 ns 178.17 ns 179.17 ns]                                  
+                        thrpt:  [10.645 MiB/s 10.705 MiB/s 10.753 MiB/s]
+=== twitter.json ===
+twitter-json/pag-json   time:   [1.0923 ms 1.0941 ms 1.0961 ms]                                   
+                        thrpt:  [667.24 MiB/s 668.46 MiB/s 669.59 MiB/s]
+twitter-json/serde-json time:   [1.2281 ms 1.2295 ms 1.2312 ms]                                     
+                        thrpt:  [594.02 MiB/s 594.88 MiB/s 595.54 MiB/s]
+twitter-json/pest-json  time:   [5.2977 ms 5.3055 ms 5.3148 ms]                                    
+                        thrpt:  [137.61 MiB/s 137.85 MiB/s 138.06 MiB/s]
+```
+
+<details>
+<summary>Why is it fast and how can I make my grammar faster</summary>
+
+- Thanks to the work of the Flap parser, we can fuse lexer and parser together such that lexers can be localized.
+- We apply tail-call optimizations explicitly. To utilize this feature, default more grammar rules using `*`, `+` or
+  mark them rule as silent rules if possible.
+- We apply batched lookahead strategy using SIMD or lookup tables. This optimization applies when you repeat simple character sets
+  (for instance, `(BLANK | '\t' | '\n' | '\r')+`). 
+- We are working on to inline/reduce more operations involving state transitions and lexer-parse communications.
+</details>
+
+## Diagnostic Grammar Error Check
+We provide diagnostic information "type errors" in your grammar definitions. Here are some examples:
+
+**Left-recursion**
+```
+  Error: Unguarded fixpoint
+      ╭─[json.pag:39:5]
+      │
+   39 │     active fixpoint json = json ~ value;
+      │     ─────────────────┬─────────────────  
+      │                      ╰─────────────────── fixpoint rule json is not guarded -- your grammar is left-recursive
+  ────╯
+```
+**Sequence Ambiguity**
+
+> **Explanation**: there may be ambiguity when separating a sequence into two part according to the grammar definition
+
+```
+  Error: When type checking a sequence of rules, the following rules are ambiguous
+      ╭─[json.pag:39:28]
+      │
+   39 │     active fixpoint test = NUMBER+ ~ NUMBER+;
+      │                            ───┬───   ───┬───  
+      │                               ╰─────────────── type info for left-hand side: nullable: false, first set: {NUMBER}, follow set: {NUMBER}
+      │                                         │     
+      │                                         ╰───── type info for right-hand side: nullable: false, first set: {NUMBER}, follow set: {NUMBER}
+  ────╯
+```
+
+**Alternation Ambiguity**
+> **Explanation**: there may be ambiguity when select a match in an alternation of two rules.
+```
+  Error: When type checking an alternation of rules, the following rules are ambiguous
+      ╭─[json.pag:39:28]
+      │
+   39 │     active fixpoint test = NUMBER+ | NUMBER;
+      │                            ───┬───   ───┬──  
+      │                               ╰────────────── type info for left-hand side: nullable false, first set: NUMBER, follow set: NUMBER
+      │                                         │    
+      │                                         ╰──── type info for right-hand side: nullable false, first set: NUMBER, follow set: 
+  ────╯
+```
+
+There are other diagnostic information for undefined references, nullable tokens in lexer, character format error, etc. 
