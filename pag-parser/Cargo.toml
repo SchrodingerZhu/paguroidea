@@ -28,7 +28,7 @@ pest_derive = "2.5.7"
 smallvec = "1"
 thiserror = "1"
 lazy_static = "1"
-pag-lexer = { path = "../pag-lexer"}
+pag-lexer = { version = "0.1.0-alpha.1", path = "../pag-lexer"}
 typed-arena = "2.0.2"
 quote = "1.0.26"
 proc-macro2 = "1.0"
