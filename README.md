@@ -61,6 +61,9 @@ parser sexpr {
 }
 ```
 
+<details>
+<summary>How to write a grammar file</summary>
+
 You can put up your own one with the following rules:
 
 - A grammar file must contain both lexer and parser parts.
@@ -89,9 +92,13 @@ You can put up your own one with the following rules:
 - Most combinators in the lexer part are also supported in the parser part except for complement.
 
 For more complicated examples, one can see [json.pag](benches/json/json.pag).
+</details>
+
+<details>
+<summary>How to compile and use a grammar file</summary>
 
 To compile your grammar file, the recommended way is to add `pag-compiler` as your build dependency. With `pag-compiler`, 
-the parser file can be easily generated as the following:
+the parser file can be easily generated in a build script as the following:
 ```rust
 fn main() {
     pag_compiler::compile("csv.pag", "src/parser.rs");
@@ -106,4 +113,4 @@ should be annotated with
 #![feature(core_intrinsics)]
 #![feature(array_chunks)]
 ```
-
+</details>
