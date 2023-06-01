@@ -143,13 +143,20 @@ impl Vector {
             }
         });
 
-        let accepting_actions = dfa.iter().filter_map(|(state, (state_id, _))| {
-            state.accepting_state().map(|rule_idx| {
-                let label = format_ident!("S{state_id}");
-                quote! {
-                    State::#label => longest_match = (#rule_idx, idx),
-                }
-            })
+        let mut accepting_map = HashMap::<usize, Vec<usize>>::new(); // maybe use Vec<Vec<usize>>?
+        for (state, (state_id, _)) in &dfa {
+            let Some(rule_idx) = state.accepting_state() else { continue };
+            accepting_map
+                .entry(rule_idx)
+                .and_modify(|v| v.push(*state_id))
+                .or_insert(vec![*state_id]);
+        }
+        let accepting_actions = accepting_map.into_iter().map(|(rule_idx, state_ids)| {
+            let enums = state_ids.into_iter().map(|id| {
+                let label = format_ident!("S{id}");
+                quote! { State::#label }
+            });
+            quote! { #(#enums)|* => longest_match = (#rule_idx, idx), }
         });
 
         quote! {
