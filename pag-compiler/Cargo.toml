@@ -23,6 +23,6 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pag-parser = { path = "../pag-parser" }
+pag-parser = { version = "0.1.0-alpha.1", path = "../pag-parser" }
 syn = { version = "2.0", features = ["full"] }
 prettyplease = { version = "0.2", features = ["verbatim"] }
