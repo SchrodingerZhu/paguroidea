@@ -10,6 +10,7 @@
 name = "pag-parser"
 version = "0.1.0-alpha.1"
 edition = "2021"
+license = "MIT/Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
