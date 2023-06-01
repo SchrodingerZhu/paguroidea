@@ -73,16 +73,16 @@ You can put up your own one with the following rules:
   parsing.
 - All rules defined in lexer part must be full uppercase.
 - You can use
-  - empty ('_')
-  - characters ('a', '\x12', '😊')
-  - strings ("你好", "Rust")
-  - ranges ('A' .. 'Z')
-  - sequences ('a' ~ 'b'),
-  - alternatives ('a' | 'b')
-  - optionals ('a'?)
-  - zero-or-mores ('a'\*)
-  - one-or-mores ('a'+)
-  - complements (!'a') 
+  - empty (`'_'`)
+  - characters (`'a', '\x12', '😊'`)
+  - strings (`"你好", "Rust"`)
+  - ranges (`'A' .. 'Z'`)
+  - sequences (`'a' ~ 'b'`),
+  - alternatives (`'a' | 'b'`)
+  - optionals (`'a'?`)
+  - zero-or-mores (`'a'\*`)
+  - one-or-mores (`'a'+`)
+  - complements (`!'a'`) 
   
   to make up your regular expressions. Notice that complement is not negative lookahead in the common sense. Rather,
   it represents characters or languages complement to negated one. It is required that all active tokens cannot be nullable.
