@@ -6,7 +6,7 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use crate::intervals::Intervals;
+use crate::intervals::{byte_char, Intervals};
 use crate::vector::{DfaTable, Vector};
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -33,19 +33,22 @@ fn generate_lut_routine(index: usize) -> TokenStream {
 }
 
 fn byte_simd(byte: u8) -> TokenStream {
+    let byte_lit = byte_char(byte);
     quote! {
         {
-            let needles = u8x16::splat(#byte);
+            let needles = u8x16::splat(#byte_lit);
             data.simd_eq(needles)
         }
     }
 }
 
 fn range_simd(min: u8, max: u8) -> TokenStream {
+    let min_lit = byte_char(min);
+    let max_lit = byte_char(max);
     quote! {
         {
-            let needles_min = u8x16::splat(#min);
-            let needles_max = u8x16::splat(#max);
+            let needles_min = u8x16::splat(#min_lit);
+            let needles_max = u8x16::splat(#max_lit);
             let cmp_min = data.simd_ge(needles_min);
             let cmp_max = data.simd_le(needles_max);
             cmp_min & cmp_max

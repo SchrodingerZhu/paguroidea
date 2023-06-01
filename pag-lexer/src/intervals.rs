@@ -6,7 +6,7 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use proc_macro2::TokenStream;
+use proc_macro2::{Literal, TokenStream};
 use quote::{quote, ToTokens};
 use smallvec::{smallvec, SmallVec};
 use std::ascii::escape_default;
@@ -220,17 +220,16 @@ impl Display for Intervals {
     }
 }
 
+pub fn byte_char(c: u8) -> Literal {
+    format!("b'{}'", escape_default(c)).parse().unwrap()
+}
+
 impl ToTokens for Intervals {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         debug_assert!(!self.0.is_empty());
         let iter = self.0.iter().map(|Interval(start, end)| {
-            let to_byte_char = |c: u8| {
-                format!("b'{}'", escape_default(c))
-                    .parse::<proc_macro2::Literal>()
-                    .unwrap()
-            };
-            let start_lit = to_byte_char(*start);
-            let end_lit = to_byte_char(*end);
+            let start_lit = byte_char(*start);
+            let end_lit = byte_char(*end);
             if start == end {
                 quote! { #start_lit }
             } else {
