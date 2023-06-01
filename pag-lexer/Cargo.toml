@@ -11,6 +11,15 @@ name = "pag-lexer"
 version = "0.1.0-alpha.1"
 edition = "2021"
 license = "MIT/Apache-2.0"
+exclude = [".github/workflows/*"]
+keywords = ["lexer", "cfg", "grammar", "regex"]
+categories = ["parsing"]
+repository = "https://github.com/SchrodingerZhu/paguroidea"
+description = "Parser-lexer fusion generator (derivative lexer)"
+rust-version = "1.71.0"
+authors = ["Schrodinger ZHU Yifan <i@zhuyi.fan>", "QuarticCat <QuarticCat@pm.me>"]
+documentation = "https://docs.rs/pag-lexer/"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
