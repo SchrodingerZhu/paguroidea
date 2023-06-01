@@ -7,6 +7,17 @@
 <br>
 Paguroidea
 </h1>
+
+![GITHUB-BADGE](https://github.com/SchrodingerZhu/paguroidea/workflows/Build/badge.svg)
+
+| Crate          | Status                                                         |
+|----------------|----------------------------------------------------------------|
+| `pag-lexer`    | ![crates.io](https://img.shields.io/crates/v/pag-lexer.svg)    |
+| `pag-parser`   | ![crates.io](https://img.shields.io/crates/v/pag-parser.svg)   |
+| `pag-compiler` | ![crates.io](https://img.shields.io/crates/v/pag-compiler.svg) |
+
+
+
 A reimplementation of the Flap parser in Rust (with our own modifications applied)!
 
 ## 🚧 Under Construction 🚧
