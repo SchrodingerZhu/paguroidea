@@ -5,6 +5,7 @@
 // license <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
+
 use crate::intervals::Intervals;
 use crate::vector::{DfaTable, Vector};
 use proc_macro2::TokenStream;
@@ -53,7 +54,7 @@ fn range_simd(min: u8, max: u8) -> TokenStream {
 }
 
 fn generate_positive_lookaheads(edges: &[LookAheadEdge]) -> TokenStream {
-    let offsets = edges
+    let max_offset = edges
         .iter()
         .map(|x| match x {
             LookAheadEdge::Byte(x) => byte_simd(*x),
@@ -75,10 +76,7 @@ fn generate_positive_lookaheads(edges: &[LookAheadEdge]) -> TokenStream {
                 }
             }
         })
-        .collect::<Vec<_>>();
-    let max_offset = offsets[1..]
-        .iter()
-        .fold(offsets[0].clone(), |acc, x| quote!(#acc.max(#x)));
+        .reduce(|acc, x| quote! { #acc.max(#x) });
     quote! {
         for i in input[idx..].array_chunks::<16>() {
             use core::simd::*;
@@ -93,12 +91,13 @@ fn generate_positive_lookaheads(edges: &[LookAheadEdge]) -> TokenStream {
 }
 
 fn generate_negative_lookaheads(edges: &[LookAheadEdge]) -> TokenStream {
-    let offsets = edges
+    let min_offset = edges
         .iter()
         .map(|x| match x {
             LookAheadEdge::Byte(x) => byte_simd(*x),
             LookAheadEdge::Range(min, max) => range_simd(*min, *max),
         })
+        .reduce(|acc, x| quote! { #acc.bitor(#x) })
         .map(|x| {
             if cfg!(target_arch = "aarch64") {
                 quote! {
@@ -114,14 +113,11 @@ fn generate_negative_lookaheads(edges: &[LookAheadEdge]) -> TokenStream {
                     }
                 }
             }
-        })
-        .collect::<Vec<_>>();
-    let min_offset = offsets[1..]
-        .iter()
-        .fold(offsets[0].clone(), |acc, x| quote!(#acc.min(#x)));
+        });
     quote! {
         for i in input[idx..].array_chunks::<16>() {
             use core::simd::*;
+            use std::ops::BitOr;
             let data = u8x16::from_slice(i);
             let min_offset = #min_offset;
             idx += min_offset as usize;
