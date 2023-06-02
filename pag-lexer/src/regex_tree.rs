@@ -46,6 +46,29 @@ impl Display for RegexTree {
 }
 
 impl RegexTree {
+    pub fn is_byte_sequence(&self) -> bool {
+        match self {
+            Set(intervals) => intervals.is_single_byte(),
+            Concat(a, b) => a.is_byte_sequence() && b.is_byte_sequence(),
+            Epsilon => true,
+            _ => false,
+        }
+    }
+    pub fn as_byte_sequence(&self) -> Option<Vec<u8>> {
+        match self {
+            Set(intervals) if intervals.is_single_byte() => {
+                Some([intervals.representative()].into())
+            }
+            Concat(a, b) => {
+                let mut a = a.as_byte_sequence()?;
+                let b = b.as_byte_sequence()?;
+                a.extend(b);
+                Some(a)
+            }
+            Epsilon => Some(Vec::new()),
+            _ => None,
+        }
+    }
     pub fn single(x: u8) -> Self {
         Set(intervals!((x, x)))
     }
