@@ -13,7 +13,7 @@ use crate::normalization::normalize;
 use crate::regex_tree::RegexTree;
 
 use crate::lookahead::LoopOptimizer;
-use proc_macro2::TokenStream;
+use proc_macro2::{Literal, TokenStream};
 use quote::{format_ident, quote};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
@@ -44,6 +44,31 @@ impl Vector {
     {
         let regex_trees = iter.into_iter().collect();
         Self { regex_trees }
+    }
+
+    pub fn is_byte_sequence(&self) -> bool {
+        let mut iter = self
+            .regex_trees
+            .iter()
+            .filter(|x| !matches!(x.as_ref(), RegexTree::Bottom))
+            .map(|x| x.is_byte_sequence());
+        matches!(iter.next(), Some(true)) && iter.next().is_none()
+    }
+
+    pub fn as_byte_sequence(&self) -> Option<(usize, Vec<u8>)> {
+        let failing = self
+            .regex_trees
+            .iter()
+            .filter(|x| matches!(x.as_ref(), RegexTree::Bottom))
+            .count();
+        if failing == self.regex_trees.len() - 1 {
+            self.regex_trees
+                .iter()
+                .enumerate()
+                .find_map(|(idx, x)| x.as_byte_sequence().map(|x| (idx, x)))
+        } else {
+            None
+        }
     }
 
     pub fn mangle(&self) -> String {
@@ -105,23 +130,34 @@ impl Vector {
         let leaf_states = extract_leaf_states(&mut dfa);
         let initial_label = format_ident!("S{}", dfa.get(&initial_state).unwrap().0);
         let name = format_ident!("{name}");
-        let labels = dfa
-            .iter()
-            .map(|(_, (state_id, _))| format_ident!("S{state_id}"));
         let actions = dfa.iter().map(|(state, (state_id, transitions))| {
             let label = format_ident!("S{state_id}");
+
+            if let Some((rule_idx, seq)) = state.as_byte_sequence() {
+                let literal = Literal::byte_string(&seq);
+                let length = seq.len();
+                return quote! {
+                    State::#label => {
+                        return if input[idx..].starts_with(#literal) {
+                            (#rule_idx, idx + #length)
+                        } else {
+                            longest_match
+                        };
+                    },
+                };
+            }
 
             let accepting_state = state
                 .accepting_state()
                 .map(|rule_idx| quote! { longest_match = (#rule_idx, idx); });
 
-            let transitions = transitions.iter().filter_map(|(interval, target)| {
+            let transitions = transitions.iter().map(|(interval, target)| {
                 if leaf_states.contains(target) {
                     let rule_idx = target.accepting_state().unwrap();
-                    return Some(quote! { #interval => return (#rule_idx, idx + 1), });
+                    return quote! { #interval => return (#rule_idx, idx + 1), };
                 }
                 let target_label = format_ident!("S{}", dfa.get(target).unwrap().0);
-                Some(quote! { #interval => state = State::#target_label, })
+                quote! { #interval => state = State::#target_label, }
             });
 
             let lookahead = optimizer.generate_lookahead(&dfa, state);
@@ -143,9 +179,13 @@ impl Vector {
             }
         });
 
+        let labels = dfa
+            .iter()
+            .map(|(_, (state_id, _))| format_ident!("S{state_id}"));
+
         let mut accepting_map = HashMap::<usize, Vec<usize>>::new(); // maybe use Vec<Vec<usize>>?
         for (state, (state_id, _)) in &dfa {
-            let Some(rule_idx) = state.accepting_state() else { continue };
+            let Some(rule_idx) = state.accepting_state() else { continue; };
             accepting_map
                 .entry(rule_idx)
                 .and_modify(|v| v.push(*state_id))
@@ -190,6 +230,10 @@ fn explore_dfa_node(dfa: &mut DfaTable, state: Vector, state_id: &mut usize) {
     dfa.insert(state.clone(), (*state_id, vec![]));
     *state_id += 1;
 
+    if state.is_byte_sequence() {
+        return;
+    }
+
     let classes = state.approximate_congruence_class();
     let mut transitions = Vec::with_capacity(classes.len());
 
@@ -219,7 +263,7 @@ fn extract_leaf_states(dfa: &mut DfaTable) -> HashSet<Vector> {
     let leaf_states = dfa
         .iter()
         .filter_map(|(state, (_, transitions))| {
-            if transitions.len() == 0 && state.accepting_state().is_some() {
+            if transitions.is_empty() && state.accepting_state().is_some() {
                 Some(state.clone())
             } else {
                 None
