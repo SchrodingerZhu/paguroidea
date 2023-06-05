@@ -1,0 +1,86 @@
+use crate::Token;
+use crate::Pvalue;
+
+grammar<'a>;
+
+extern {
+  type Location = usize;
+  enum Token<'a> {
+    "true"  => Token::True,
+    "false" => Token::False,
+    "null"  => Token::Null,
+    ","	    => Token::Comma,
+    ":"	    => Token::Colon,
+    "{"	    => Token::LBrace,
+    "}"	    => Token::RBrace,
+    "["	    => Token::LBrack,
+    "]"	    => Token::RBrack,
+    number  => Token::Number(<&'a str>),
+    string  => Token::String(<&'a str>),
+    //missing_quote => MissingEndQuote(<&'a str>),
+  }
+}
+
+// Macro of CommaList
+// Comma<T>: Vec<T> = { 
+//   <mut v:(<T> ",")*> <e:T?> => match e { 
+//       None => v,
+//       Some(e) => {
+//           v.push(e);
+//           v
+//       }
+//   }
+// };
+
+Comma<T>: Vec<T> = {
+  <es: Comma<T>> "," <e: T> => {let mut es = es; es.push(e); es },
+  <e: T> => vec![e],
+}
+
+
+pub Json = value;
+
+// value: Vec<Pvalue<'a>> = {
+//   "[" <a: Comma<fnumber>> "]" => a,
+//   "[" "]" => vec![],
+// }
+
+// fnumber: Value<'a> = {
+//   <n: number> => {
+//     let result = lexical::parse(n.as_bytes()).unwrap();
+//     Value::Number(result)
+//   }
+// }
+
+value: Pvalue<'a> = {
+  "true" => Pvalue::<'a>::Bool(true),
+  "false" => Pvalue::<'a>::Bool(false),
+  "null" => Pvalue::<'a>::Null,
+  <l:@L> <s: string> <r:@R> => {
+    let without_quotes = &s[1..r - (l + 1)];
+    Pvalue::<'a>::String(without_quotes)
+  },
+  <l:@L> <n: number> <r:@R> => {
+    let res: f64 = n.parse().unwrap();
+    Pvalue::<'a>::Number(res)
+  },
+  <a: array> => Pvalue::<'a>::Array(a),
+  <o: object> => Pvalue::<'a>::Object(o),
+}
+
+
+
+attribute: (&'a str, Pvalue<'a>) = {
+    <s:string> ":" <v:value> => (s,v),
+}
+
+object: Vec<(&'a str, Pvalue<'a>)> = {
+  "{" <attr: Comma<attribute>> "}" => attr,
+  "{" "}" => vec![],
+}
+
+
+array: Vec<Pvalue<'a>> = {
+  "[" <a: Comma<value>> "]" => a,
+  "[" "]" => vec![],
+  }
