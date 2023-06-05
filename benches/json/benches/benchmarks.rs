@@ -51,9 +51,9 @@ pub enum Token<'a> {
 
 impl<'a> Token<'a> {
     pub fn to_triple(
-        (t, r): (Result<Token<'a>,()>, Range<usize>),
+        (t, r): (Result<Token<'a>, ()>, Range<usize>),
     ) -> Result<(usize, Token, usize), &'static str> {
-            Ok((r.start, t.unwrap(), r.end))
+        Ok((r.start, t.unwrap(), r.end))
     }
 }
 
@@ -62,8 +62,6 @@ impl<'a> fmt::Display for Token<'a> {
         write!(f, "{:#?}", self)
     }
 }
-
-
 
 #[macro_use]
 extern crate lalrpop_util;
@@ -124,7 +122,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| {
             JSONParser::parse(Rule::json, data).unwrap();
         })
-    });    
+    });
     g.bench_function("lalrpop-json", |b| {
         b.iter(|| {
             let lexer = Token::lexer(data).spanned().map(Token::to_triple);

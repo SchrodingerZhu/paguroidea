@@ -1,7 +1,6 @@
 extern crate lexical;
 use std::fmt;
 
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pvalue<'a> {
     Number(f64),
