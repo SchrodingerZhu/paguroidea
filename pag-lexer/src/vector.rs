@@ -275,3 +275,83 @@ fn extract_leaf_states(dfa: &mut DfaTable) -> HashSet<Vector> {
     }
     leaf_states
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DfaState {
+    state: Vector,
+    last_success: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DfaInfo {
+    state_id: usize,
+    transitions: Vec<(Intervals, DfaState)>,
+}
+
+pub type DfaTable2 = HashMap<DfaState, DfaInfo>;
+
+fn explore_dfa_node2(dfa: &mut DfaTable2, state: DfaState, state_id: &mut usize) {
+    dfa.insert(
+        state.clone(),
+        DfaInfo {
+            state_id: *state_id,
+            transitions: vec![],
+        },
+    );
+    *state_id += 1;
+
+    if state.state.is_byte_sequence() {
+        return;
+    }
+
+    let classes = state.state.approximate_congruence_class();
+    let mut transitions = Vec::with_capacity(classes.len());
+
+    for intervals in classes {
+        let char = intervals.representative();
+        let target = state.state.derivative(char).normalize();
+        let last_success = target.accepting_state().or(state.last_success);
+        let next = DfaState {
+            state: target,
+            last_success,
+        };
+        if !next.state.is_rejecting_state() {
+            transitions.push((intervals, next.clone()));
+            if !dfa.contains_key(&next) {
+                explore_dfa_node2(dfa, next, state_id)
+            }
+        }
+    }
+
+    dfa.get_mut(&state).unwrap().transitions = transitions;
+}
+
+pub fn build_dfa2(state: Vector) -> DfaTable2 {
+    let mut state_id = 0;
+    let mut dfa = HashMap::new();
+    let last_success = state.accepting_state();
+    let state = DfaState {
+        state,
+        last_success,
+    };
+    explore_dfa_node2(&mut dfa, state, &mut state_id);
+    dfa
+}
+
+fn extract_leaf_states2(dfa: &mut DfaTable2) -> HashSet<DfaState> {
+    // TODO: switch to `drain_filter` (nightly) / `extract_if` (hashbrown)
+    let leaf_states = dfa
+        .iter()
+        .filter_map(|(state, info)| {
+            if info.transitions.is_empty() && state.last_success.is_some() {
+                Some(state.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    for s in &leaf_states {
+        dfa.remove(s);
+    }
+    leaf_states
+}
