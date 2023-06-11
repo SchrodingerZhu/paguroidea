@@ -75,7 +75,16 @@ mod tests {
         let mut optimizer = LoopOptimizer::new();
         println!(
             "{}",
-            vectorized.generate_dfa("polo".to_string(), &mut optimizer)
+            vectorized.generate_dfa(
+                &quote!(0),
+                &mut optimizer,
+                &[quote!({
+                    return Some(idx);
+                })],
+                &quote!({
+                    return None;
+                })
+            )
         );
     }
 
@@ -99,12 +108,7 @@ mod tests {
         let mut optimizer = LoopOptimizer::new();
         println!(
             "{}",
-            vectorized.generate_dfa("test".to_string(), &mut optimizer)
-        );
-        let mut optimizer = LoopOptimizer::new();
-        println!(
-            "{}",
-            vectorized.generate_dfa2(
+            vectorized.generate_dfa(
                 &quote!(0),
                 &mut optimizer,
                 &[quote!({

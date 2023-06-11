@@ -11,6 +11,7 @@ use std::ops::Range;
 use ariadne::{Color, Report, ReportKind, Source};
 use frontend::{lexical::LexerDatabase, GrammarDefinitionError, WithSpan};
 
+use fusion::fusion_parser;
 use proc_macro2::TokenStream;
 use quote::format_ident;
 use typed_arena::Arena;
@@ -28,7 +29,6 @@ use crate::{
 pub mod core_syntax;
 pub mod frontend;
 mod fusion;
-mod fusion2;
 mod nf;
 pub mod type_system;
 pub mod utilities;
@@ -260,7 +260,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
             fully_normalize(&nf_arena, &mut nfs);
             merge_inactive_rules(&mut nfs, &parser, &nf_arena);
             remove_unreachable_rules(&mut nfs, &parser);
-            let parser_routines = fusion2::fusion_parser(&nfs, &parser);
+            let parser_routines = fusion_parser(&nfs, &parser);
             let entrypoint = format_ident!("parse_{}", parser.entrypoint.name());
             Ok(quote::quote! {
                 #![allow(

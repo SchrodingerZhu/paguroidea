@@ -208,8 +208,7 @@ fn generate_children<'src>(
     rules
         .iter()
         .filter(|x| !matches!(x, NormalForm::Empty(..)))
-        .enumerate()
-        .map(|(index, nf)| {
+        .map(|nf| {
             let NormalForm::Sequence { nonterminals, .. } = nf else { unreachable!() };
 
             let mut add_continue = false;
@@ -273,19 +272,19 @@ fn generate_children<'src>(
             }
             if add_continue {
                 quote! {
-                    (#index, shift) => {
-                        cursor += shift;
+                    {
+                        cursor = idx;
                         #(#actions)*
                         offset = cursor;
-                        continue;
+                        continue 'parser;
                     }
                 }
             } else {
                 quote! {
-                    (#index, shift) => {
-                        cursor += shift;
+                    {
+                        cursor = idx;
                         #(#actions)*
-                        break;
+                        break 'parser;
                     }
                 }
             }
@@ -293,11 +292,11 @@ fn generate_children<'src>(
         .collect()
 }
 
-fn generate_skip(index: usize) -> TokenStream {
+fn generate_skip() -> TokenStream {
     quote! {
-        (#index, shift) => {
-            offset += shift;
-            continue;
+        {
+            offset = idx;
+            continue 'parser;
         }
     }
 }
@@ -330,43 +329,38 @@ fn generate_inactive_parser<'src>(
     let parser_name = format_ident!("parse_{tag_name}");
     let expect = generate_expect(rules, lexer_database);
 
-    let lexer = fusion_lexer(rules, lexer_database)
-        .generate_dfa(format!("lexer_{tag_name}"), loop_optimizer);
-    let lexer_name = format_ident!("lexer_{tag_name}");
-
-    let parser_rules = generate_children(&tag, false, parser, rules)
+    let success_actions = generate_children(&tag, false, parser, rules)
         .into_iter()
-        .chain(lexer_database.skip.map(|_| {
-            generate_skip(
-                rules
-                    .iter()
-                    .filter(|x| !matches!(x, NormalForm::Empty(..)))
-                    .count(),
-            )
-        }));
-    let none_action = match rules.iter().find_map(|x| match x {
+        .chain(lexer_database.skip.map(|_| generate_skip()))
+        .collect::<Vec<_>>();
+    let failure_action = match rules.iter().find_map(|x| match x {
         NormalForm::Empty(e) => Some(e),
         _ => None,
     }) {
         Some(e) => {
             let actions = generate_empty_actions(false, e);
             quote! {
-                (usize::MAX, _) => {
+                {
                     #(#actions)*
-                    break;
+                    break 'parser;
                 }
             }
         }
         None => quote! {
-            (usize::MAX, _) => {
-                return Err(Error {
-                    active_rule: parent.tag,
-                    expecting: EXPECTING,
-                    offset,
-                });
-            }
+            return Err(Error {
+                active_rule: parent.tag,
+                expecting: EXPECTING,
+                offset,
+            })
         },
     };
+
+    let fused = fusion_lexer(rules, lexer_database).generate_dfa(
+        &quote!(offset),
+        loop_optimizer,
+        &success_actions,
+        &failure_action,
+    );
     quote! {
         fn #parser_name<'a>(
             src: &'a str,
@@ -374,15 +368,10 @@ fn generate_inactive_parser<'src>(
             parent: &mut ParserTree<'a>,
         ) -> Result<usize, Error> {
             #expect
-            #lexer
-            let mut cursor;
-            loop {
-                cursor = offset;
-                match #lexer_name(src[offset..].as_bytes()) {
-                    #none_action,
-                    #(#parser_rules,)*
-                    _ => unsafe { ::core::hint::unreachable_unchecked() },
-                }
+            let mut cursor = offset;
+            'parser: loop {
+                let input = src.as_bytes();
+                #fused
             }
             Ok(cursor)
         }
@@ -401,59 +390,48 @@ fn generate_active_parser<'src>(
     let parser_name = format_ident!("parse_{tag_name}");
     let expect = generate_expect(rules, lexer_database);
 
-    let lexer = fusion_lexer(rules, lexer_database)
-        .generate_dfa(format!("lexer_{tag_name}"), loop_optimizer);
-    let lexer_name = format_ident!("lexer_{tag_name}");
-
-    let parser_rules = generate_children(&tag, true, parser, rules)
+    let success_actions = generate_children(&tag, true, parser, rules)
         .into_iter()
-        .chain(lexer_database.skip.map(|_| {
-            generate_skip(
-                rules
-                    .iter()
-                    .filter(|x| !matches!(x, NormalForm::Empty(..)))
-                    .count(),
-            )
-        }));
-    let none_action = match rules.iter().find_map(|x| match x {
+        .chain(lexer_database.skip.map(|_| generate_skip()))
+        .collect::<Vec<_>>();
+    let failure_action = match rules.iter().find_map(|x| match x {
         NormalForm::Empty(e) => Some(e),
         _ => None,
     }) {
         Some(e) => {
             let actions = generate_empty_actions(true, e);
             quote! {
-                (usize::MAX, _) => {
+                {
                     #(#actions)*
-                    break;
+                    break 'parser;
                 }
             }
         }
         None => quote! {
-            (usize::MAX, _) => {
                 return Err(Error{
                     active_rule: tree.tag,
                     expecting: EXPECTING,
                     offset,
-                });
-            }
+                })
         },
     };
+    let fused = fusion_lexer(rules, lexer_database).generate_dfa(
+        &quote!(offset),
+        loop_optimizer,
+        &success_actions,
+        &failure_action,
+    );
     quote! {
         fn #parser_name(
             src: &str,
             mut offset: usize,
         ) -> Result<ParserTree, Error> {
             #expect
-            #lexer
             let mut tree = ParserTree::new(Tag::#tag_ident, src);
-            let mut cursor;
-            loop {
-                cursor = offset;
-                match #lexer_name(src[offset..].as_bytes()) {
-                    #none_action,
-                    #(#parser_rules,)*
-                    _ => unsafe { ::core::hint::unreachable_unchecked() },
-                }
+            let mut cursor = offset;
+            'parser: loop {
+                let input = src.as_bytes();
+                #fused
             }
             tree.set_span(offset..cursor);
             Ok(tree)
