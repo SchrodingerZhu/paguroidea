@@ -124,6 +124,85 @@ impl Vector {
         Self { regex_trees }
     }
 
+    pub fn generate_dfa2(
+        &self,
+        initial_idx: &TokenStream,
+        optimizer: &mut LoopOptimizer,
+        success_actions: &[TokenStream],
+        failure_action: &TokenStream,
+    ) -> TokenStream {
+        let initial_state = {
+            let initial_state = self.normalize();
+            let last_success = initial_state.accepting_state();
+            DfaState {
+                state: initial_state,
+                last_success,
+            }
+        };
+        let mut dfa = build_dfa2(initial_state.state.clone());
+        let leaf_states = extract_leaf_states2(&mut dfa);
+        let initial_label = format_ident!("S{}", dfa.get(&initial_state).unwrap().state_id);
+        let actions = dfa.iter().map(|(state, info)| {
+            let label = format_ident!("S{}", info.state_id);
+
+            if let Some((rule_idx, seq)) = state.state.as_byte_sequence() {
+                let literal = Literal::byte_string(&seq);
+                let length = seq.len();
+                let on_success = &success_actions[rule_idx];
+                return quote! {
+                    State::#label => {
+                        if input[idx..].starts_with(#literal) {
+                            idx += #length;
+                            #on_success
+                        } else {
+                            #failure_action
+                        }
+                    },
+                };
+            }
+            let transitions = info.transitions.iter().map(|(interval, target)| {
+                if leaf_states.contains(target) {
+                    let rule_idx = target.state.accepting_state().unwrap();
+                    let on_success = &success_actions[rule_idx];
+                    return quote! { Some(#interval) => #on_success, };
+                }
+                let target_label = format_ident!("S{}", dfa.get(target).unwrap().state_id);
+                quote! { Some(#interval) => state = State::#target_label, }
+            });
+            //
+            let lookahead = optimizer.generate_lookahead2(&dfa, state);
+            let otherwise = state
+                .last_success
+                .and_then(|x| success_actions.get(x))
+                .unwrap_or(failure_action);
+            quote! {
+                State::#label => {
+                    #lookahead
+                    match input.get(idx) {
+                        #(#transitions)*
+                        _ => #otherwise,
+                    }
+                },
+            }
+        });
+
+        let labels = dfa.values().map(|info| format_ident!("S{}", info.state_id));
+
+        quote! {
+            enum State {
+                #(#labels,)*
+            };
+            let mut idx = #initial_idx;
+            let mut state = State::#initial_label;
+            loop {
+                match state {
+                    #(#actions)*
+                }
+                idx += 1;
+            }
+        }
+    }
+
     pub fn generate_dfa(&self, name: String, optimizer: &mut LoopOptimizer) -> TokenStream {
         let initial_state = self.normalize();
         let mut dfa = build_dfa(initial_state.clone());
@@ -285,7 +364,7 @@ pub struct DfaState {
 #[derive(Debug, Clone)]
 pub struct DfaInfo {
     state_id: usize,
-    transitions: Vec<(Intervals, DfaState)>,
+    pub(crate) transitions: Vec<(Intervals, DfaState)>,
 }
 
 pub type DfaTable2 = HashMap<DfaState, DfaInfo>;

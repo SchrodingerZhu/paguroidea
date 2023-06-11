@@ -5,6 +5,9 @@
 // license <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
+#![feature(portable_simd)]
+#![feature(core_intrinsics)]
+#![feature(array_chunks)]
 
 pub mod congruence;
 pub mod derivative;
@@ -22,6 +25,7 @@ mod tests {
     use crate::normalization::normalize;
     use crate::regex_tree::*;
     use crate::vector::Vector;
+    use quote::quote;
     use std::rc::Rc;
     use RegexTree::*;
 
@@ -82,7 +86,9 @@ mod tests {
         let c = Rc::new(RegexTree::single(b'c'));
         let ba = Rc::new(Concat(b, a.clone()));
         let a_or_ba = Rc::new(Union(a, ba));
-        let a_or_ba_or_c = Rc::new(KleeneClosure(Rc::new(Union(a_or_ba, c))));
+        let a_or_ba_or_c = Rc::new(Union(a_or_ba, c));
+        let star = Rc::new(KleeneClosure(a_or_ba_or_c.clone()));
+        let a_or_ba_or_c = Rc::new(Concat(a_or_ba_or_c, star));
         println!("{}", a_or_ba_or_c);
         let normalized = normalize(a_or_ba_or_c);
         println!("{}", normalized);
@@ -94,6 +100,20 @@ mod tests {
         println!(
             "{}",
             vectorized.generate_dfa("test".to_string(), &mut optimizer)
+        );
+        let mut optimizer = LoopOptimizer::new();
+        println!(
+            "{}",
+            vectorized.generate_dfa2(
+                &quote!(0),
+                &mut optimizer,
+                &[quote!({
+                    return Some(idx);
+                })],
+                &quote!({
+                    return None;
+                })
+            )
         );
     }
 }
