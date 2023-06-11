@@ -4,10 +4,15 @@
 mod parser;
 
 pub use parser::parse;
-use rand::Rng;
+use rand::prelude::StdRng;
+use rand::{Rng, SeedableRng};
 
 pub fn generate_csv(line: usize, width: usize) -> String {
-    let mut random = rand::thread_rng();
+    let mut random = std::env::var("PAG_RANDOM_SEED")
+        .map_err(Into::<anyhow::Error>::into)
+        .and_then(|x| x.parse().map_err(Into::into))
+        .map(StdRng::seed_from_u64)
+        .unwrap_or_else(|_| StdRng::from_entropy());
     let mut buffer = String::new();
     for _ in 0..line {
         for i in 0..width {

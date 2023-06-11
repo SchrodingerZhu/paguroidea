@@ -4,7 +4,8 @@
 mod parser;
 
 pub use parser::parse;
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use serde_json::Value;
 
 fn generate_json_value<G: Rng>(depth: usize, gen: &mut G) -> Value {
@@ -42,7 +43,11 @@ fn generate_json_value<G: Rng>(depth: usize, gen: &mut G) -> Value {
 }
 
 pub fn generate_random_json(depth: usize) -> String {
-    let mut random = rand::thread_rng();
+    let mut random = std::env::var("PAG_RANDOM_SEED")
+        .map_err(Into::<anyhow::Error>::into)
+        .and_then(|x| x.parse().map_err(Into::into))
+        .map(StdRng::seed_from_u64)
+        .unwrap_or_else(|_| StdRng::from_entropy());
     let mut buffer = Vec::new();
     let value = generate_json_value(depth, &mut random);
     serde_json::to_writer(&mut buffer, &value).unwrap();
