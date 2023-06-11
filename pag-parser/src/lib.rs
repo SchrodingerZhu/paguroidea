@@ -10,6 +10,7 @@ use std::ops::Range;
 
 use ariadne::{Color, Report, ReportKind, Source};
 use frontend::{lexical::LexerDatabase, GrammarDefinitionError, WithSpan};
+
 use fusion::fusion_parser;
 use proc_macro2::TokenStream;
 use quote::format_ident;
@@ -270,6 +271,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
                     unused_mut,
                     unreachable_patterns,
                     unreachable_code,
+                    unused_assignments,
                     clippy::identity_op,
                     clippy::single_match,
                     clippy::never_loop,

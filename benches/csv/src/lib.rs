@@ -28,5 +28,7 @@ pub fn generate_csv(line: usize, width: usize) -> String {
 
 #[test]
 fn test_csv() {
-    parser::parse(&generate_csv(500, 500)).unwrap();
+    let data = generate_csv(500, 500);
+    let parsed = parser::parse(&data).unwrap();
+    assert_eq!(parsed.len(), data.len());
 }

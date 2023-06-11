@@ -124,146 +124,154 @@ impl Vector {
         Self { regex_trees }
     }
 
-    pub fn generate_dfa(&self, name: String, optimizer: &mut LoopOptimizer) -> TokenStream {
-        let initial_state = self.normalize();
-        let mut dfa = build_dfa(initial_state.clone());
+    pub fn generate_dfa(
+        &self,
+        initial_idx: &TokenStream,
+        optimizer: &mut LoopOptimizer,
+        success_actions: &[TokenStream],
+        failure_action: &TokenStream,
+    ) -> TokenStream {
+        let initial_state = {
+            let initial_state = self.normalize();
+            let last_success = initial_state.accepting_state();
+            DfaState {
+                state: initial_state,
+                last_success,
+            }
+        };
+        let mut dfa = build_dfa(initial_state.state.clone());
         let leaf_states = extract_leaf_states(&mut dfa);
-        let initial_label = format_ident!("S{}", dfa.get(&initial_state).unwrap().0);
-        let name = format_ident!("{name}");
-        let actions = dfa.iter().map(|(state, (state_id, transitions))| {
-            let label = format_ident!("S{state_id}");
+        let initial_label = format_ident!("S{}", dfa.get(&initial_state).unwrap().state_id);
+        let actions = dfa.iter().map(|(state, info)| {
+            let label = format_ident!("S{}", info.state_id);
 
-            if let Some((rule_idx, seq)) = state.as_byte_sequence() {
+            if let Some((rule_idx, seq)) = state.state.as_byte_sequence() {
                 let literal = Literal::byte_string(&seq);
                 let length = seq.len();
+                let on_success = &success_actions[rule_idx];
                 return quote! {
                     State::#label => {
-                        return if input[idx..].starts_with(#literal) {
-                            (#rule_idx, idx + #length)
+                        if input[idx..].starts_with(#literal) {
+                            idx += #length;
+                            #on_success
                         } else {
-                            longest_match
-                        };
+                            #failure_action
+                        }
                     },
                 };
             }
-
-            let accepting_state = state
-                .accepting_state()
-                .map(|rule_idx| quote! { longest_match = (#rule_idx, idx); });
-
-            let transitions = transitions.iter().map(|(interval, target)| {
+            let transitions = info.transitions.iter().map(|(interval, target)| {
                 if leaf_states.contains(target) {
-                    let rule_idx = target.accepting_state().unwrap();
-                    return quote! { #interval => return (#rule_idx, idx + 1), };
+                    let rule_idx = target.state.accepting_state().unwrap();
+                    let on_success = &success_actions[rule_idx];
+                    return quote! { Some(#interval) => { idx += 1; #on_success }, };
                 }
-                let target_label = format_ident!("S{}", dfa.get(target).unwrap().0);
-                quote! { #interval => state = State::#target_label, }
+                let target_label = format_ident!("S{}", dfa.get(target).unwrap().state_id);
+                quote! { Some(#interval) => state = State::#target_label, }
             });
-
+            //
             let lookahead = optimizer.generate_lookahead(&dfa, state);
-            let get_char = if lookahead.is_some() {
-                Some(quote! { let Some(c) = input.get(idx) else { break }; })
-            } else {
-                None
-            };
+            let otherwise = state
+                .last_success
+                .and_then(|x| success_actions.get(x))
+                .unwrap_or(failure_action);
             quote! {
                 State::#label => {
                     #lookahead
-                    #accepting_state
-                    #get_char
-                    match c {
+                    match input.get(idx) {
                         #(#transitions)*
-                        _ => return longest_match,
+                        _ => #otherwise,
                     }
                 },
             }
         });
 
-        let labels = dfa
-            .iter()
-            .map(|(_, (state_id, _))| format_ident!("S{state_id}"));
-
-        let mut accepting_map = HashMap::<usize, Vec<usize>>::new(); // maybe use Vec<Vec<usize>>?
-        for (state, (state_id, _)) in &dfa {
-            let Some(rule_idx) = state.accepting_state() else { continue; };
-            accepting_map
-                .entry(rule_idx)
-                .and_modify(|v| v.push(*state_id))
-                .or_insert(vec![*state_id]);
-        }
-        let accepting_actions = accepting_map.into_iter().map(|(rule_idx, state_ids)| {
-            let enums = state_ids.into_iter().map(|id| {
-                let label = format_ident!("S{id}");
-                quote! { State::#label }
-            });
-            quote! { #(#enums)|* => longest_match = (#rule_idx, idx), }
-        });
+        let labels = dfa.values().map(|info| format_ident!("S{}", info.state_id));
 
         quote! {
-            fn #name(input: &[u8]) -> (usize, usize) {
-                enum State {
-                    #(#labels,)*
-                };
-                let mut state = State::#initial_label;
-                let mut longest_match = (usize::MAX, 0);
-                let mut idx = 0;
-                while idx < input.len() {
-                    let c = unsafe { *input.get_unchecked(idx) };
-                    match state {
-                        #(#actions)*
-                    };
-                    idx += 1;
-                }
+            enum State {
+                #(#labels,)*
+            };
+            let mut idx = #initial_idx;
+            let mut state = State::#initial_label;
+            loop {
                 match state {
-                    #(#accepting_actions)*
-                    _ => {}
+                    #(#actions)*
                 }
-                longest_match
+                idx += 1;
             }
         }
     }
 }
 
-pub type DfaTable = HashMap<Vector, (usize /* ID */, Vec<(Intervals, Vector)>)>;
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DfaState {
+    state: Vector,
+    last_success: Option<usize>,
+}
 
-fn explore_dfa_node(dfa: &mut DfaTable, state: Vector, state_id: &mut usize) {
-    dfa.insert(state.clone(), (*state_id, vec![]));
+#[derive(Debug, Clone)]
+pub struct DfaInfo {
+    state_id: usize,
+    pub(crate) transitions: Vec<(Intervals, DfaState)>,
+}
+
+pub type DfaTable = HashMap<DfaState, DfaInfo>;
+
+fn explore_dfa_node(dfa: &mut DfaTable, state: DfaState, state_id: &mut usize) {
+    dfa.insert(
+        state.clone(),
+        DfaInfo {
+            state_id: *state_id,
+            transitions: vec![],
+        },
+    );
     *state_id += 1;
 
-    if state.is_byte_sequence() {
+    if state.state.is_byte_sequence() {
         return;
     }
 
-    let classes = state.approximate_congruence_class();
+    let classes = state.state.approximate_congruence_class();
     let mut transitions = Vec::with_capacity(classes.len());
 
     for intervals in classes {
         let char = intervals.representative();
-        let target = state.derivative(char).normalize();
-        if !target.is_rejecting_state() {
-            transitions.push((intervals, target.clone()));
-            if !dfa.contains_key(&target) {
-                explore_dfa_node(dfa, target, state_id)
+        let target = state.state.derivative(char).normalize();
+        let last_success = target.accepting_state().or(state.last_success);
+        let next = DfaState {
+            state: target,
+            last_success,
+        };
+        if !next.state.is_rejecting_state() {
+            transitions.push((intervals, next.clone()));
+            if !dfa.contains_key(&next) {
+                explore_dfa_node(dfa, next, state_id)
             }
         }
     }
 
-    dfa.get_mut(&state).unwrap().1 = transitions;
+    dfa.get_mut(&state).unwrap().transitions = transitions;
 }
 
-fn build_dfa(initial_state: Vector) -> DfaTable {
+pub fn build_dfa(state: Vector) -> DfaTable {
     let mut state_id = 0;
     let mut dfa = HashMap::new();
-    explore_dfa_node(&mut dfa, initial_state, &mut state_id);
+    let last_success = state.accepting_state();
+    let state = DfaState {
+        state,
+        last_success,
+    };
+    explore_dfa_node(&mut dfa, state, &mut state_id);
     dfa
 }
 
-fn extract_leaf_states(dfa: &mut DfaTable) -> HashSet<Vector> {
+fn extract_leaf_states(dfa: &mut DfaTable) -> HashSet<DfaState> {
     // TODO: switch to `drain_filter` (nightly) / `extract_if` (hashbrown)
     let leaf_states = dfa
         .iter()
-        .filter_map(|(state, (_, transitions))| {
-            if transitions.is_empty() && state.accepting_state().is_some() {
+        .filter_map(|(state, info)| {
+            if info.transitions.is_empty() && state.last_success.is_some() {
                 Some(state.clone())
             } else {
                 None

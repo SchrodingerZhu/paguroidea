@@ -7,7 +7,7 @@
 // modified, or distributed except according to those terms.
 
 use crate::intervals::{byte_char, Intervals};
-use crate::vector::{DfaTable, Vector};
+use crate::vector::{DfaState, DfaTable};
 use proc_macro2::TokenStream;
 use quote::quote;
 use std::collections::hash_map::Entry;
@@ -206,7 +206,7 @@ impl LoopOptimizer {
             const GLOBAL_LUT : [[u8;256]; #table_size] = [ #(#table,)* ];
         })
     }
-    pub fn generate_lookahead(&mut self, dfa: &DfaTable, state: &Vector) -> Option<TokenStream> {
+    pub fn generate_lookahead(&mut self, dfa: &DfaTable, state: &DfaState) -> Option<TokenStream> {
         let limit = if cfg!(target_arch = "aarch64") { 2 } else { 4 };
         if let Some(intervals) = direct_self_loops(dfa, state) {
             let positives = convert_interval_to_edges(&intervals);
@@ -226,10 +226,10 @@ impl LoopOptimizer {
     }
 }
 
-fn direct_self_loops(dfa: &DfaTable, state: &Vector) -> Option<Intervals> {
+fn direct_self_loops(dfa: &DfaTable, state: &DfaState) -> Option<Intervals> {
     let mut intervals = None;
-    if let Some((_, transitions)) = dfa.get(state) {
-        for (edge, target) in transitions {
+    if let Some(info) = dfa.get(state) {
+        for (edge, target) in info.transitions.iter() {
             if target == state {
                 intervals =
                     Some(intervals.map_or_else(|| edge.clone(), |x: Intervals| x.union(edge)));
