@@ -59,12 +59,14 @@ fn test_json() {
 fn test_random() {
     for _ in 0..10 {
         let json = generate_random_json(10);
-        parser::parse(&json).unwrap();
+        let parsed = parser::parse(&json).unwrap();
+        assert_eq!(json.len(), parsed.len())
     }
 }
 
 #[test]
 fn test_twitter() {
     let json = include_str!("../benches/twitter.json");
-    parser::parse(json).unwrap();
+    let parsed = parser::parse(json).unwrap();
+    assert_eq!(json.len(), parsed.len())
 }
