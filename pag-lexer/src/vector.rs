@@ -164,7 +164,7 @@ impl Vector {
                 if leaf_states.contains(target) {
                     let rule_idx = target.state.accepting_state().unwrap();
                     let on_success = &success_actions[rule_idx];
-                    return quote! { Some(#interval) => #on_success, };
+                    return quote! { Some(#interval) => { idx += 1; #on_success }, };
                 }
                 let target_label = format_ident!("S{}", dfa.get(target).unwrap().state_id);
                 quote! { Some(#interval) => state = State::#target_label, }
