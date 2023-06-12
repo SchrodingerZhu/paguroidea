@@ -1,0 +1,52 @@
+use crate::Token;
+use crate::Pvalue;
+
+grammar<'a>;
+
+extern {
+    type Location = usize;
+    enum Token<'a> {
+        "true"    => Token::True,
+        "false"   => Token::False,
+        "null"    => Token::Null,
+        ","	      => Token::Comma,
+        ":"	      => Token::Colon,
+        "{"	      => Token::LBrace,
+        "}"	      => Token::RBrace,
+        "["	      => Token::LBracket,
+        "]"	      => Token::RBracket,
+        "number"  => Token::Number(<&'a str>),
+        "string"  => Token::String(<&'a str>),
+    }
+}
+
+Comma<T>: Vec<T> = {
+    <mut es: Comma<T>> "," <e: T> => { es.push(e); es },
+    <e: T> => vec![e],
+}
+
+pub Json = Value;
+
+Value: Pvalue<'a> = {
+    "true"        => Pvalue::<'a>::Bool(true),
+    "false"       => Pvalue::<'a>::Bool(false),
+    "null"        => Pvalue::<'a>::Null,
+    <s: "string"> => Pvalue::<'a>::String(&s[1..s.len() - 1]),
+    <n: "number"> => Pvalue::<'a>::Number(n),
+    <a: Array>    => Pvalue::<'a>::Array(a),
+    <o: Object>   => Pvalue::<'a>::Object(o),
+}
+
+Attribute: (&'a str, Pvalue<'a>) = {
+    <s: "string"> ":" <v: Value> => (s, v),
+}
+
+Object: Vec<(&'a str, Pvalue<'a>)> = {
+    "{" <attr: Comma<Attribute>> "}" => attr,
+    "{" "}" => vec![],
+}
+
+Array: Vec<Pvalue<'a>> = {
+    "[" <a: Comma<Value>> "]" => a,
+    "[" "]" => vec![],
+}

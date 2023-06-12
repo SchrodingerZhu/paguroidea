@@ -1,9 +1,62 @@
-extern crate lexical;
+use logos::Logos;
 use std::fmt;
+
+#[derive(Logos, Debug, PartialEq, Copy, Clone)]
+#[logos(skip r"[ \r\n\t]+")]
+pub enum Token<'a> {
+    #[token("true")]
+    True,
+
+    #[token("false")]
+    False,
+
+    #[token("null")]
+    Null,
+
+    #[token(":")]
+    Colon,
+
+    #[token(",")]
+    Comma,
+
+    #[token("{")]
+    LBrace,
+
+    #[token("}")]
+    RBrace,
+
+    #[token("[")]
+    LBracket,
+
+    #[token("]")]
+    RBracket,
+
+    #[regex(r"-?(0|[1-9]\d*)((\.\d+)?)([eE][+-]?\d+)?")]
+    Number(&'a str),
+
+    #[regex(r#""([^\\"]|\\(["\\/bfnrt]|u[0-9a-fA-F]{4}))*""#)]
+    String(&'a str),
+}
+
+impl<'a> Token<'a> {
+    pub fn lalrpop_lexer(
+        source: &'a str,
+    ) -> impl Iterator<Item = Result<(usize, Token<'a>, usize), &'static str>> {
+        Self::lexer(source)
+            .spanned()
+            .map(|(t, r)| Ok((r.start, t.unwrap(), r.end)))
+    }
+}
+
+impl<'a> fmt::Display for Token<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pvalue<'a> {
-    Number(f64),
+    Number(&'a str),
     String(&'a str),
     Object(Vec<(&'a str, Pvalue<'a>)>),
     Bool(bool),
@@ -14,29 +67,17 @@ pub enum Pvalue<'a> {
 impl<'a> fmt::Display for Pvalue<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Pvalue::Number(float) => write!(f, "{}", lexical::to_string(*float)),
-            Pvalue::String(string) => write!(f, "\"{}\"", string),
-            Pvalue::Object(obj) => {
-                write!(f, "{{")?;
-                if let Some(((key, value), rest)) = obj.split_first() {
-                    write!(f, "\"{}\": {}", key, value)?;
-                    for (key, value) in rest.iter() {
-                        write!(f, ", \"{}\": {}", key, value)?
-                    }
-                }
-                write!(f, "}}")
+            Pvalue::Number(number) => write!(f, "{number}"),
+            Pvalue::String(string) => write!(f, "\"{string}\""),
+            Pvalue::Object(object) => {
+                let iter = object.into_iter().map(|(k, v)| format!("\"{k}\": {v}"));
+                write!(f, "{{{}}}", iter.collect::<Vec<_>>().join(", "))
             }
-            Pvalue::Bool(flag) => write!(f, "{}", flag),
+            Pvalue::Bool(flag) => write!(f, "{flag}"),
             Pvalue::Null => write!(f, "null"),
             Pvalue::Array(array) => {
-                write!(f, "[")?;
-                if let Some((value, rest)) = array.split_first() {
-                    write!(f, "{}", value)?;
-                    for value in rest.iter() {
-                        write!(f, ", {}", value)?
-                    }
-                }
-                write!(f, "]")
+                let iter = array.into_iter().map(|v| v.to_string());
+                write!(f, "[{}]", iter.collect::<Vec<_>>().join(", "))
             }
         }
     }
