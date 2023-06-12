@@ -10,9 +10,7 @@ serde_json = "1.0"
 rand = { version = "0.8" }
 snmalloc-rs = { version = "0.3", features = ["build_cc"] }
 lalrpop-util = "0.20.0"
-lexical = "6.1.1"
 logos = "0.13.0"
-
 
 [build-dependencies]
 pag-compiler = { path = "../../pag-compiler" }
