@@ -1,4 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+use lalrpop_util::lalrpop_mod;
 use pag_json::{generate_random_json, parse};
 use pest::Parser;
 use pest_json::Rule;
@@ -7,8 +8,7 @@ use serde_json::Value;
 mod lalrlexer;
 pub use lalrlexer::{Pvalue, Token};
 
-#[macro_use]
-extern crate lalrpop_util;
+lalrpop_mod!(lalrpop_json, "/benches/json.rs");
 lalrpop_mod!(lalrpop_logos_json, "/benches/json_logos.rs");
 
 mod pest_json {
@@ -41,6 +41,11 @@ fn criterion_benchmark(c: &mut Criterion) {
             pest_json::JSONParser::parse(Rule::json, &data).unwrap();
         })
     });
+    g.bench_function("lalrpop", |b| {
+        b.iter(|| {
+            lalrpop_json::JsonParser::new().parse(&data).unwrap();
+        })
+    });
     g.bench_function("lalrpop+logos", |b| {
         b.iter(|| {
             let lexer = Token::lalrpop_lexer(&data);
@@ -65,6 +70,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     g.bench_function("pest", |b| {
         b.iter(|| {
             pest_json::JSONParser::parse(Rule::json, data).unwrap();
+        })
+    });
+    g.bench_function("lalrpop", |b| {
+        b.iter(|| {
+            lalrpop_json::JsonParser::new().parse(&data).unwrap();
         })
     });
     g.bench_function("lalrpop+logos", |b| {

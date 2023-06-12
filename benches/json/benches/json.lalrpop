@@ -1,0 +1,38 @@
+use crate::Pvalue;
+
+grammar;
+
+Comma<T>: Vec<T> = {
+    <mut es: Comma<T>> "," <e: T> => { es.push(e); es },
+    <e: T> => vec![e],
+}
+
+pub Json = Value;
+
+Value: Pvalue<'input> = {
+    "true"      => Pvalue::<'input>::Bool(true),
+    "false"     => Pvalue::<'input>::Bool(false),
+    "null"      => Pvalue::<'input>::Null,
+    <s: String> => Pvalue::<'input>::String(&s[1..s.len() - 1]),
+    <n: Number> => Pvalue::<'input>::Number(n),
+    <a: Array>  => Pvalue::<'input>::Array(a),
+    <o: Object> => Pvalue::<'input>::Object(o),
+}
+
+Attribute: (&'input str, Pvalue<'input>) = {
+    <s: String> ":" <v: Value> => (s, v),
+}
+
+Object: Vec<(&'input str, Pvalue<'input>)> = {
+    "{" <attr: Comma<Attribute>> "}" => attr,
+    "{" "}" => vec![],
+}
+
+Array: Vec<Pvalue<'input>> = {
+    "[" <a: Comma<Value>> "]" => a,
+    "[" "]" => vec![],
+}
+
+Number = r"-?(0|[1-9]\d*)((\.\d+)?)([eE][+-]?\d+)?";
+
+String = r#""([^\\"]|\\(["\\/bfnrt]|u[0-9a-fA-F]{4}))*""#;
