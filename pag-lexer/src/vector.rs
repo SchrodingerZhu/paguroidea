@@ -135,17 +135,17 @@ impl Vector {
             let initial_state = self.normalize();
             let last_success = initial_state.accepting_state();
             DfaState {
-                state: initial_state,
+                state_vec: initial_state,
                 last_success,
             }
         };
-        let mut dfa = build_dfa(initial_state.state.clone());
+        let mut dfa = build_dfa(initial_state.state_vec.clone());
         let leaf_states = extract_leaf_states(&mut dfa);
         let initial_label = format_ident!("S{}", dfa.get(&initial_state).unwrap().state_id);
         let actions = dfa.iter().map(|(state, info)| {
             let label = format_ident!("S{}", info.state_id);
 
-            if let Some((rule_idx, seq)) = state.state.as_byte_sequence() {
+            if let Some((rule_idx, seq)) = state.state_vec.as_byte_sequence() {
                 let literal = Literal::byte_string(&seq);
                 let length = seq.len();
                 let on_success = &success_actions[rule_idx];
@@ -162,7 +162,7 @@ impl Vector {
             }
             let transitions = info.transitions.iter().map(|(interval, target)| {
                 if leaf_states.contains(target) {
-                    let rule_idx = target.state.accepting_state().unwrap();
+                    let rule_idx = target.state_vec.accepting_state().unwrap();
                     let on_success = &success_actions[rule_idx];
                     return quote! { Some(#interval) => { idx += 1; #on_success }, };
                 }
@@ -206,7 +206,7 @@ impl Vector {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DfaState {
-    state: Vector,
+    state_vec: Vector,
     last_success: Option<usize>,
 }
 
@@ -228,22 +228,22 @@ fn explore_dfa_node(dfa: &mut DfaTable, state: DfaState, state_id: &mut usize) {
     );
     *state_id += 1;
 
-    if state.state.is_byte_sequence() {
+    if state.state_vec.is_byte_sequence() {
         return;
     }
 
-    let classes = state.state.approximate_congruence_class();
+    let classes = state.state_vec.approximate_congruence_class();
     let mut transitions = Vec::with_capacity(classes.len());
 
     for intervals in classes {
         let char = intervals.representative();
-        let target = state.state.derivative(char).normalize();
+        let target = state.state_vec.derivative(char).normalize();
         let last_success = target.accepting_state().or(state.last_success);
         let next = DfaState {
-            state: target,
+            state_vec: target,
             last_success,
         };
-        if !next.state.is_rejecting_state() {
+        if !next.state_vec.is_rejecting_state() {
             transitions.push((intervals, next.clone()));
             if !dfa.contains_key(&next) {
                 explore_dfa_node(dfa, next, state_id)
@@ -259,7 +259,7 @@ pub fn build_dfa(state: Vector) -> DfaTable {
     let mut dfa = HashMap::new();
     let last_success = state.accepting_state();
     let state = DfaState {
-        state,
+        state_vec: state,
         last_success,
     };
     explore_dfa_node(&mut dfa, state, &mut state_id);
