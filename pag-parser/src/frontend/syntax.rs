@@ -6,7 +6,7 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     core_syntax::BindingContext,
@@ -28,13 +28,13 @@ pub struct Parser<'src, 'a> {
     pub entrypoint: Symbol<'src>,
     pub arena: &'a TermArena<'src, 'a>,
     pub bindings: BindingContext<'src, 'a>,
-    pub symbol_table: HashMap<&'src str, WithSpan<'src, Symbol<'src>>>,
+    pub symbol_set: HashSet<&'src str>,
     pub lexer_database: LexerDatabase<'src>,
 }
 
 impl<'src, 'a> Parser<'src, 'a> {
     pub fn type_check(&self) -> Vec<TypeError<'src>> {
-        let target = unsafe { self.bindings.get(&self.entrypoint).unwrap_unchecked() };
+        let target = self.bindings.get(&self.entrypoint).unwrap();
         type_check(&self.bindings, target.term, self.entrypoint)
     }
 
@@ -48,31 +48,28 @@ pub fn construct_parser<'src, 'a>(
     lexer_database: LexerDatabase<'src>,
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
 ) -> FrontendResult<'src, Parser<'src, 'a>> {
-    let mut parser = Parser {
-        entrypoint: Symbol::new(""),
-        arena,
-        bindings: HashMap::new(),
-        lexer_database,
-        symbol_table: HashMap::new(),
-    };
-    let mut errs = match construct_symbol_table(&mut parser, sst) {
-        Ok(()) => vec![],
-        Err(errs) => errs,
-    };
+    let symbol_set = construct_symbol_table(sst)?;
     let ParserDef { entrypoint, rules } = &sst.node else {
         unreachable_branch!("sst should be a parser")
     };
-    let entrypoint = match parser.symbol_table.get(entrypoint.span.as_str()) {
-        Some(entrypoint) => entrypoint,
+    let entrypoint = match symbol_set.get(entrypoint.span.as_str()) {
+        Some(name) => Symbol::new(name),
         None => {
-            errs.extend(span_errors!(
+            return Err(span_errors!(
                 UndefinedParserRuleReference,
                 entrypoint.span,
                 entrypoint.span.as_str(),
             ));
-            return Err(errs);
         }
     };
+    let mut parser = Parser {
+        entrypoint,
+        arena,
+        bindings: HashMap::new(),
+        lexer_database,
+        symbol_set,
+    };
+    let mut errs = Vec::new();
     for rule in rules {
         match &rule.node {
             ParserDefinition { active, name, expr } => {
@@ -114,7 +111,6 @@ pub fn construct_parser<'src, 'a>(
             _ => unreachable_branch!("parser rule should only contains definitions or fixpoints"),
         }
     }
-    parser.entrypoint = entrypoint.node;
     if !errs.is_empty() {
         return Err(errs);
     }
@@ -122,36 +118,30 @@ pub fn construct_parser<'src, 'a>(
 }
 
 fn construct_symbol_table<'src>(
-    context: &mut Parser<'src, '_>,
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
-) -> FrontendResult<'src, ()> {
+) -> FrontendResult<'src, HashSet<&'src str>> {
     let ParserDef { rules, .. } = &sst.node else {
         unreachable_branch!("sst should be a parser")
     };
+    let mut symbol_table = HashMap::with_capacity(rules.len());
     for rule in rules {
         match &rule.node {
             ParserFixpoint { name, .. } | ParserDefinition { name, .. } => {
-                if let Some(previous) = context.symbol_table.get(name.span.as_str()) {
+                if let Some(previous) = symbol_table.get(name.span.as_str()) {
                     return Err(span_errors!(
                         MultipleDefinition,
                         name.span,
                         name.span.as_str(),
-                        previous.span,
+                        *previous,
                     ));
                 } else {
-                    context.symbol_table.insert(
-                        name.span.as_str(),
-                        WithSpan {
-                            span: name.span,
-                            node: Symbol::new(name.span.as_str()),
-                        },
-                    );
+                    symbol_table.insert(name.span.as_str(), name.span);
                 }
             }
             _ => unreachable_branch!("parser rule should only contains definitions or fixpoints"),
         }
     }
-    Ok(())
+    Ok(symbol_table.keys().copied().collect())
 }
 
 fn construct_core_syntax_tree<'src, 'a>(
@@ -276,10 +266,10 @@ fn construct_core_syntax_tree<'src, 'a>(
         })),
         ParserRuleRef { name } => {
             let name = name.span.as_str();
-            match context.symbol_table.get(name) {
+            match context.symbol_set.get(name) {
                 Some(target) => Ok(context.arena.alloc(WithSpan {
                     span: sst.span,
-                    node: Term::ParserRef(target.node),
+                    node: Term::ParserRef(Symbol::new(target)),
                 })),
                 None => Err(span_errors!(UndefinedParserRuleReference, sst.span, name,)),
             }

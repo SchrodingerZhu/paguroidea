@@ -13,6 +13,7 @@ impl<'a> Symbol<'a> {
     pub fn new(data: &'a str) -> Self {
         Self(data)
     }
+
     pub fn name(&self) -> &'a str {
         self.0
     }
