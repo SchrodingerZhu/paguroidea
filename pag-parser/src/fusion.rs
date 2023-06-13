@@ -451,12 +451,7 @@ pub fn fusion_parser<'src>(
         .entries
         .iter()
         .map(|(tag, rules)| {
-            if !tag.is_versioned()
-                && parser
-                    .bindings
-                    .get(&tag.symbol())
-                    .map_or(false, |x| x.active)
-            {
+            if parser.is_active(tag) {
                 generate_active_parser(
                     *tag,
                     parser,

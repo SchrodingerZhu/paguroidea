@@ -32,13 +32,13 @@ impl<'src, 'a> Parser<'src, 'a> {
         let target = unsafe { self.bindings.get(&self.entrypoint).unwrap_unchecked() };
         type_check(&self.bindings, target.term, self.entrypoint)
     }
+
     pub fn is_active(&self, tag: &Tag<'src>) -> bool {
         !tag.is_versioned()
             && self
                 .bindings
                 .get(&tag.symbol())
-                .map(|x| x.active)
-                .unwrap_or(false)
+                .map_or(false, |x| x.active)
     }
 }
 
