@@ -209,11 +209,11 @@ pub enum SurfaceSyntaxTree<'a> {
         lexer: SpanBox<'a, Self>,
         parser: SpanBox<'a, Self>,
     },
-    Parser {
+    ParserDef {
         entrypoint: WithSpan<'a, ()>,
         rules: Vec<WithSpan<'a, Self>>,
     },
-    Lexer {
+    LexerDef {
         rules: Vec<WithSpan<'a, Self>>,
     },
     LexicalAlternative {
@@ -262,16 +262,16 @@ pub enum SurfaceSyntaxTree<'a> {
         name: WithSpan<'a, ()>,
         expr: SpanBox<'a, Self>,
     },
-    Range {
+    RangeLit {
         start: char,
         end: char,
     },
-    String(String),
-    Bottom,
-    Empty,
-    Char {
+    StringLit(String),
+    CharLit {
         value: WithSpan<'a, char>,
     },
+    Bottom,
+    Empty,
     ParserDefinition {
         active: bool,
         name: WithSpan<'a, ()>,
@@ -290,12 +290,13 @@ pub enum SurfaceSyntaxTree<'a> {
     },
 }
 
+use SurfaceSyntaxTree::*;
+
 fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
     pairs: I,
     pratt: &PrattParser<Rule>,
     src: &'a str,
 ) -> Result<WithSpan<'a, SurfaceSyntaxTree<'a>>, GrammarDefinitionError<'a>> {
-    use SurfaceSyntaxTree::*;
     pratt
         .map_primary(|primary| {
             let span = primary.as_span();
@@ -317,7 +318,7 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                         .into_inner()
                         .map(|rule| parse_surface_syntax([rule], pratt, src))
                         .collect::<Result<_, _>>()?;
-                    Lexer { rules }
+                    LexerDef { rules }
                 }
                 Rule::lexical_definition => {
                     let mut definition = primary.into_inner();
@@ -350,12 +351,12 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                         .ok_or_else(|| format_error!(span, "failed to unescape character"))?
                         .parse()
                         .map_err(|e| format_error!(span, "{}", e))?;
-                    Range { start, end }
+                    RangeLit { start, end }
                 }
                 Rule::string => {
                     let value = unescape_qouted(primary.as_str())
                         .ok_or_else(|| format_error!(span, "failed to unescape string"))?;
-                    String(value)
+                    StringLit(value)
                 }
                 Rule::lexical_expr => {
                     return parse_surface_syntax(primary.into_inner(), pratt, src)
@@ -385,7 +386,7 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                         span,
                         node: character,
                     };
-                    Char { value }
+                    CharLit { value }
                 }
                 Rule::token_id => LexicalRuleRef {
                     name: WithSpan { span, node: () },
@@ -411,7 +412,7 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                         .into_inner()
                         .map(|rule| parse_surface_syntax([rule], pratt, src))
                         .collect::<Result<_, _>>()?;
-                    Parser { entrypoint, rules }
+                    ParserDef { entrypoint, rules }
                 }
                 Rule::active_parser_definition | Rule::silent_parser_definition => {
                     let active = matches!(primary.as_rule(), Rule::active_parser_definition);
@@ -533,7 +534,7 @@ mod test {
         dbg!(size_of::<NormalForm>());
         let pairs = GrammarParser::parse(Rule::grammar, TEST).unwrap();
         let tree = parse_surface_syntax(pairs, &PRATT_PARSER, TEST).unwrap();
-        let SurfaceSyntaxTree::Grammar { lexer, parser } = &tree.node else { unreachable!() };
+        let Grammar { lexer, parser } = &tree.node else { unreachable!() };
 
         let database = LexerDatabase::new(lexer).unwrap();
         for (i, rule) in database.entries.iter() {

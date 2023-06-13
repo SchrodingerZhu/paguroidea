@@ -112,8 +112,8 @@ where
             let inner = construct_regex_tree(inner, reference_handler)?;
             Ok(Rc::new(RegexTree::Complement(inner)))
         }
-        SurfaceSyntaxTree::Range { start, end } => Ok(unicode::encode_range(*start, *end)),
-        SurfaceSyntaxTree::String(x) => {
+        SurfaceSyntaxTree::RangeLit { start, end } => Ok(unicode::encode_range(*start, *end)),
+        SurfaceSyntaxTree::StringLit(x) => {
             if x.is_empty() {
                 Ok(Rc::new(RegexTree::Epsilon))
             } else {
@@ -126,7 +126,7 @@ where
         }
         SurfaceSyntaxTree::Bottom => Ok(Rc::new(RegexTree::Bottom)),
         SurfaceSyntaxTree::Empty => Ok(Rc::new(RegexTree::Epsilon)),
-        SurfaceSyntaxTree::Char { value } => Ok(unicode::encode_char(value.node)),
+        SurfaceSyntaxTree::CharLit { value } => Ok(unicode::encode_char(value.node)),
         SurfaceSyntaxTree::LexicalRuleRef { name } => reference_handler(name.clone()),
         _ => unreachable_branch!(
             "lexer translation is called with unsupported code: {}",
@@ -213,7 +213,7 @@ impl<'a> TranslationContext<'a> {
         sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
     ) -> Result<(), Vec<WithSpan<'a, Error<'a>>>> {
         match &sst.node {
-            SurfaceSyntaxTree::Lexer { rules } => {
+            SurfaceSyntaxTree::LexerDef { rules } => {
                 let mut error = Vec::new();
                 for i in rules
                     .iter()
@@ -261,7 +261,7 @@ impl<'a> TranslationContext<'a> {
             Err(errs) => errs,
         };
         match &sst.node {
-            SurfaceSyntaxTree::Lexer { rules } => {
+            SurfaceSyntaxTree::LexerDef { rules } => {
                 for i in rules
                     .iter()
                     .filter_map(|x| match &x.node {

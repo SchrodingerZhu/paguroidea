@@ -17,7 +17,12 @@ use crate::{
     utilities::{unreachable_branch, Symbol},
 };
 
-use super::{lexical::LexerDatabase, Error, SurfaceSyntaxTree, WithSpan};
+use super::{
+    lexical::LexerDatabase,
+    Error,
+    SurfaceSyntaxTree::{self, *},
+    WithSpan,
+};
 
 pub struct Parser<'src, 'a> {
     pub entrypoint: Symbol<'src>,
@@ -34,11 +39,7 @@ impl<'src, 'a> Parser<'src, 'a> {
     }
 
     pub fn is_active(&self, tag: &Tag<'src>) -> bool {
-        !tag.is_versioned()
-            && self
-                .bindings
-                .get(&tag.symbol())
-                .map_or(false, |x| x.active)
+        !tag.is_versioned() && self.bindings.get(&tag.symbol()).map_or(false, |x| x.active)
     }
 }
 
@@ -59,7 +60,7 @@ pub fn construct_parser<'src, 'a>(
         Err(errs) => errs,
     };
     match &sst.node {
-        SurfaceSyntaxTree::Parser { entrypoint, rules } => {
+        ParserDef { entrypoint, rules } => {
             let entrypoint = match parser.symbol_table.get(entrypoint.span.as_str()) {
                 Some(entrypoint) => entrypoint.clone(),
                 None => {
@@ -73,7 +74,7 @@ pub fn construct_parser<'src, 'a>(
             };
             for i in rules.iter() {
                 match &i.node {
-                    SurfaceSyntaxTree::ParserDefinition { active, name, expr } => {
+                    ParserDefinition { active, name, expr } => {
                         match construct_core_syntax_tree(&parser, expr) {
                             Ok(expr) => {
                                 let name = unsafe {
@@ -96,7 +97,7 @@ pub fn construct_parser<'src, 'a>(
                             Err(e) => errs.extend(e),
                         }
                     }
-                    SurfaceSyntaxTree::ParserFixpoint { active, name, expr } => {
+                    ParserFixpoint { active, name, expr } => {
                         match construct_core_syntax_tree(&parser, expr) {
                             Ok(expr) => {
                                 let name = unsafe {
@@ -139,11 +140,10 @@ fn construct_symbol_table<'src>(
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
 ) -> Result<(), Vec<WithSpan<'src, Error<'src>>>> {
     match &sst.node {
-        SurfaceSyntaxTree::Parser { rules, .. } => {
+        ParserDef { rules, .. } => {
             for rule in rules {
                 match &rule.node {
-                    SurfaceSyntaxTree::ParserFixpoint { name, .. }
-                    | SurfaceSyntaxTree::ParserDefinition { name, .. } => {
+                    ParserFixpoint { name, .. } | ParserDefinition { name, .. } => {
                         if let Some(previous) = context.symbol_table.get(name.span.as_str()) {
                             return Err(span_errors!(
                                 MultipleDefinition,
@@ -177,7 +177,7 @@ fn construct_core_syntax_tree<'src, 'a>(
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
 ) -> Result<TermPtr<'src, 'a>, Vec<WithSpan<'src, Error<'src>>>> {
     match &sst.node {
-        SurfaceSyntaxTree::ParserAlternative { lhs, rhs } => {
+        ParserAlternative { lhs, rhs } => {
             let lhs = construct_core_syntax_tree(translation_context, lhs);
             let rhs = construct_core_syntax_tree(translation_context, rhs);
             match (lhs, rhs) {
@@ -193,7 +193,7 @@ fn construct_core_syntax_tree<'src, 'a>(
                 }
             }
         }
-        SurfaceSyntaxTree::ParserSequence { lhs, rhs } => {
+        ParserSequence { lhs, rhs } => {
             let lhs = construct_core_syntax_tree(translation_context, lhs);
             let rhs = construct_core_syntax_tree(translation_context, rhs);
             match (lhs, rhs) {
@@ -209,7 +209,7 @@ fn construct_core_syntax_tree<'src, 'a>(
                 }
             }
         }
-        SurfaceSyntaxTree::ParserStar { inner } => {
+        ParserStar { inner } => {
             let symbol = Symbol::new(sst.span.as_str());
             let inner = construct_core_syntax_tree(translation_context, inner)?;
             // \x . (i ~ x) | epsilon
@@ -238,7 +238,7 @@ fn construct_core_syntax_tree<'src, 'a>(
                 node: crate::core_syntax::Term::Fix(symbol, alternative),
             }))
         }
-        SurfaceSyntaxTree::ParserPlus { inner } => {
+        ParserPlus { inner } => {
             let symbol = Symbol::new(sst.span.as_str());
             let inner = construct_core_syntax_tree(translation_context, inner)?;
             // \x . (i ~ x) | epsilon
@@ -271,7 +271,7 @@ fn construct_core_syntax_tree<'src, 'a>(
                 node: crate::core_syntax::Term::Sequence(inner, fixpoint),
             }))
         }
-        SurfaceSyntaxTree::ParserOptional { inner } => {
+        ParserOptional { inner } => {
             let inner = construct_core_syntax_tree(translation_context, inner)?;
             Ok(translation_context.arena.alloc(WithSpan {
                 span: sst.span,
@@ -284,15 +284,15 @@ fn construct_core_syntax_tree<'src, 'a>(
                 ),
             }))
         }
-        SurfaceSyntaxTree::Bottom => Ok(translation_context.arena.alloc(WithSpan {
+        Bottom => Ok(translation_context.arena.alloc(WithSpan {
             span: sst.span,
             node: crate::core_syntax::Term::Bottom,
         })),
-        SurfaceSyntaxTree::Empty => Ok(translation_context.arena.alloc(WithSpan {
+        Empty => Ok(translation_context.arena.alloc(WithSpan {
             span: sst.span,
             node: crate::core_syntax::Term::Epsilon,
         })),
-        SurfaceSyntaxTree::ParserRuleRef { name } => {
+        ParserRuleRef { name } => {
             let name = name.span.as_str();
             match translation_context.symbol_table.get(name) {
                 Some(target) => Ok(translation_context.arena.alloc(WithSpan {
@@ -302,7 +302,7 @@ fn construct_core_syntax_tree<'src, 'a>(
                 None => Err(span_errors!(UndefinedParserRuleReference, sst.span, name,)),
             }
         }
-        SurfaceSyntaxTree::LexicalRuleRef { name } => {
+        LexicalRuleRef { name } => {
             let name = name.span.as_str();
             match translation_context.lexer_database.symbol_table.get(name) {
                 Some(target) => Ok(translation_context.arena.alloc(WithSpan {
