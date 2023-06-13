@@ -19,7 +19,7 @@ use utilities::unreachable_branch;
 
 use crate::{
     core_syntax::TermArena,
-    frontend::syntax::construct_parser,
+    frontend::{syntax::construct_parser, FrontendErrors},
     nf::{
         fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
         NormalForms, Tag, TagAssigner,
@@ -35,7 +35,7 @@ pub mod utilities;
 
 pub enum Error<'src> {
     GrammarDefinitionError(GrammarDefinitionError<'src>),
-    FrontendErrors(Vec<WithSpan<'src, frontend::Error<'src>>>),
+    FrontendErrors(FrontendErrors<'src>),
     TypeErrors(Vec<type_system::TypeError<'src>>),
 }
 

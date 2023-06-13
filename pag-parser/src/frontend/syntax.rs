@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     lexical::LexerDatabase,
-    Error,
+    FrontendResult,
     SurfaceSyntaxTree::{self, *},
     WithSpan,
 };
@@ -47,7 +47,7 @@ pub fn construct_parser<'src, 'a>(
     arena: &'a TermArena<'src, 'a>,
     lexer_database: LexerDatabase<'src>,
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
-) -> Result<Parser<'src, 'a>, Vec<WithSpan<'src, Error<'src>>>> {
+) -> FrontendResult<'src, Parser<'src, 'a>> {
     let mut parser = Parser {
         entrypoint: Symbol::new(""),
         arena,
@@ -138,7 +138,7 @@ pub fn construct_parser<'src, 'a>(
 fn construct_symbol_table<'src>(
     context: &mut Parser<'src, '_>,
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
-) -> Result<(), Vec<WithSpan<'src, Error<'src>>>> {
+) -> FrontendResult<'src, ()> {
     match &sst.node {
         ParserDef { rules, .. } => {
             for rule in rules {
@@ -175,7 +175,7 @@ fn construct_symbol_table<'src>(
 fn construct_core_syntax_tree<'src, 'a>(
     translation_context: &Parser<'src, 'a>,
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
-) -> Result<TermPtr<'src, 'a>, Vec<WithSpan<'src, Error<'src>>>> {
+) -> FrontendResult<'src, TermPtr<'src, 'a>> {
     match &sst.node {
         ParserAlternative { lhs, rhs } => {
             let lhs = construct_core_syntax_tree(translation_context, lhs);

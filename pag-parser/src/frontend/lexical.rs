@@ -14,9 +14,7 @@ use crate::frontend::unicode;
 use crate::span_errors;
 use crate::{utilities::unreachable_branch, utilities::Symbol};
 
-use super::{SurfaceSyntaxTree, WithSpan};
-
-use super::Error;
+use super::{Error, FrontendErrors, FrontendResult, SurfaceSyntaxTree, WithSpan};
 
 type SpanRegexTree<'a> = WithSpan<'a, Rc<RegexTree>>;
 
@@ -32,12 +30,11 @@ pub struct LexerDatabase<'a> {
 }
 
 impl<'a> LexerDatabase<'a> {
-    pub fn new(
-        sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-    ) -> Result<Self, Vec<WithSpan<'a, Error<'a>>>> {
+    pub fn new(sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>) -> FrontendResult<'a, Self> {
         TranslationContext::create_database(sst)
     }
-    pub fn nullability_check(&self) -> Vec<WithSpan<'a, Error<'a>>> {
+
+    pub fn nullability_check(&self) -> FrontendErrors<'a> {
         let mut errors = Vec::new();
         for (sym, rule) in self.entries.iter() {
             if rule.rule.node.is_nullable() {
@@ -59,9 +56,9 @@ struct TranslationContext<'a> {
 fn construct_regex_tree<'a, F>(
     sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
     reference_handler: &F,
-) -> Result<Rc<RegexTree>, Vec<WithSpan<'a, Error<'a>>>>
+) -> FrontendResult<'a, Rc<RegexTree>>
 where
-    F: Fn(WithSpan<'a, ()>) -> Result<Rc<RegexTree>, Vec<WithSpan<'a, Error<'a>>>>,
+    F: Fn(WithSpan<'a, ()>) -> FrontendResult<'a, Rc<RegexTree>>,
 {
     match &sst.node {
         SurfaceSyntaxTree::LexicalAlternative { lhs, rhs } => {
@@ -137,10 +134,8 @@ where
 
 fn construct_definition<'a>(
     sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-) -> Result<(&'a str, SpanRegexTree<'a>), Vec<WithSpan<'a, Error<'a>>>> {
-    fn reference_handler(
-        name: WithSpan<'_, ()>,
-    ) -> Result<Rc<RegexTree>, Vec<WithSpan<'_, Error<'_>>>> {
+) -> FrontendResult<'a, (&'a str, SpanRegexTree<'a>)> {
+    fn reference_handler(name: WithSpan<()>) -> FrontendResult<Rc<RegexTree>> {
         Err(span_errors!(
             InvalidLexicalReference,
             name.span,
@@ -169,7 +164,7 @@ fn construct_definition<'a>(
 fn construct_lexical_rule<'a>(
     definitions: &HashMap<&'a str, SpanRegexTree<'a>>,
     sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-) -> Result<(Symbol<'a>, SpanRegexTree<'a>), Vec<WithSpan<'a, Error<'a>>>> {
+) -> FrontendResult<'a, (Symbol<'a>, SpanRegexTree<'a>)> {
     let reference_handler = |name: WithSpan<'a, ()>| match definitions.get(name.span.as_str()) {
         Some(x) => Ok(x.node.clone()),
         _ => Err(span_errors!(
@@ -208,10 +203,11 @@ impl<'a> TranslationContext<'a> {
             },
         }
     }
+
     fn populate_definitions(
         &mut self,
         sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-    ) -> Result<(), Vec<WithSpan<'a, Error<'a>>>> {
+    ) -> FrontendResult<'a, ()> {
         match &sst.node {
             SurfaceSyntaxTree::LexerDef { rules } => {
                 let mut error = Vec::new();
@@ -252,9 +248,10 @@ impl<'a> TranslationContext<'a> {
             )),
         }
     }
+
     fn create_database(
         sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-    ) -> Result<LexerDatabase<'a>, Vec<WithSpan<'a, Error<'a>>>> {
+    ) -> FrontendResult<'a, LexerDatabase<'a>> {
         let mut ctx = Self::new();
         let mut errs = match ctx.populate_definitions(sst) {
             Ok(_) => Vec::new(),
