@@ -14,7 +14,7 @@ use crate::{
     nf::Tag,
     span_errors,
     type_system::{type_check, TypeError},
-    utilities::{unreachable_branch, Symbol},
+    utilities::{merge_results, unreachable_branch, Symbol},
 };
 
 use super::{
@@ -146,28 +146,12 @@ fn construct_core_syntax_tree<'src, 'a>(
         ParserAlternative { lhs, rhs } => {
             let lhs = construct_core_syntax_tree(context, lhs);
             let rhs = construct_core_syntax_tree(context, rhs);
-            match (lhs, rhs) {
-                (Ok(lhs), Ok(rhs)) => Ok(spanned(Term::Alternative(lhs, rhs))),
-                (Ok(_), Err(rhs)) => Err(rhs),
-                (Err(lhs), Ok(_)) => Err(lhs),
-                (Err(mut lhs), Err(rhs)) => {
-                    lhs.extend(rhs);
-                    Err(lhs)
-                }
-            }
+            merge_results(lhs, rhs, |l, r| &*spanned(Term::Alternative(l, r)))
         }
         ParserSequence { lhs, rhs } => {
             let lhs = construct_core_syntax_tree(context, lhs);
             let rhs = construct_core_syntax_tree(context, rhs);
-            match (lhs, rhs) {
-                (Ok(lhs), Ok(rhs)) => Ok(spanned(Term::Sequence(lhs, rhs))),
-                (Ok(_), Err(rhs)) => Err(rhs),
-                (Err(lhs), Ok(_)) => Err(lhs),
-                (Err(mut lhs), Err(rhs)) => {
-                    lhs.extend(rhs);
-                    Err(lhs)
-                }
-            }
+            merge_results(lhs, rhs, |l, r| &*spanned(Term::Sequence(l, r)))
         }
         ParserStar { inner } => {
             let symbol = Symbol::new(sst.span.as_str());

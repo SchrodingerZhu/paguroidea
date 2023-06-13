@@ -11,7 +11,7 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use crate::span_errors;
+use crate::{span_errors, utilities::merge_results};
 
 use super::{
     FrontendResult,
@@ -41,15 +41,7 @@ fn find_neighbors<'src>(
         ParserAlternative { lhs, rhs } | ParserSequence { lhs, rhs } => {
             let lhs = find_neighbors(lhs, neighbors, id_table);
             let rhs = find_neighbors(rhs, neighbors, id_table);
-            match (lhs, rhs) {
-                (Ok(_), Ok(_)) => Ok(()),
-                (Ok(_), Err(rhs)) => Err(rhs),
-                (Err(lhs), Ok(_)) => Err(lhs),
-                (Err(mut lhs), Err(rhs)) => {
-                    lhs.extend(rhs);
-                    Err(lhs)
-                }
-            }
+            merge_results(lhs, rhs, |_, _| ())
         }
         ParserStar { inner } | ParserPlus { inner } | ParserOptional { inner } => {
             find_neighbors(inner, neighbors, id_table)

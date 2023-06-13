@@ -12,7 +12,7 @@ use pag_lexer::{normalization::normalize, regex_tree::RegexTree};
 
 use crate::frontend::unicode;
 use crate::span_errors;
-use crate::{utilities::unreachable_branch, utilities::Symbol};
+use crate::utilities::{merge_results, unreachable_branch, Symbol};
 
 use super::{
     Error, FrontendErrors, FrontendResult,
@@ -68,28 +68,12 @@ where
         LexicalAlternative { lhs, rhs } => {
             let lhs = construct_regex_tree(lhs, reference_handler);
             let rhs = construct_regex_tree(rhs, reference_handler);
-            match (lhs, rhs) {
-                (Err(mut lhs), Err(rhs)) => {
-                    lhs.extend(rhs.into_iter());
-                    Err(lhs)
-                }
-                (Err(lhs), _) => Err(lhs),
-                (_, Err(rhs)) => Err(rhs),
-                (Ok(lhs), Ok(rhs)) => Ok(Rc::new(RegexTree::Union(lhs, rhs))),
-            }
+            merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Union(l, r)))
         }
         LexicalSequence { lhs, rhs } => {
             let lhs = construct_regex_tree(lhs, reference_handler);
             let rhs = construct_regex_tree(rhs, reference_handler);
-            match (lhs, rhs) {
-                (Err(mut lhs), Err(rhs)) => {
-                    lhs.extend(rhs.into_iter());
-                    Err(lhs)
-                }
-                (Err(lhs), _) => Err(lhs),
-                (_, Err(rhs)) => Err(rhs),
-                (Ok(lhs), Ok(rhs)) => Ok(Rc::new(RegexTree::Concat(lhs, rhs))),
-            }
+            merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Concat(l, r)))
         }
         LexicalStar { inner } => {
             let inner = construct_regex_tree(inner, reference_handler)?;
