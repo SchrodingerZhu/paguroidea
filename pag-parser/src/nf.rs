@@ -326,7 +326,7 @@ pub fn merge_inactive_rules<'src, 'nf>(
     let mut table: HashMap<&[&NormalForm], Tag<'src>> = HashMap::new();
     let mut rename = Vec::new();
     for (tag, nf) in nfs.entries.iter() {
-        if !tag.is_versioned() && parser.bindings.get(&tag.symbol).map_or(false, |x| x.active) {
+        if parser.is_active(tag) {
             continue;
         }
         table
