@@ -15,30 +15,25 @@ use std::vec;
 
 use crate::type_system::context::TypeContext;
 use pest::Span;
-use thiserror::Error;
 
 use self::binding_proxy::BindingProxy;
 
 pub mod binding_proxy;
 pub mod context;
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum TypeError<'a> {
-    #[error("sequential uniqueness requirement volidation")]
     SequentialUniquenessViolation {
         lhs: (Span<'a>, Type<'a>),
         rhs: (Span<'a>, Type<'a>),
         total: Span<'a>,
     },
-    #[error("disjunctive uniqueness requirement volidation")]
     DisjunctiveUniquenessViolation {
         lhs: (Span<'a>, Type<'a>),
         rhs: (Span<'a>, Type<'a>),
         total: Span<'a>,
     },
-    #[error("unguarded fixpoint {0}")]
     UnguardedFixpoint(Symbol<'a>, Span<'a>),
-    #[error("unresolved reference {0}")]
     UnresolvedReference(Symbol<'a>, Span<'a>),
 }
 
