@@ -14,7 +14,11 @@ use crate::frontend::unicode;
 use crate::span_errors;
 use crate::{utilities::unreachable_branch, utilities::Symbol};
 
-use super::{Error, FrontendErrors, FrontendResult, SurfaceSyntaxTree, WithSpan};
+use super::{
+    Error, FrontendErrors, FrontendResult,
+    SurfaceSyntaxTree::{self, *},
+    WithSpan,
+};
 
 type SpanRegexTree<'a> = WithSpan<'a, Rc<RegexTree>>;
 
@@ -61,7 +65,7 @@ where
     F: Fn(WithSpan<'a, ()>) -> FrontendResult<'a, Rc<RegexTree>>,
 {
     match &sst.node {
-        SurfaceSyntaxTree::LexicalAlternative { lhs, rhs } => {
+        LexicalAlternative { lhs, rhs } => {
             let lhs = construct_regex_tree(lhs, reference_handler);
             let rhs = construct_regex_tree(rhs, reference_handler);
             match (lhs, rhs) {
@@ -74,7 +78,7 @@ where
                 (Ok(lhs), Ok(rhs)) => Ok(Rc::new(RegexTree::Union(lhs, rhs))),
             }
         }
-        SurfaceSyntaxTree::LexicalSequence { lhs, rhs } => {
+        LexicalSequence { lhs, rhs } => {
             let lhs = construct_regex_tree(lhs, reference_handler);
             let rhs = construct_regex_tree(rhs, reference_handler);
             match (lhs, rhs) {
@@ -87,30 +91,30 @@ where
                 (Ok(lhs), Ok(rhs)) => Ok(Rc::new(RegexTree::Concat(lhs, rhs))),
             }
         }
-        SurfaceSyntaxTree::LexicalStar { inner } => {
+        LexicalStar { inner } => {
             let inner = construct_regex_tree(inner, reference_handler)?;
             Ok(Rc::new(RegexTree::KleeneClosure(inner)))
         }
-        SurfaceSyntaxTree::LexicalPlus { inner } => {
+        LexicalPlus { inner } => {
             let inner = construct_regex_tree(inner, reference_handler)?;
             Ok(Rc::new(RegexTree::Concat(
                 inner.clone(),
                 Rc::new(RegexTree::KleeneClosure(inner)),
             )))
         }
-        SurfaceSyntaxTree::LexicalOptional { inner } => {
+        LexicalOptional { inner } => {
             let inner = construct_regex_tree(inner, reference_handler)?;
             Ok(Rc::new(RegexTree::Union(
                 inner,
                 Rc::new(RegexTree::Epsilon),
             )))
         }
-        SurfaceSyntaxTree::LexicalNot { inner } => {
+        LexicalNot { inner } => {
             let inner = construct_regex_tree(inner, reference_handler)?;
             Ok(Rc::new(RegexTree::Complement(inner)))
         }
-        SurfaceSyntaxTree::RangeLit { start, end } => Ok(unicode::encode_range(*start, *end)),
-        SurfaceSyntaxTree::StringLit(x) => {
+        RangeLit { start, end } => Ok(unicode::encode_range(*start, *end)),
+        StringLit(x) => {
             if x.is_empty() {
                 Ok(Rc::new(RegexTree::Epsilon))
             } else {
@@ -121,10 +125,10 @@ where
                 }))
             }
         }
-        SurfaceSyntaxTree::Bottom => Ok(Rc::new(RegexTree::Bottom)),
-        SurfaceSyntaxTree::Empty => Ok(Rc::new(RegexTree::Epsilon)),
-        SurfaceSyntaxTree::CharLit { value } => Ok(unicode::encode_char(value.node)),
-        SurfaceSyntaxTree::LexicalRuleRef { name } => reference_handler(name.clone()),
+        Bottom => Ok(Rc::new(RegexTree::Bottom)),
+        Empty => Ok(Rc::new(RegexTree::Epsilon)),
+        CharLit { value } => Ok(unicode::encode_char(value.node)),
+        LexicalRuleRef { name } => reference_handler(name.clone()),
         _ => unreachable_branch!(
             "lexer translation is called with unsupported code: {}",
             sst.span.as_str()
@@ -143,7 +147,7 @@ fn construct_definition<'a>(
         ))
     }
     match &sst.node {
-        SurfaceSyntaxTree::LexicalDefinition { name, expr } => {
+        LexicalDefinition { name, expr } => {
             let name = name.span.as_str();
             let tree = construct_regex_tree(expr, &reference_handler)?;
             Ok((
@@ -174,7 +178,7 @@ fn construct_lexical_rule<'a>(
         )),
     };
     match &sst.node {
-        SurfaceSyntaxTree::LexicalToken { name, expr, .. } => {
+        LexicalToken { name, expr, .. } => {
             let name = name.span.as_str();
             let tree = construct_regex_tree(expr, &reference_handler)?;
             Ok((
@@ -209,11 +213,11 @@ impl<'a> TranslationContext<'a> {
         sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
     ) -> FrontendResult<'a, ()> {
         match &sst.node {
-            SurfaceSyntaxTree::LexerDef { rules } => {
+            LexerDef { rules } => {
                 let mut error = Vec::new();
                 for i in rules
                     .iter()
-                    .filter(|x| matches!(x.node, SurfaceSyntaxTree::LexicalDefinition { .. }))
+                    .filter(|x| matches!(x.node, LexicalDefinition { .. }))
                     .map(construct_definition)
                 {
                     match i {
@@ -258,11 +262,11 @@ impl<'a> TranslationContext<'a> {
             Err(errs) => errs,
         };
         match &sst.node {
-            SurfaceSyntaxTree::LexerDef { rules } => {
+            LexerDef { rules } => {
                 for i in rules
                     .iter()
                     .filter_map(|x| match &x.node {
-                        SurfaceSyntaxTree::LexicalToken { active, .. } => Some((*active, x)),
+                        LexicalToken { active, .. } => Some((*active, x)),
                         _ => None,
                     })
                     .map(|(active, sst)| (active, construct_lexical_rule(&ctx.definitions, sst)))
