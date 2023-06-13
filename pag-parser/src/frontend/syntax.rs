@@ -59,78 +59,64 @@ pub fn construct_parser<'src, 'a>(
         Ok(()) => vec![],
         Err(errs) => errs,
     };
-    match &sst.node {
-        ParserDef { entrypoint, rules } => {
-            let entrypoint = match parser.symbol_table.get(entrypoint.span.as_str()) {
-                Some(entrypoint) => entrypoint.clone(),
-                None => {
-                    errs.extend(span_errors!(
-                        UndefinedParserRuleReference,
-                        entrypoint.span,
-                        entrypoint.span.as_str(),
-                    ));
-                    return Err(errs);
-                }
-            };
-            for i in rules.iter() {
-                match &i.node {
-                    ParserDefinition { active, name, expr } => {
-                        match construct_core_syntax_tree(&parser, expr) {
-                            Ok(expr) => {
-                                let name = unsafe {
-                                    parser
-                                        .symbol_table
-                                        .get(name.span.as_str())
-                                        .unwrap_unchecked()
-                                };
-                                parser.bindings.insert(
-                                    name.node,
-                                    ParserRule {
-                                        active: *active,
-                                        term: parser.arena.alloc(WithSpan {
-                                            span: i.span,
-                                            node: expr.node.clone(),
-                                        }),
-                                    },
-                                );
-                            }
-                            Err(e) => errs.extend(e),
-                        }
-                    }
-                    ParserFixpoint { active, name, expr } => {
-                        match construct_core_syntax_tree(&parser, expr) {
-                            Ok(expr) => {
-                                let name = unsafe {
-                                    parser
-                                        .symbol_table
-                                        .get(name.span.as_str())
-                                        .unwrap_unchecked()
-                                };
-                                parser.bindings.insert(
-                                    name.node,
-                                    ParserRule {
-                                        active: *active,
-                                        term: parser.arena.alloc(WithSpan {
-                                            span: i.span,
-                                            node: Term::Fix(name.node, expr),
-                                        }),
-                                    },
-                                );
-                            }
-                            Err(e) => errs.extend(e),
-                        }
-                    }
-                    _ => unreachable_branch!(
-                        "parser rule should only contains definitions or fixpoints"
-                    ),
-                }
-            }
-            parser.entrypoint = entrypoint.node;
-            if !errs.is_empty() {
-                return Err(errs);
-            }
+    let ParserDef { entrypoint, rules } = &sst.node else {
+        unreachable_branch!("sst should be a parser")
+    };
+    let entrypoint = match parser.symbol_table.get(entrypoint.span.as_str()) {
+        Some(entrypoint) => entrypoint,
+        None => {
+            errs.extend(span_errors!(
+                UndefinedParserRuleReference,
+                entrypoint.span,
+                entrypoint.span.as_str(),
+            ));
+            return Err(errs);
         }
-        _ => unreachable_branch!("sst should be a parser"),
+    };
+    for rule in rules {
+        match &rule.node {
+            ParserDefinition { active, name, expr } => {
+                match construct_core_syntax_tree(&parser, expr) {
+                    Ok(expr) => {
+                        let symbol = Symbol::new(name.span.as_str());
+                        parser.bindings.insert(
+                            symbol,
+                            ParserRule {
+                                active: *active,
+                                term: parser.arena.alloc(WithSpan {
+                                    span: rule.span,
+                                    node: expr.node.clone(),
+                                }),
+                            },
+                        );
+                    }
+                    Err(e) => errs.extend(e),
+                }
+            }
+            ParserFixpoint { active, name, expr } => {
+                match construct_core_syntax_tree(&parser, expr) {
+                    Ok(expr) => {
+                        let symbol = Symbol::new(name.span.as_str());
+                        parser.bindings.insert(
+                            symbol,
+                            ParserRule {
+                                active: *active,
+                                term: parser.arena.alloc(WithSpan {
+                                    span: rule.span,
+                                    node: Term::Fix(symbol, expr),
+                                }),
+                            },
+                        );
+                    }
+                    Err(e) => errs.extend(e),
+                }
+            }
+            _ => unreachable_branch!("parser rule should only contains definitions or fixpoints"),
+        }
+    }
+    parser.entrypoint = entrypoint.node;
+    if !errs.is_empty() {
+        return Err(errs);
     }
     Ok(parser)
 }
@@ -139,51 +125,47 @@ fn construct_symbol_table<'src>(
     context: &mut Parser<'src, '_>,
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
 ) -> FrontendResult<'src, ()> {
-    match &sst.node {
-        ParserDef { rules, .. } => {
-            for rule in rules {
-                match &rule.node {
-                    ParserFixpoint { name, .. } | ParserDefinition { name, .. } => {
-                        if let Some(previous) = context.symbol_table.get(name.span.as_str()) {
-                            return Err(span_errors!(
-                                MultipleDefinition,
-                                name.span,
-                                name.span.as_str(),
-                                previous.span,
-                            ));
-                        } else {
-                            context.symbol_table.insert(
-                                name.span.as_str(),
-                                WithSpan {
-                                    span: name.span,
-                                    node: Symbol::new(name.span.as_str()),
-                                },
-                            );
-                        }
-                    }
-                    _ => unreachable_branch!(
-                        "parser rule should only contains definitions or fixpoints"
-                    ),
+    let ParserDef { rules, .. } = &sst.node else {
+        unreachable_branch!("sst should be a parser")
+    };
+    for rule in rules {
+        match &rule.node {
+            ParserFixpoint { name, .. } | ParserDefinition { name, .. } => {
+                if let Some(previous) = context.symbol_table.get(name.span.as_str()) {
+                    return Err(span_errors!(
+                        MultipleDefinition,
+                        name.span,
+                        name.span.as_str(),
+                        previous.span,
+                    ));
+                } else {
+                    context.symbol_table.insert(
+                        name.span.as_str(),
+                        WithSpan {
+                            span: name.span,
+                            node: Symbol::new(name.span.as_str()),
+                        },
+                    );
                 }
             }
-            Ok(())
+            _ => unreachable_branch!("parser rule should only contains definitions or fixpoints"),
         }
-        _ => unreachable_branch!("sst should be a parser"),
     }
+    Ok(())
 }
 
 fn construct_core_syntax_tree<'src, 'a>(
-    translation_context: &Parser<'src, 'a>,
+    context: &Parser<'src, 'a>,
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
 ) -> FrontendResult<'src, TermPtr<'src, 'a>> {
     match &sst.node {
         ParserAlternative { lhs, rhs } => {
-            let lhs = construct_core_syntax_tree(translation_context, lhs);
-            let rhs = construct_core_syntax_tree(translation_context, rhs);
+            let lhs = construct_core_syntax_tree(context, lhs);
+            let rhs = construct_core_syntax_tree(context, rhs);
             match (lhs, rhs) {
-                (Ok(lhs), Ok(rhs)) => Ok(translation_context.arena.alloc(WithSpan {
+                (Ok(lhs), Ok(rhs)) => Ok(context.arena.alloc(WithSpan {
                     span: sst.span,
-                    node: crate::core_syntax::Term::Alternative(lhs, rhs),
+                    node: Term::Alternative(lhs, rhs),
                 })),
                 (Ok(_), Err(rhs)) => Err(rhs),
                 (Err(lhs), Ok(_)) => Err(lhs),
@@ -194,12 +176,12 @@ fn construct_core_syntax_tree<'src, 'a>(
             }
         }
         ParserSequence { lhs, rhs } => {
-            let lhs = construct_core_syntax_tree(translation_context, lhs);
-            let rhs = construct_core_syntax_tree(translation_context, rhs);
+            let lhs = construct_core_syntax_tree(context, lhs);
+            let rhs = construct_core_syntax_tree(context, rhs);
             match (lhs, rhs) {
-                (Ok(lhs), Ok(rhs)) => Ok(translation_context.arena.alloc(WithSpan {
+                (Ok(lhs), Ok(rhs)) => Ok(context.arena.alloc(WithSpan {
                     span: sst.span,
-                    node: crate::core_syntax::Term::Sequence(lhs, rhs),
+                    node: Term::Sequence(lhs, rhs),
                 })),
                 (Ok(_), Err(rhs)) => Err(rhs),
                 (Err(lhs), Ok(_)) => Err(lhs),
@@ -211,103 +193,103 @@ fn construct_core_syntax_tree<'src, 'a>(
         }
         ParserStar { inner } => {
             let symbol = Symbol::new(sst.span.as_str());
-            let inner = construct_core_syntax_tree(translation_context, inner)?;
+            let inner = construct_core_syntax_tree(context, inner)?;
             // \x . (i ~ x) | epsilon
-            let sequence = translation_context.arena.alloc(WithSpan {
+            let sequence = context.arena.alloc(WithSpan {
                 span: sst.span,
-                node: crate::core_syntax::Term::Sequence(
+                node: Term::Sequence(
                     inner,
-                    translation_context.arena.alloc(WithSpan {
+                    context.arena.alloc(WithSpan {
                         span: sst.span,
-                        node: crate::core_syntax::Term::ParserRef(symbol),
+                        node: Term::ParserRef(symbol),
                     }),
                 ),
             });
-            let alternative = translation_context.arena.alloc(WithSpan {
+            let alternative = context.arena.alloc(WithSpan {
                 span: sst.span,
-                node: crate::core_syntax::Term::Alternative(
+                node: Term::Alternative(
                     sequence,
-                    translation_context.arena.alloc(WithSpan {
+                    context.arena.alloc(WithSpan {
                         span: sst.span,
-                        node: crate::core_syntax::Term::Epsilon,
+                        node: Term::Epsilon,
                     }),
                 ),
             });
-            Ok(translation_context.arena.alloc(WithSpan {
+            Ok(context.arena.alloc(WithSpan {
                 span: sst.span,
-                node: crate::core_syntax::Term::Fix(symbol, alternative),
+                node: Term::Fix(symbol, alternative),
             }))
         }
         ParserPlus { inner } => {
             let symbol = Symbol::new(sst.span.as_str());
-            let inner = construct_core_syntax_tree(translation_context, inner)?;
+            let inner = construct_core_syntax_tree(context, inner)?;
             // \x . (i ~ x) | epsilon
-            let sequence = translation_context.arena.alloc(WithSpan {
+            let sequence = context.arena.alloc(WithSpan {
                 span: sst.span,
-                node: crate::core_syntax::Term::Sequence(
+                node: Term::Sequence(
                     inner,
-                    translation_context.arena.alloc(WithSpan {
+                    context.arena.alloc(WithSpan {
                         span: sst.span,
-                        node: crate::core_syntax::Term::ParserRef(symbol),
+                        node: Term::ParserRef(symbol),
                     }),
                 ),
             });
-            let alternative = translation_context.arena.alloc(WithSpan {
+            let alternative = context.arena.alloc(WithSpan {
                 span: sst.span,
-                node: crate::core_syntax::Term::Alternative(
+                node: Term::Alternative(
                     sequence,
-                    translation_context.arena.alloc(WithSpan {
+                    context.arena.alloc(WithSpan {
                         span: sst.span,
-                        node: crate::core_syntax::Term::Epsilon,
+                        node: Term::Epsilon,
                     }),
                 ),
             });
-            let fixpoint = translation_context.arena.alloc(WithSpan {
+            let fixpoint = context.arena.alloc(WithSpan {
                 span: sst.span,
-                node: crate::core_syntax::Term::Fix(symbol, alternative),
+                node: Term::Fix(symbol, alternative),
             });
-            Ok(translation_context.arena.alloc(WithSpan {
+            Ok(context.arena.alloc(WithSpan {
                 span: sst.span,
-                node: crate::core_syntax::Term::Sequence(inner, fixpoint),
+                node: Term::Sequence(inner, fixpoint),
             }))
         }
         ParserOptional { inner } => {
-            let inner = construct_core_syntax_tree(translation_context, inner)?;
-            Ok(translation_context.arena.alloc(WithSpan {
+            let inner = construct_core_syntax_tree(context, inner)?;
+            Ok(context.arena.alloc(WithSpan {
                 span: sst.span,
-                node: crate::core_syntax::Term::Alternative(
+                node: Term::Alternative(
                     inner,
-                    translation_context.arena.alloc(WithSpan {
+                    context.arena.alloc(WithSpan {
                         span: sst.span,
-                        node: crate::core_syntax::Term::Epsilon,
+                        node: Term::Epsilon,
                     }),
                 ),
             }))
         }
-        Bottom => Ok(translation_context.arena.alloc(WithSpan {
+        Bottom => Ok(context.arena.alloc(WithSpan {
             span: sst.span,
-            node: crate::core_syntax::Term::Bottom,
+            node: Term::Bottom,
         })),
-        Empty => Ok(translation_context.arena.alloc(WithSpan {
+        Empty => Ok(context.arena.alloc(WithSpan {
             span: sst.span,
-            node: crate::core_syntax::Term::Epsilon,
+            node: Term::Epsilon,
         })),
         ParserRuleRef { name } => {
             let name = name.span.as_str();
-            match translation_context.symbol_table.get(name) {
-                Some(target) => Ok(translation_context.arena.alloc(WithSpan {
+            match context.symbol_table.get(name) {
+                Some(target) => Ok(context.arena.alloc(WithSpan {
                     span: sst.span,
-                    node: crate::core_syntax::Term::ParserRef(target.node),
+                    node: Term::ParserRef(target.node),
                 })),
                 None => Err(span_errors!(UndefinedParserRuleReference, sst.span, name,)),
             }
         }
         LexicalRuleRef { name } => {
             let name = name.span.as_str();
-            match translation_context.lexer_database.symbol_table.get(name) {
-                Some(target) => Ok(translation_context.arena.alloc(WithSpan {
+            match context.lexer_database.symbol_table.get(name) {
+                Some(target) => Ok(context.arena.alloc(WithSpan {
                     span: sst.span,
-                    node: crate::core_syntax::Term::LexerRef(*target),
+                    node: Term::LexerRef(*target),
                 })),
                 None => Err(span_errors!(UndefinedLexicalReference, sst.span, name,)),
             }
