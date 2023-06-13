@@ -19,7 +19,7 @@ use utilities::unreachable_branch;
 
 use crate::{
     core_syntax::TermArena,
-    frontend::{syntax::construct_parser, FrontendErrors},
+    frontend::{fixpoint::infer_fixpoints, syntax::construct_parser, FrontendErrors},
     nf::{
         fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
         NormalForms, Tag, TagAssigner,
@@ -230,59 +230,60 @@ impl<'src> Error<'src> {
 }
 
 pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
-    let sst = frontend::parse(input)?;
-    match &sst.node {
-        frontend::SurfaceSyntaxTree::Grammar { lexer, parser } => {
-            let lexer_database = LexerDatabase::new(lexer)?;
-            let nullable_errors = lexer_database.nullability_check();
-            if !nullable_errors.is_empty() {
-                return Err(Error::FrontendErrors(nullable_errors));
-            }
-            let term_arena = TermArena::new();
-            let parser = construct_parser(&term_arena, lexer_database, parser)?;
-            let type_errs = parser.type_check();
-            if !type_errs.is_empty() {
-                return Err(Error::TypeErrors(type_errs));
-            }
-            let nf_arena = Arena::new();
-            let mut nfs = NormalForms::new();
-            let mut assigner = TagAssigner::new();
-            for (i, rule) in parser.bindings.iter() {
-                semi_normalize(
-                    &rule.term.node,
-                    Tag::new(*i),
-                    &nf_arena,
-                    &mut nfs,
-                    &mut assigner,
-                    &parser,
-                );
-            }
-            fully_normalize(&nf_arena, &mut nfs);
-            merge_inactive_rules(&mut nfs, &parser, &nf_arena);
-            remove_unreachable_rules(&mut nfs, &parser);
-            let parser_routines = fusion_parser(&nfs, &parser);
-            let entrypoint = format_ident!("parse_{}", parser.entrypoint.name());
-            Ok(quote::quote! {
-                #![allow(
-                    non_snake_case,
-                    dead_code,
-                    non_camel_case_types,
-                    unused_variables,
-                    unused_mut,
-                    unreachable_patterns,
-                    unreachable_code,
-                    unused_assignments,
-                    clippy::identity_op,
-                    clippy::single_match,
-                    clippy::never_loop,
-                    clippy::match_single_binding,
-                )]
-                #parser_routines
-                pub fn parse(input: &str) -> Result<ParserTree, Error> {
-                    #entrypoint(input, 0)
-                }
-            })
-        }
-        _ => unreachable_branch!("the entrypoint of sst can only be Grammar"),
+    use frontend::SurfaceSyntaxTree::Grammar;
+
+    let mut sst = frontend::parse(input)?;
+    let Grammar { lexer, parser } = &mut sst.node else {
+        unreachable_branch!("the entrypoint of sst can only be Grammar")
+    };
+    infer_fixpoints(parser);
+    let lexer_database = LexerDatabase::new(lexer)?;
+    let nullable_errors = lexer_database.nullability_check();
+    if !nullable_errors.is_empty() {
+        return Err(Error::FrontendErrors(nullable_errors));
     }
+    let term_arena = TermArena::new();
+    let parser = construct_parser(&term_arena, lexer_database, parser)?;
+    let type_errs = parser.type_check();
+    if !type_errs.is_empty() {
+        return Err(Error::TypeErrors(type_errs));
+    }
+    let nf_arena = Arena::new();
+    let mut nfs = NormalForms::new();
+    let mut assigner = TagAssigner::new();
+    for (i, rule) in parser.bindings.iter() {
+        semi_normalize(
+            &rule.term.node,
+            Tag::new(*i),
+            &nf_arena,
+            &mut nfs,
+            &mut assigner,
+            &parser,
+        );
+    }
+    fully_normalize(&nf_arena, &mut nfs);
+    merge_inactive_rules(&mut nfs, &parser, &nf_arena);
+    remove_unreachable_rules(&mut nfs, &parser);
+    let parser_routines = fusion_parser(&nfs, &parser);
+    let entrypoint = format_ident!("parse_{}", parser.entrypoint.name());
+    Ok(quote::quote! {
+        #![allow(
+            non_snake_case,
+            dead_code,
+            non_camel_case_types,
+            unused_variables,
+            unused_mut,
+            unreachable_patterns,
+            unreachable_code,
+            unused_assignments,
+            clippy::identity_op,
+            clippy::single_match,
+            clippy::never_loop,
+            clippy::match_single_binding,
+        )]
+        #parser_routines
+        pub fn parse(input: &str) -> Result<ParserTree, Error> {
+            #entrypoint(input, 0)
+        }
+    })
 }

@@ -19,22 +19,22 @@ lexer {
 }
 
 parser json {
-    active definition attribute = 
+    active attribute =
         string ~ COLON ~ value;
 
-    active definition string = STRING;
-    active definition number = NUMBER;
-    active definition lit_true = TRUE;
-    active definition lit_false = FALSE;
-    active definition lit_null = NULL;
+    active string = STRING;
+    active number = NUMBER;
+    active lit_true = TRUE;
+    active lit_false = FALSE;
+    active lit_null = NULL;
 
-    active fixpoint object = 
+    active object =
         LBRACKET ~ (attribute ~ (COMMA ~ attribute)*)? ~ RBRACKET;
-    
-    active fixpoint array = 
+
+    active array =
         LSQUARE ~ (value ~ (COMMA ~ value)*)? ~ RSQUARE;
 
-    silent fixpoint value = string | number | array | object | lit_true | lit_false | lit_null;
+    silent value = string | number | array | object | lit_true | lit_false | lit_null;
 
-    active definition json = value;
+    active json = value;
 }

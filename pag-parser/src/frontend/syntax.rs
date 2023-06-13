@@ -50,7 +50,7 @@ pub fn construct_parser<'src, 'a>(
 ) -> FrontendResult<'src, Parser<'src, 'a>> {
     let symbol_set = construct_symbol_table(sst)?;
     let ParserDef { entrypoint, rules } = &sst.node else {
-        unreachable_branch!("sst should be a parser")
+        unreachable_branch!("sst should be a parser definition")
     };
     let entrypoint = match symbol_set.get(entrypoint.span.as_str()) {
         Some(name) => Symbol::new(name),
@@ -71,44 +71,34 @@ pub fn construct_parser<'src, 'a>(
     };
     let mut errs = Vec::new();
     for rule in rules {
-        match &rule.node {
-            ParserDefinition { active, name, expr } => {
-                match construct_core_syntax_tree(&parser, expr) {
-                    Ok(expr) => {
-                        let symbol = Symbol::new(name.span.as_str());
-                        parser.bindings.insert(
-                            symbol,
-                            ParserRule {
-                                active: *active,
-                                term: parser.arena.alloc(WithSpan {
-                                    span: rule.span,
-                                    node: expr.node.clone(),
-                                }),
-                            },
-                        );
-                    }
-                    Err(e) => errs.extend(e),
-                }
+        let ParserRuleDef {
+            active,
+            fixpoint,
+            name,
+            expr,
+        } = &rule.node else {
+            unreachable_branch!("parser should only contain rule definitions")
+        };
+        match construct_core_syntax_tree(&parser, expr) {
+            Ok(expr) => {
+                let symbol = Symbol::new(name.span.as_str());
+                let node = if *fixpoint {
+                    Term::Fix(symbol, expr)
+                } else {
+                    expr.node.clone()
+                };
+                parser.bindings.insert(
+                    symbol,
+                    ParserRule {
+                        active: *active,
+                        term: parser.arena.alloc(WithSpan {
+                            span: rule.span,
+                            node,
+                        }),
+                    },
+                );
             }
-            ParserFixpoint { active, name, expr } => {
-                match construct_core_syntax_tree(&parser, expr) {
-                    Ok(expr) => {
-                        let symbol = Symbol::new(name.span.as_str());
-                        parser.bindings.insert(
-                            symbol,
-                            ParserRule {
-                                active: *active,
-                                term: parser.arena.alloc(WithSpan {
-                                    span: rule.span,
-                                    node: Term::Fix(symbol, expr),
-                                }),
-                            },
-                        );
-                    }
-                    Err(e) => errs.extend(e),
-                }
-            }
-            _ => unreachable_branch!("parser rule should only contains definitions or fixpoints"),
+            Err(e) => errs.extend(e),
         }
     }
     if !errs.is_empty() {
@@ -121,24 +111,22 @@ fn construct_symbol_table<'src>(
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
 ) -> FrontendResult<'src, HashSet<&'src str>> {
     let ParserDef { rules, .. } = &sst.node else {
-        unreachable_branch!("sst should be a parser")
+        unreachable_branch!("sst should be a parser definition")
     };
     let mut symbol_table = HashMap::with_capacity(rules.len());
     for rule in rules {
-        match &rule.node {
-            ParserFixpoint { name, .. } | ParserDefinition { name, .. } => {
-                if let Some(previous) = symbol_table.get(name.span.as_str()) {
-                    return Err(span_errors!(
-                        MultipleDefinition,
-                        name.span,
-                        name.span.as_str(),
-                        *previous,
-                    ));
-                } else {
-                    symbol_table.insert(name.span.as_str(), name.span);
-                }
-            }
-            _ => unreachable_branch!("parser rule should only contains definitions or fixpoints"),
+        let ParserRuleDef { name, .. } = &rule.node else {
+            unreachable_branch!("parser should only contain rule definitions")
+        };
+        if let Some(previous) = symbol_table.get(name.span.as_str()) {
+            return Err(span_errors!(
+                MultipleDefinition,
+                name.span,
+                name.span.as_str(),
+                *previous,
+            ));
+        } else {
+            symbol_table.insert(name.span.as_str(), name.span);
         }
     }
     Ok(symbol_table.keys().copied().collect())

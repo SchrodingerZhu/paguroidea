@@ -7,9 +7,8 @@ lexer = _{ "lexer" }
 parser = _{ "parser" }
 empty = { "_" }
 definition = _{ "definition" }
-fixpoint = _{ "fixpoint" }
 
-KEYWORD = { any | active | empty | bottom | silent | token | lexer | parser | definition | fixpoint }
+KEYWORD = { any | active | empty | bottom | silent | token | lexer | parser | definition }
 
 /// A newline character.
 newline = _{ "\n" | "\r\n" }
@@ -72,12 +71,8 @@ silent_token = { silent ~ token ~ token_id ~ "=" ~ lexical_expr }
 
 // parser definition
 parser_def = { parser ~ parser_id ~ "{" ~ parser_rules ~ "}" }
-parser_rules = { ( (parser_fixpoint | parser_definition) ~ ";")+ }
-parser_definition = _{ active_parser_definition | silent_parser_definition }
-active_parser_definition = { active ~ definition ~ parser_id ~ "=" ~ parser_expr }
-silent_parser_definition = { silent ~ definition ~ parser_id ~ "=" ~ parser_expr }
-parser_fixpoint = _{ active_parser_fixpoint | silent_parser_fixpoint }
-active_parser_fixpoint = { active ~ fixpoint ~ parser_id ~ "=" ~ parser_expr }
-silent_parser_fixpoint = { silent ~ fixpoint ~ parser_id ~ "=" ~ parser_expr }
+parser_rules = { ( (active_parser_rule | silent_parser_rule) ~ ";")+ }
+active_parser_rule = { active ~ parser_id ~ "=" ~ parser_expr }
+silent_parser_rule = { silent ~ parser_id ~ "=" ~ parser_expr }
 
 grammar = { SOI ~ lexer_def ~ parser_def ~ EOI }
