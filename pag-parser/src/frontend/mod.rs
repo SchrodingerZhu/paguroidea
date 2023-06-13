@@ -35,12 +35,15 @@ pub enum Error<'a> {
     UndefinedParserRuleReference(&'a str),
 }
 
+pub type FrontendErrors<'a> = Vec<WithSpan<'a, Error<'a>>>;
+pub type FrontendResult<'a, T> = Result<T, FrontendErrors<'a>>;
+
 #[macro_export]
 macro_rules! span_errors {
     ($ekind:ident, $span:expr, $($params:expr,)*) => {
         vec![WithSpan {
             span: $span,
-            node: Error::$ekind ($($params,)*)
+            node: $crate::frontend::Error::$ekind($($params,)*)
         }]
     };
 }
