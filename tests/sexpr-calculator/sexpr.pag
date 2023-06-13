@@ -9,15 +9,15 @@ lexer {
 }
 
 parser sexpr {
-    active fixpoint compound
+    active compound
         = LPAREN ~ op ~ (compound | int)* ~ RPAREN;
 
-    active definition op
+    active op
         = PLUS | MULT;
 
-    active definition int
+    active int
         = INT;
 
-    active definition sexpr
+    active sexpr
         = compound | int;
 }

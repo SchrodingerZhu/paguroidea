@@ -6,12 +6,12 @@ lexer {
 }
 
 parser csv {
-    active definition csv
+    active csv
         = record+;
 
-    active definition field
-        = TEXT | STRING; 
+    active field
+        = TEXT | STRING;
 
-    active definition record
-        = field ~ (COMMA ~ field)* ~ CRLF;  
+    active record
+        = field ~ (COMMA ~ field)* ~ CRLF;
 }

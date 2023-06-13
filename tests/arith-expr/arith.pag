@@ -10,18 +10,18 @@ lexer {
 }
 
 parser expr {
-    active fixpoint expr
+    active expr
         = mult ~ (PLUS ~ mult)*;
 
-    active fixpoint mult
+    active mult
         = primary ~ (MULT ~ primary)*;
 
-    silent fixpoint primary
+    silent primary
         = special | int | LPAREN ~ expr ~ RPAREN;
 
-    active definition int
+    active int
         = INT;
 
-    active definition special
+    active special
         = SPECIAL;
 }

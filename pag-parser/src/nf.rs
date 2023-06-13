@@ -229,6 +229,11 @@ pub fn semi_normalize_helper<'src, 'p, 'nf>(
         Term::Fix(var, body) => {
             let body_tag = Tag::new(*var);
             semi_normalize_helper(&body.node, body_tag, arena, nfs, assigner, parser);
+            // copy tag for fixpoint
+            if tag != body_tag {
+                let body_nf = nfs.entries.get(&body_tag).unwrap();
+                nfs.entries.insert(tag, body_nf.clone());
+            }
             body_tag
         }
         Term::ParserRef(x) => {

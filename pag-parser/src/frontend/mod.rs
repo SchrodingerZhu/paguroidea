@@ -6,6 +6,7 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
+pub mod fixpoint;
 pub mod lexical;
 pub mod syntax;
 pub mod unicode;
@@ -276,13 +277,9 @@ pub enum SurfaceSyntaxTree<'a> {
     },
     Bottom,
     Empty,
-    ParserDefinition {
+    ParserRuleDef {
         active: bool,
-        name: WithSpan<'a, ()>,
-        expr: SpanBox<'a, Self>,
-    },
-    ParserFixpoint {
-        active: bool,
+        fixpoint: bool,
         name: WithSpan<'a, ()>,
         expr: SpanBox<'a, Self>,
     },
@@ -418,8 +415,8 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                         .collect::<Result<_, _>>()?;
                     ParserDef { entrypoint, rules }
                 }
-                Rule::active_parser_definition | Rule::silent_parser_definition => {
-                    let active = matches!(primary.as_rule(), Rule::active_parser_definition);
+                Rule::active_parser_rule | Rule::silent_parser_rule => {
+                    let active = matches!(primary.as_rule(), Rule::active_parser_rule);
                     let mut definition = primary.into_inner();
                     let name = definition
                         .next()
@@ -432,23 +429,12 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                         node: (),
                     };
                     let expr = Box::new(parse_surface_syntax(expr.into_inner(), pratt, src)?);
-                    ParserDefinition { active, name, expr }
-                }
-                Rule::active_parser_fixpoint | Rule::silent_parser_fixpoint => {
-                    let active = matches!(primary.as_rule(), Rule::active_parser_fixpoint);
-                    let mut fixpoint = primary.into_inner();
-                    let name = fixpoint
-                        .next()
-                        .ok_or_else(|| unexpected_eoi!("name for token rule"))?;
-                    let expr = fixpoint
-                        .next()
-                        .ok_or_else(|| unexpected_eoi!("expr for token rule"))?;
-                    let name = WithSpan {
-                        span: name.as_span(),
-                        node: (),
-                    };
-                    let expr = Box::new(parse_surface_syntax(expr.into_inner(), pratt, src)?);
-                    ParserFixpoint { active, name, expr }
+                    ParserRuleDef {
+                        active,
+                        fixpoint: false,
+                        name,
+                        expr,
+                    }
                 }
                 Rule::parser_expr => return parse_surface_syntax(primary.into_inner(), pratt, src),
                 _ => {
@@ -519,7 +505,7 @@ mod test {
 
     use crate::{
         core_syntax::TermArena,
-        frontend::lexical::LexerDatabase,
+        frontend::{fixpoint::infer_fixpoints, lexical::LexerDatabase},
         fusion::fusion_parser,
         nf::{
             fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
@@ -537,22 +523,32 @@ mod test {
 
         dbg!(size_of::<NormalForm>());
         let pairs = GrammarParser::parse(Rule::grammar, TEST).unwrap();
-        let tree = parse_surface_syntax(pairs, &PRATT_PARSER, TEST).unwrap();
-        let Grammar { lexer, parser } = &tree.node else { unreachable!() };
+        let mut tree = parse_surface_syntax(pairs, &PRATT_PARSER, TEST).unwrap();
+        let Grammar { lexer, parser } = &mut tree.node else { unreachable!() };
 
+        println!("\n---------< infer fixpoints >----------");
+        infer_fixpoints(parser);
+        let ParserDef { rules, .. } = &mut parser.node else { unreachable!() };
+        for rule in rules {
+            let ParserRuleDef { name, fixpoint, .. } = &rule.node else { unreachable!() };
+            println!("{}: fixpoint = {fixpoint}", name.span.as_str());
+        }
+
+        println!("\n---------< lexer database >----------");
         let database = LexerDatabase::new(lexer).unwrap();
         for (i, rule) in database.entries.iter() {
             println!("{i} ::= {}, active = {}", rule.rule, rule.active)
         }
-        println!("----");
 
+        println!("\n---------< parser bindings >----------");
         let arena = TermArena::new();
         let parser = construct_parser(&arena, database, parser).unwrap();
         for (i, rule) in parser.bindings.iter() {
             println!("{i} ::= {}, active = {}", rule.term, rule.active)
         }
-        let errs = parser.type_check();
 
+        println!("\n---------< type check >----------");
+        let errs = parser.type_check();
         let liberr = crate::Error::from(errs);
         let reports = liberr.to_reports("example.pag");
         let mut src = ("example.pag", Source::from(TEST));
@@ -560,12 +556,12 @@ mod test {
             i.eprint(&mut src).unwrap();
         }
         assert!(reports.is_empty());
-        println!("----");
 
         let nf_arena = Arena::new();
         let mut nfs = NormalForms::new();
         let mut assigner = TagAssigner::new();
 
+        println!("\n---------< semi normalize >----------");
         for (i, rule) in parser.bindings.iter() {
             semi_normalize(
                 &rule.term.node,
@@ -578,23 +574,23 @@ mod test {
         }
         dbg!(nfs_size(&nfs));
         println!("{}", nfs);
-        println!("----");
 
+        println!("\n---------< fully normalize >----------");
         fully_normalize(&nf_arena, &mut nfs);
         dbg!(nfs_size(&nfs));
         println!("{}", nfs);
-        println!("----");
 
+        println!("\n---------< merge inactive rules >----------");
         merge_inactive_rules(&mut nfs, &parser, &nf_arena);
         dbg!(nfs_size(&nfs));
         println!("{}", nfs);
-        println!("----");
 
+        println!("\n---------< remove unreachable rules >----------");
         remove_unreachable_rules(&mut nfs, &parser);
         dbg!(nfs_size(&nfs));
         println!("{}", nfs);
-        println!("----");
 
+        println!("\n---------< fusion parser >----------");
         let parser = fusion_parser(&nfs, &parser);
         println!("{}", parser);
         //println!("{:#?}", tree)
