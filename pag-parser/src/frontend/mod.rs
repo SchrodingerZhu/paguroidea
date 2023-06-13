@@ -6,6 +6,10 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
+pub mod lexical;
+pub mod syntax;
+pub mod unicode;
+
 use lazy_static::lazy_static;
 use pest::iterators::Pair;
 use pest::pratt_parser::{Op, PrattParser};
@@ -13,16 +17,13 @@ use pest::Span;
 use std::borrow::Cow;
 use std::fmt::Display;
 use thiserror::Error;
-pub mod lexical;
-pub mod syntax;
-pub mod unicode;
 
 #[derive(Error, Debug, Clone)]
 pub enum Error<'a> {
     #[error("internal logic error: {0}")]
     InternalLogicalError(Cow<'a, str>),
     #[error("multiple definition for {0}")]
-    MultipleDefinition(&'a str, pest::Span<'a>),
+    MultipleDefinition(&'a str, Span<'a>),
     #[error("lexical reference {0} is not allowed within lexical definitions")]
     InvalidLexicalReference(&'a str),
     #[error("multiple skip rule detected, previous definition is {0}")]

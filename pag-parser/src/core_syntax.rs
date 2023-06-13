@@ -19,7 +19,6 @@ pub enum Term<'src, 'a> {
     LexerRef(Symbol<'src>),
     Bottom,
     Alternative(&'a WithSpan<'src, Self>, &'a WithSpan<'src, Self>),
-    // Star(&'a WithSpan<'src, Self>),
     Fix(Symbol<'src>, &'a WithSpan<'src, Self>),
     ParserRef(Symbol<'src>),
 }
@@ -45,27 +44,13 @@ pub type BindingContext<'src, 'a> = HashMap<Symbol<'src>, ParserRule<'src, 'a>>;
 impl<'src, 'a> Display for Term<'src, 'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Term::Epsilon => {
-                write!(f, "ε")
-            }
-            Term::Sequence(x, y) => {
-                write!(f, "({x} ~ {y})",)
-            }
-            Term::LexerRef(x) => {
-                write!(f, "{x}")
-            }
-            Term::Bottom => {
-                write!(f, "⊥")
-            }
-            Term::Alternative(x, y) => {
-                write!(f, "({x} | {y})")
-            }
-            Term::Fix(x, y) => {
-                write!(f, "(μ {x} . {y})",)
-            }
-            Term::ParserRef(x) => {
-                write!(f, "{x}")
-            }
+            Term::Epsilon => write!(f, "ε"),
+            Term::Sequence(x, y) => write!(f, "({x} ~ {y})"),
+            Term::LexerRef(x) => write!(f, "{x}"),
+            Term::Bottom => write!(f, "⊥"),
+            Term::Alternative(x, y) => write!(f, "({x} | {y})"),
+            Term::Fix(x, y) => write!(f, "(μ {x} . {y})"),
+            Term::ParserRef(x) => write!(f, "{x}"),
         }
     }
 }
