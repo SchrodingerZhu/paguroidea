@@ -289,7 +289,7 @@ pub enum SurfaceSyntaxTree<'a> {
     },
 }
 
-fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
+fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
     pairs: I,
     pratt: &PrattParser<Rule>,
     src: &'a str,
@@ -302,8 +302,8 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                     let mut grammar = primary.into_inner();
                     let lexer = grammar.next().ok_or_else(|| unexpected_eoi!("lexer"))?;
                     let parser = grammar.next().ok_or_else(|| unexpected_eoi!("parser"))?;
-                    let lexer = parse_surface_syntax([lexer].into_iter(), pratt, src)?;
-                    let parser = parse_surface_syntax([parser].into_iter(), pratt, src)?;
+                    let lexer = parse_surface_syntax([lexer], pratt, src)?;
+                    let parser = parse_surface_syntax([parser], pratt, src)?;
                     Ok(WithSpan {
                         span,
                         node: SurfaceSyntaxTree::Grammar {
@@ -319,7 +319,7 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                         .ok_or_else(|| unexpected_eoi!("lexer rules"))?;
                     let rules = lexer_rules.into_inner().fold(Ok(Vec::new()), |acc, rule| {
                         acc.and_then(|vec| {
-                            parse_surface_syntax([rule].into_iter(), pratt, src).map(|rule| {
+                            parse_surface_syntax([rule], pratt, src).map(|rule| {
                                 let mut vec = vec;
                                 vec.push(rule);
                                 vec
@@ -468,7 +468,7 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                         .into_inner()
                         .fold(Ok(Vec::new()), |acc, rule| {
                             acc.and_then(|vec| {
-                                parse_surface_syntax([rule].into_iter(), pratt, src).map(|rule| {
+                                parse_surface_syntax([rule], pratt, src).map(|rule| {
                                     let mut vec = vec;
                                     vec.push(rule);
                                     vec
@@ -631,7 +631,7 @@ fn parse_surface_syntax<'a, I: Iterator<Item = Pair<'a, Rule>>>(
                 _ => unreachable_branch!("Operator {} is not a postfix operator", op.as_str()),
             }
         })
-        .parse(pairs)
+        .parse(pairs.into_iter())
 }
 
 pub fn parse(input: &str) -> Result<WithSpan<SurfaceSyntaxTree>, crate::Error> {
