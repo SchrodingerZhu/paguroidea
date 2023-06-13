@@ -17,18 +17,20 @@ categories = ["parsing"]
 repository = "https://github.com/SchrodingerZhu/paguroidea"
 description = "Parser-lexer fusion generator (parser generator)"
 rust-version = "1.71.0"
-authors = ["Schrodinger ZHU Yifan <i@zhuyi.fan>", "QuarticCat <QuarticCat@pm.me>"]
+authors = [
+    "Schrodinger ZHU Yifan <i@zhuyi.fan>",
+    "QuarticCat <QuarticCat@pm.me>",
+]
 documentation = "https://docs.rs/pag-parser/"
 readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pest = { version = "2.5.7", features = [ "std", "memchr" ] }
+pest = { version = "2.5.7", features = ["std", "memchr"] }
 pest_derive = "2.5.7"
 smallvec = { version = "1", features = ["union"] }
-thiserror = "1"
 lazy_static = "1"
-pag-lexer = { version = "0.1.0-alpha.1", path = "../pag-lexer"}
+pag-lexer = { version = "0.1.0-alpha.1", path = "../pag-lexer" }
 typed-arena = "2.0.2"
 quote = "1.0.26"
 proc-macro2 = "1.0"

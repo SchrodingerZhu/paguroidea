@@ -17,23 +17,15 @@ use pest::pratt_parser::{Op, PrattParser};
 use pest::Span;
 use std::borrow::Cow;
 use std::fmt::Display;
-use thiserror::Error;
 
-#[derive(Error, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum Error<'a> {
-    #[error("internal logic error: {0}")]
     InternalLogicalError(Cow<'a, str>),
-    #[error("multiple definition for {0}")]
     MultipleDefinition(&'a str, Span<'a>),
-    #[error("lexical reference {0} is not allowed within lexical definitions")]
     InvalidLexicalReference(&'a str),
-    #[error("multiple skip rule detected, previous definition is {0}")]
     MultipleSkippingRule(&'a str),
-    #[error("nullable token {0} is prohibited")]
     NullableToken(&'a str),
-    #[error("lexical {0} is undefined")]
     UndefinedLexicalReference(&'a str),
-    #[error("parser rule {0} is undefined")]
     UndefinedParserRuleReference(&'a str),
 }
 
@@ -103,15 +95,11 @@ use crate::utilities::unreachable_branch;
 pub use grammar::Parser as GrammarParser;
 pub use grammar::Rule;
 
-#[derive(Debug, Error, Clone)]
+#[derive(Debug, Clone)]
 pub enum GrammarDefinitionError<'a> {
-    #[error("grammar definition error: {0}")]
-    SyntaxError(#[from] Box<pest::error::Error<Rule>>),
-    #[error("failed to parse {}: {message}", span.as_str())]
+    SyntaxError(Box<pest::error::Error<Rule>>),
     FormatError { span: Span<'a>, message: String },
-    #[error("{0}")]
     ParserLogicError(Cow<'a, str>),
-    #[error("unexpected end of input, expecting {0}")]
     UnexpectedEOI(Cow<'a, str>),
 }
 
