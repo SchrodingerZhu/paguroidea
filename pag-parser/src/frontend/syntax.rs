@@ -196,14 +196,14 @@ fn construct_core_syntax_tree<'src, 'a>(
             let name = name.span.as_str();
             match context.symbol_set.get(name) {
                 Some(target) => Ok(spanned(Term::ParserRef(Symbol::new(target)))),
-                None => Err(span_errors!(UndefinedParserRuleReference, sst.span, name,)),
+                None => Err(span_errors!(UndefinedParserRuleReference, sst.span, name)),
             }
         }
         LexicalRuleRef { name } => {
             let name = name.span.as_str();
             match context.lexer_database.symbol_table.get(name) {
                 Some(target) => Ok(spanned(Term::LexerRef(*target))),
-                None => Err(span_errors!(UndefinedLexicalReference, sst.span, name,)),
+                None => Err(span_errors!(UndefinedLexicalReference, sst.span, name)),
             }
         }
         _ => unreachable_branch!(

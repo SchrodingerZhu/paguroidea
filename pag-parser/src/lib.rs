@@ -9,8 +9,6 @@
 use std::ops::Range;
 
 use ariadne::{Color, Report, ReportKind, Source};
-use frontend::{lexical::LexerDatabase, GrammarDefinitionError, WithSpan};
-
 use fusion::fusion_parser;
 use proc_macro2::TokenStream;
 use quote::format_ident;
@@ -19,7 +17,10 @@ use utilities::unreachable_branch;
 
 use crate::{
     core_syntax::TermArena,
-    frontend::{fixpoint::infer_fixpoints, syntax::construct_parser, FrontendErrors},
+    frontend::{
+        fixpoint::infer_fixpoints, lexical::LexerDatabase, syntax::construct_parser,
+        FrontendErrors, GrammarDefinitionError,
+    },
     nf::{
         fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
         NormalForms, Tag, TagAssigner,
@@ -39,8 +40,8 @@ pub enum Error<'src> {
     TypeErrors(Vec<type_system::TypeError<'src>>),
 }
 
-impl<'src> From<Vec<WithSpan<'src, frontend::Error<'src>>>> for Error<'src> {
-    fn from(errors: Vec<WithSpan<'src, frontend::Error<'src>>>) -> Self {
+impl<'src> From<FrontendErrors<'src>> for Error<'src> {
+    fn from(errors: FrontendErrors<'src>) -> Self {
         Error::FrontendErrors(errors)
     }
 }
@@ -236,7 +237,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
     let Grammar { lexer, parser } = &mut sst.node else {
         unreachable_branch!("the entrypoint of sst can only be Grammar")
     };
-    infer_fixpoints(parser);
+    infer_fixpoints(parser)?;
     let lexer_database = LexerDatabase::new(lexer)?;
     let nullable_errors = lexer_database.nullability_check();
     if !nullable_errors.is_empty() {
