@@ -34,7 +34,7 @@ pub type FrontendResult<'a, T> = Result<T, FrontendErrors<'a>>;
 
 #[macro_export]
 macro_rules! span_errors {
-    ($ekind:ident, $span:expr, $($params:expr,)*) => {
+    ($ekind:ident, $span:expr, $($params:expr),* $(,)?) => {
         vec![WithSpan {
             span: $span,
             node: $crate::frontend::Error::$ekind($($params,)*)
@@ -515,7 +515,7 @@ mod test {
         let Grammar { lexer, parser } = &mut tree.node else { unreachable!() };
 
         println!("\n---------< infer fixpoints >----------");
-        infer_fixpoints(parser);
+        infer_fixpoints(parser).unwrap();
         let ParserDef { rules, .. } = &mut parser.node else { unreachable!() };
         for rule in rules {
             let ParserRuleDef { name, fixpoint, .. } = &rule.node else { unreachable!() };
