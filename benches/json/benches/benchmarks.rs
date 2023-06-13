@@ -5,8 +5,11 @@ use pest::Parser;
 use pest_json::Rule;
 use serde_json::Value;
 
-mod lalrlexer;
-pub use lalrlexer::{Pvalue, Token};
+mod lalr_def;
+pub use lalr_def::{Pvalue, Token};
+
+#[global_allocator]
+static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
 lalrpop_mod!(lalrpop_json, "/benches/json.rs");
 lalrpop_mod!(lalrpop_logos_json, "/benches/json_logos.rs");
@@ -18,9 +21,6 @@ mod pest_json {
     #[grammar = "benches/json.pest"]
     pub struct JSONParser;
 }
-
-#[global_allocator]
-static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut g = c.benchmark_group("random-json");
