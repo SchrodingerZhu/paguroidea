@@ -52,11 +52,27 @@ impl<'a> std::fmt::Display for Symbol<'a> {
 
 impl<'a, 'b> PartialEq<Symbol<'b>> for Symbol<'a> {
     fn eq(&self, other: &Symbol<'b>) -> bool {
-        self.0.as_ptr().eq(&other.0.as_ptr()) && self.0.len() == other.0.len()
+        self.0.as_ptr() == other.0.as_ptr() && self.0.len() == other.0.len()
     }
 }
 
 impl<'a> Eq for Symbol<'a> {}
+
+pub fn merge_results<T, E, U>(
+    a: Result<T, Vec<E>>,
+    b: Result<T, Vec<E>>,
+    f: impl FnOnce(T, T) -> U,
+) -> Result<U, Vec<E>> {
+    match (a, b) {
+        (Ok(a), Ok(b)) => Ok(f(a, b)),
+        (Ok(_), Err(b)) => Err(b),
+        (Err(a), Ok(_)) => Err(a),
+        (Err(mut a), Err(b)) => {
+            a.extend(b);
+            Err(a)
+        }
+    }
+}
 
 macro_rules! unreachable_branch {
     ($($arg:tt)*) => {
