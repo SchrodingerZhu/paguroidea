@@ -11,13 +11,9 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use crate::frontend::{
-    FrontendResult,
-    SurfaceSyntaxTree::{self, *},
-    WithSpan,
-};
-use crate::span_errors;
-use crate::utilities::merge_results;
+use crate::core_syntax::{BindingContext, Term, TermArena, TermPtr};
+use crate::frontend::WithSpan;
+use crate::utilities::Symbol;
 
 type NodeId = u32;
 
@@ -33,72 +29,47 @@ struct Node {
 type Graph = Vec<Node>;
 
 fn find_neighbors<'src>(
-    sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
+    term: TermPtr,
     neighbors: &mut Vec<NodeId>,
-    id_table: &HashMap<&'src str, NodeId>,
-) -> FrontendResult<'src, ()> {
-    match &sst.node {
-        ParserAlternative { lhs, rhs } | ParserSequence { lhs, rhs } => {
-            let lhs = find_neighbors(lhs, neighbors, id_table);
-            let rhs = find_neighbors(rhs, neighbors, id_table);
-            merge_results(lhs, rhs, |_, _| ())
+    sym_to_id: &HashMap<Symbol<'src>, NodeId>,
+) {
+    match &term.node {
+        Term::Sequence(lhs, rhs) | Term::Alternative(lhs, rhs) => {
+            find_neighbors(lhs, neighbors, sym_to_id);
+            find_neighbors(rhs, neighbors, sym_to_id);
         }
-        ParserStar { inner } | ParserPlus { inner } | ParserOptional { inner } => {
-            find_neighbors(inner, neighbors, id_table)
+        Term::Fix(_, expr) => find_neighbors(expr, neighbors, sym_to_id),
+        Term::ParserRef(symbol) => {
+            // unexisted IDs refer to implicit fixpoints
+            let Some(&id) = sym_to_id.get(symbol) else { return };
+            neighbors.push(id);
         }
-        ParserRuleRef { name } => match id_table.get(name.span.as_str()) {
-            Some(id) => Ok(neighbors.push(*id)),
-            None => Err(span_errors!(
-                UndefinedParserRuleReference,
-                name.span,
-                name.span.as_str(),
-            )),
-        },
-        _ => Ok(()),
+        _ => {}
     }
 }
 
-fn construct_graph<'src>(
-    sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
-) -> FrontendResult<'src, Graph> {
-    let ParserDef { rules, .. } = &sst.node else {
-        unreachable!("sst should be a parser definition")
-    };
-
-    let mut id_table = HashMap::new();
-    for (idx, rule) in rules.iter().enumerate() {
-        let ParserRuleDef { name, .. } = &rule.node else {
-            unreachable!("parser should only contain rule definitions")
-        };
-        id_table.insert(name.span.as_str(), idx as NodeId);
+fn construct_graph<'src, 'a>(binding_ctx: &BindingContext<'src, 'a>) -> (Graph, Vec<Symbol<'src>>) {
+    let mut sym_to_id = HashMap::new();
+    let mut id_to_sym = Vec::new();
+    for (idx, (symbol, _)) in binding_ctx.iter().enumerate() {
+        sym_to_id.insert(*symbol, idx as NodeId);
+        id_to_sym.push(*symbol);
     }
 
     let mut nodes = Vec::new();
-    let mut errs = Vec::new();
-    for (idx, rule) in rules.iter().enumerate() {
-        let ParserRuleDef { expr, .. } = &rule.node else {
-            unreachable!("parser should only contain rule definitions")
-        };
+    for (idx, (_, rule)) in binding_ctx.iter().enumerate() {
         let mut neighbors = Vec::new();
-        match find_neighbors(&expr, &mut neighbors, &id_table) {
-            Ok(_) => {
-                // self reference
-                let in_cycle = Cell::new(neighbors.iter().find(|id| **id == idx as _).is_some());
-                nodes.push(Node {
-                    neighbors,
-                    in_cycle,
-                    ..Node::default()
-                })
-            }
-            Err(e) => errs.extend(e),
-        }
+        find_neighbors(rule.term, &mut neighbors, &sym_to_id);
+        // self reference
+        let in_cycle = Cell::new(neighbors.iter().find(|id| **id == idx as _).is_some());
+        nodes.push(Node {
+            neighbors,
+            in_cycle,
+            ..Node::default()
+        })
     }
 
-    if !errs.is_empty() {
-        return Err(errs);
-    }
-
-    Ok(nodes)
+    (nodes, id_to_sym)
 }
 
 fn tarjan(node_id: NodeId, dfn_cnt: &mut u32, stack: &mut Vec<NodeId>, graph: &Graph) {
@@ -139,10 +110,11 @@ fn tarjan(node_id: NodeId, dfn_cnt: &mut u32, stack: &mut Vec<NodeId>, graph: &G
     }
 }
 
-pub fn infer_fixpoints<'src>(
-    sst: &mut WithSpan<'src, SurfaceSyntaxTree<'src>>,
-) -> FrontendResult<'src, ()> {
-    let graph = construct_graph(sst)?;
+pub fn infer_fixpoints<'src, 'a>(
+    arena: &'a TermArena<'src, 'a>,
+    binding_ctx: &mut BindingContext<'src, 'a>,
+) {
+    let (graph, id_to_sym) = construct_graph(binding_ctx);
     let mut dfn_cnt = 0;
     let mut stack = Vec::new();
 
@@ -152,16 +124,14 @@ pub fn infer_fixpoints<'src>(
         }
     }
 
-    let ParserDef { rules, .. } = &mut sst.node else {
-        unreachable!("sst should be a parser definition")
-    };
     for (id, node) in graph.iter().enumerate() {
         if node.in_cycle.get() {
-            let ParserRuleDef { fixpoint, .. } = &mut rules[id].node else {
-                unreachable!("parser should only contain rule definitions")
-            };
-            *fixpoint = true;
+            let symbol = id_to_sym[id];
+            let rule = binding_ctx.get_mut(&symbol).unwrap();
+            rule.term = arena.alloc(WithSpan {
+                span: rule.term.span,
+                node: Term::Fix(symbol, rule.term),
+            })
         }
     }
-    Ok(())
 }

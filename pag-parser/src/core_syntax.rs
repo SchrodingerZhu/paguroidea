@@ -8,7 +8,8 @@
 
 use std::{collections::HashMap, fmt::Display};
 
-use crate::{frontend::WithSpan, utilities::Symbol};
+use crate::frontend::WithSpan;
+use crate::utilities::Symbol;
 
 #[derive(Debug, Clone)]
 pub enum Term<'src, 'a> {
