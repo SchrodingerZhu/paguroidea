@@ -91,18 +91,14 @@ fn generate_error() -> TokenStream {
 
         impl core::fmt::Display for Error {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                let expectation = if self.expecting.len() == 1 {
-                    self.expecting[0].to_string()
-                } else {
-                    format!(
-                        "{} or {}",
-                        self.expecting[0..self.expecting.len() - 1].join(", "),
-                        self.expecting[self.expecting.len() - 1]
-                    )
+                let expect = match self.expecting {
+                    [head] => head.to_string(),
+                    [init @ .., last] => format!("{} or {last}", init.join(", ")),
+                    _ => unsafe { std::intrinsics::unreachable() },
                 };
                 write!(
                     f,
-                    "expecting {expectation} for {:?} at offset {}",
+                    "expecting {expect} for {:?} at offset {}",
                     self.active_rule, self.offset
                 )
             }
