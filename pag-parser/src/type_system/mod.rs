@@ -6,8 +6,7 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use crate::core_syntax::{BindingContext, Term};
-use crate::frontend::WithSpan;
+use crate::core_syntax::{BindingContext, Term, TermPtr};
 use crate::utilities::Symbol;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -158,7 +157,7 @@ impl<'src> Type<'src> {
 fn type_check_impl<'src, 'a>(
     typing_ctx: &mut TypeContext<'src>,
     binding_ctx: &mut BindingProxy<'src, 'a>,
-    term: &'a WithSpan<'src, Term<'src, 'a>>,
+    term: TermPtr<'src, 'a>,
 ) -> (Type<'src>, Vec<TypeError<'src>>) {
     match &term.node {
         Term::Epsilon => (Type::epsilon(), vec![]),
@@ -245,7 +244,7 @@ fn type_check_impl<'src, 'a>(
 
 pub fn type_check<'src, 'a>(
     binding_ctx: &BindingContext<'src, 'a>,
-    term: &'a WithSpan<'src, Term<'src, 'a>>,
+    term: TermPtr<'src, 'a>,
     name: Symbol<'src>,
 ) -> Vec<TypeError<'src>> {
     let mut typing_ctx = TypeContext::new();

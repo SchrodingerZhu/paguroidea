@@ -8,31 +8,21 @@
 
 use std::{collections::HashMap, fmt::Display};
 
-use pest::Span;
-
 use crate::{frontend::WithSpan, utilities::Symbol};
 
 #[derive(Debug, Clone)]
 pub enum Term<'src, 'a> {
     Epsilon,
-    Sequence(&'a WithSpan<'src, Self>, &'a WithSpan<'src, Self>),
+    Sequence(TermPtr<'src, 'a>, TermPtr<'src, 'a>),
     LexerRef(Symbol<'src>),
     Bottom,
-    Alternative(&'a WithSpan<'src, Self>, &'a WithSpan<'src, Self>),
-    Fix(Symbol<'src>, &'a WithSpan<'src, Self>),
+    Alternative(TermPtr<'src, 'a>, TermPtr<'src, 'a>),
+    Fix(Symbol<'src>, TermPtr<'src, 'a>),
     ParserRef(Symbol<'src>),
 }
 
 pub type TermPtr<'src, 'a> = &'a WithSpan<'src, Term<'src, 'a>>;
 pub type TermArena<'src, 'a> = typed_arena::Arena<WithSpan<'src, Term<'src, 'a>>>;
-
-pub fn allocate_term<'src, 'a>(
-    arena: &'a TermArena<'src, 'a>,
-    node: Term<'src, 'a>,
-    span: Span<'src>,
-) -> TermPtr<'src, 'a> {
-    arena.alloc(WithSpan { span, node })
-}
 
 pub struct ParserRule<'src, 'a> {
     pub active: bool,
