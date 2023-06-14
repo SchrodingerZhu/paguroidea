@@ -60,7 +60,7 @@ fn construct_graph<'src, 'a>(binding_ctx: &BindingContext<'src, 'a>) -> (Graph, 
     for (idx, (_, rule)) in binding_ctx.iter().enumerate() {
         let mut neighbors = Vec::new();
         find_neighbors(rule.term, &mut neighbors, &sym_to_id);
-        // self reference
+        // detect self reference
         let in_cycle = Cell::new(neighbors.iter().find(|id| **id == idx as _).is_some());
         nodes.push(Node {
             neighbors,
@@ -85,9 +85,9 @@ fn tarjan(node_id: NodeId, dfn_cnt: &mut u32, stack: &mut Vec<NodeId>, graph: &G
         let next = &graph[next_id as usize];
         if next.dfn.get() == 0 {
             tarjan(next_id, dfn_cnt, stack, graph);
-            node.low.set(node.low.get().min(next.low.get()))
+            node.low.set(node.low.get().min(next.low.get())); // u.low = min(u.low, v.low)
         } else if next.in_stack.get() {
-            node.low.set(node.low.get().min(next.dfn.get()))
+            node.low.set(node.low.get().min(next.dfn.get())); // u.low = min(u.low, v.dfn)
         }
     }
 
