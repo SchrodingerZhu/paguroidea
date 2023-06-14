@@ -14,9 +14,23 @@ members = [
     "tests/sexpr-calculator",
     "tests/arith-expr",
     "benches/csv",
-    "benches/json"
+    "benches/json",
 ]
 resolver = "2"
+
+[workspace.package]
+version = "0.1.0-alpha.1"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+exclude = [".github/workflows/*"]
+categories = ["parsing"]
+repository = "https://github.com/SchrodingerZhu/paguroidea"
+rust-version = "1.71.0"
+authors = [
+    "Schrodinger ZHU Yifan <i@zhuyi.fan>",
+    "QuarticCat <QuarticCat@pm.me>",
+]
+readme = "README.md"
 
 [profile.release]
 debug = true
