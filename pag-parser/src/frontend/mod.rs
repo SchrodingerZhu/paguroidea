@@ -108,7 +108,7 @@ lazy_static! {
         use pest::pratt_parser::Assoc::*;
 
         PrattParser::new()
-            .op(Op::infix(Rule::lexical_alternative, Left))
+            .op(Op::infix(Rule::lexical_alternative, Left) | Op::infix(Rule::lexical_and, Left))
             .op(Op::infix(Rule::lexical_sequence, Left))
             .op(Op::postfix(Rule::lexical_star)
                 | Op::postfix(Rule::lexical_plus)
