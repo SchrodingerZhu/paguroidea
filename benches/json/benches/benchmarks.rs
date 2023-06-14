@@ -74,12 +74,12 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
     g.bench_function("lalrpop", |b| {
         b.iter(|| {
-            lalrpop_json::JsonParser::new().parse(&data).unwrap();
+            lalrpop_json::JsonParser::new().parse(data).unwrap();
         })
     });
     g.bench_function("lalrpop+logos", |b| {
         b.iter(|| {
-            let lexer = Token::lalrpop_lexer(&data);
+            let lexer = Token::lalrpop_lexer(data);
             lalrpop_logos_json::JsonParser::new().parse(lexer).unwrap();
         })
     });

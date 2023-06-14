@@ -70,13 +70,13 @@ impl<'a> fmt::Display for Pvalue<'a> {
             Pvalue::Number(number) => write!(f, "{number}"),
             Pvalue::String(string) => write!(f, "\"{string}\""),
             Pvalue::Object(object) => {
-                let iter = object.into_iter().map(|(k, v)| format!("\"{k}\": {v}"));
+                let iter = object.iter().map(|(k, v)| format!("\"{k}\": {v}"));
                 write!(f, "{{{}}}", iter.collect::<Vec<_>>().join(", "))
             }
             Pvalue::Bool(flag) => write!(f, "{flag}"),
             Pvalue::Null => write!(f, "null"),
             Pvalue::Array(array) => {
-                let iter = array.into_iter().map(|v| v.to_string());
+                let iter = array.iter().map(|v| v.to_string());
                 write!(f, "[{}]", iter.collect::<Vec<_>>().join(", "))
             }
         }

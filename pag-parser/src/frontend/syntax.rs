@@ -34,7 +34,7 @@ pub struct Parser<'src, 'a> {
 
 impl<'src, 'a> Parser<'src, 'a> {
     pub fn infer_fixpoints(&mut self) {
-        infer_fixpoints(&self.arena, &mut self.bindings);
+        infer_fixpoints(self.arena, &mut self.bindings);
     }
 
     pub fn type_check(&self) -> Vec<TypeError<'src>> {
