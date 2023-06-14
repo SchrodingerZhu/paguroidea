@@ -6,11 +6,10 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use crate::type_system::Type;
-use crate::utilities::Symbol;
 use std::borrow::Cow;
-
 use std::collections::HashMap;
+use crate::utilities::Symbol;
+use super::type_check::Type;
 
 pub(super) struct TypeContext<'src> {
     guarded: bool,
