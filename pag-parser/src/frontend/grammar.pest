@@ -46,9 +46,10 @@ lexical_star = { "*" }
 lexical_plus = { "+" }
 lexical_not = { "!" }
 lexical_prefix = _{ lexical_not }
-lexical_infix = _{ lexical_sequence | lexical_alternative }
+lexical_infix = _{ lexical_sequence | lexical_alternative | lexical_and }
 lexical_sequence = { "~" }
 lexical_alternative = { "|" }
+lexical_and = { "&" }
 
 // pratt parser for parser expressions
 parser_primary = _{ bottom | empty | parser_id | token_id | "(" ~ parser_expr ~ ")" }

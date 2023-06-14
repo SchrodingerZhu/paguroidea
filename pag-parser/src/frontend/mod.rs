@@ -19,6 +19,7 @@ use std::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub enum Error<'a> {
+    #[allow(clippy::enum_variant_names)]
     InternalLogicalError(Cow<'a, str>),
     MultipleDefinition(&'a str, Span<'a>),
     InvalidLexicalReference(&'a str),
@@ -213,6 +214,10 @@ pub enum SurfaceSyntaxTree<'a> {
         rhs: SpanBox<'a, Self>,
     },
     LexicalSequence {
+        lhs: SpanBox<'a, Self>,
+        rhs: SpanBox<'a, Self>,
+    },
+    LexicalAnd {
         lhs: SpanBox<'a, Self>,
         rhs: SpanBox<'a, Self>,
     },
@@ -442,6 +447,7 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
             let node = match op.as_rule() {
                 Rule::lexical_alternative => LexicalAlternative { lhs, rhs },
                 Rule::lexical_sequence => LexicalSequence { lhs, rhs },
+                Rule::lexical_and => LexicalAnd { lhs, rhs },
                 Rule::parser_alternative => ParserAlternative { lhs, rhs },
                 Rule::parser_sequence => ParserSequence { lhs, rhs },
                 _ => unreachable_branch!("Operator {} is not an infix operator", op.as_str()),

@@ -75,6 +75,11 @@ where
             let rhs = construct_regex_tree(rhs, reference_handler);
             merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Concat(l, r)))
         }
+        LexicalAnd { lhs, rhs } => {
+            let lhs = construct_regex_tree(lhs, reference_handler);
+            let rhs = construct_regex_tree(rhs, reference_handler);
+            merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Intersection(l, r)))
+        }
         LexicalStar { inner } => {
             let inner = construct_regex_tree(inner, reference_handler)?;
             Ok(Rc::new(RegexTree::KleeneClosure(inner)))

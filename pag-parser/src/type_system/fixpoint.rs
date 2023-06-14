@@ -28,10 +28,10 @@ struct Node {
 
 type Graph = Vec<Node>;
 
-fn find_neighbors<'src>(
+fn find_neighbors(
     term: TermPtr,
     neighbors: &mut Vec<NodeId>,
-    sym_to_id: &HashMap<Symbol<'src>, NodeId>,
+    sym_to_id: &HashMap<Symbol<'_>, NodeId>,
 ) {
     match &term.node {
         Term::Sequence(lhs, rhs) | Term::Alternative(lhs, rhs) => {
@@ -48,7 +48,7 @@ fn find_neighbors<'src>(
     }
 }
 
-fn construct_graph<'src, 'a>(binding_ctx: &BindingContext<'src, 'a>) -> (Graph, Vec<Symbol<'src>>) {
+fn construct_graph<'src>(binding_ctx: &BindingContext<'src, '_>) -> (Graph, Vec<Symbol<'src>>) {
     let mut sym_to_id = HashMap::new();
     let mut id_to_sym = Vec::new();
     for (idx, (symbol, _)) in binding_ctx.iter().enumerate() {
@@ -61,7 +61,7 @@ fn construct_graph<'src, 'a>(binding_ctx: &BindingContext<'src, 'a>) -> (Graph, 
         let mut neighbors = Vec::new();
         find_neighbors(rule.term, &mut neighbors, &sym_to_id);
         // detect self reference
-        let in_cycle = Cell::new(neighbors.iter().find(|id| **id == idx as _).is_some());
+        let in_cycle = Cell::new(neighbors.iter().any(|id| *id == idx as _));
         nodes.push(Node {
             neighbors,
             in_cycle,
