@@ -8,8 +8,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    core_syntax::{BindingContext, Term},
-    frontend::WithSpan,
+    core_syntax::{BindingContext, TermPtr},
     utilities::Symbol,
 };
 
@@ -25,7 +24,7 @@ impl<'src, 'a> BindingProxy<'src, 'a> {
             hiding: HashSet::new(),
         }
     }
-    pub fn lookup(&self, sym: &Symbol<'src>) -> Option<&'a WithSpan<'src, Term<'src, 'a>>> {
+    pub fn lookup(&self, sym: &Symbol<'src>) -> Option<TermPtr<'src, 'a>> {
         if self.hiding.contains(sym) {
             return None;
         }
