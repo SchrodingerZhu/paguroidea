@@ -11,13 +11,13 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use crate::{span_errors, utilities::merge_results};
-
-use super::{
+use crate::frontend::{
     FrontendResult,
     SurfaceSyntaxTree::{self, *},
     WithSpan,
 };
+use crate::span_errors;
+use crate::utilities::merge_results;
 
 type NodeId = u32;
 

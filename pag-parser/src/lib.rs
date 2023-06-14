@@ -6,34 +6,31 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use std::ops::Range;
+mod core_syntax;
+mod frontend;
+mod fusion;
+mod nf;
+mod type_system;
+mod utilities;
 
 use ariadne::{Color, Report, ReportKind, Source};
 use fusion::fusion_parser;
 use proc_macro2::TokenStream;
 use quote::format_ident;
-use type_system::TypeError;
 use typed_arena::Arena;
-use utilities::unreachable_branch;
 
-use crate::{
-    core_syntax::TermArena,
-    frontend::{
-        fixpoint::infer_fixpoints, lexical::LexerDatabase, syntax::construct_parser,
-        FrontendErrors, GrammarDefinitionError,
-    },
-    nf::{
-        fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
-        NormalForms, Tag, TagAssigner,
-    },
+use std::ops::Range;
+
+use core_syntax::TermArena;
+use frontend::{
+    lexical::LexerDatabase, syntax::construct_parser, FrontendErrors, GrammarDefinitionError,
 };
-
-pub mod core_syntax;
-pub mod frontend;
-mod fusion;
-mod nf;
-pub mod type_system;
-pub mod utilities;
+use nf::{
+    fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize, NormalForms,
+    Tag, TagAssigner,
+};
+use type_system::{infer_fixpoints, TypeError};
+use utilities::unreachable_branch;
 
 pub enum Error<'src> {
     GrammarDefinitionError(GrammarDefinitionError<'src>),
