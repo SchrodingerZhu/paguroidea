@@ -12,6 +12,7 @@ use ariadne::{Color, Report, ReportKind, Source};
 use fusion::fusion_parser;
 use proc_macro2::TokenStream;
 use quote::format_ident;
+use type_system::TypeError;
 use typed_arena::Arena;
 use utilities::unreachable_branch;
 
@@ -37,7 +38,7 @@ pub mod utilities;
 pub enum Error<'src> {
     GrammarDefinitionError(GrammarDefinitionError<'src>),
     FrontendErrors(FrontendErrors<'src>),
-    TypeErrors(Vec<type_system::TypeError<'src>>),
+    TypeErrors(Vec<TypeError<'src>>),
 }
 
 impl<'src> From<FrontendErrors<'src>> for Error<'src> {
@@ -46,8 +47,8 @@ impl<'src> From<FrontendErrors<'src>> for Error<'src> {
     }
 }
 
-impl<'src> From<Vec<type_system::TypeError<'src>>> for Error<'src> {
-    fn from(errors: Vec<type_system::TypeError<'src>>) -> Self {
+impl<'src> From<Vec<TypeError<'src>>> for Error<'src> {
+    fn from(errors: Vec<TypeError<'src>>) -> Self {
         Error::TypeErrors(errors)
     }
 }
@@ -173,7 +174,7 @@ impl<'src> Error<'src> {
                 .iter()
                 .map(|e| {
                     match e {
-                        type_system::TypeError::SequentialUniquenessViolation { lhs, rhs, total } => {
+                        TypeError::SequentialUniquenessViolation { lhs, rhs, total } => {
                             Report::build(ReportKind::Error, input_name, total.start())
                                 .with_message("When type checking a sequence of rules, the following rules are ambiguous")
                                 .with_label(ariadne::Label::new((input_name, lhs.0.start()..lhs.0.end()))
@@ -190,7 +191,7 @@ impl<'src> Error<'src> {
                                     .with_color(Color::Blue))
                                 .finish()
                         },
-                        type_system::TypeError::DisjunctiveUniquenessViolation { lhs, rhs, total } => {
+                        TypeError::DisjunctiveUniquenessViolation { lhs, rhs, total } => {
                             Report::build(ReportKind::Error, input_name, total.start())
                                 .with_message("When type checking an alternation of rules, the following rules are ambiguous")
                                 .with_label(ariadne::Label::new((input_name, lhs.0.start()..lhs.0.end()))
@@ -207,7 +208,7 @@ impl<'src> Error<'src> {
                                     .with_color(Color::Blue))
                                 .finish()
                         },
-                        type_system::TypeError::UnguardedFixpoint(sym, s) => {
+                        TypeError::UnguardedFixpoint(sym, s) => {
                             Report::build(ReportKind::Error, input_name, s.start())
                                 .with_message("Unguarded fixpoint")
                                 .with_label(ariadne::Label::new((input_name,s.start()..s.end()))
@@ -215,7 +216,7 @@ impl<'src> Error<'src> {
                                     .with_color(Color::Red))
                                 .finish()
                         },
-                        type_system::TypeError::UnresolvedReference(sym, s) => {
+                        TypeError::UnresolvedReference(sym, s) => {
                             Report::build(ReportKind::Error, input_name, s.start())
                                 .with_message("Unresolved reference")
                                 .with_label(ariadne::Label::new((input_name,s.start()..s.end()))
