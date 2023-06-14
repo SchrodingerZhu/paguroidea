@@ -8,6 +8,8 @@
 
 mod binding_proxy;
 mod context;
+mod fixpoint;
 mod type_check;
 
+pub use fixpoint::infer_fixpoints;
 pub use type_check::{type_check, Type, TypeError};

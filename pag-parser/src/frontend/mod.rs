@@ -6,7 +6,6 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-pub mod fixpoint;
 pub mod lexical;
 pub mod syntax;
 pub mod unicode;
@@ -493,12 +492,13 @@ mod test {
 
     use crate::{
         core_syntax::TermArena,
-        frontend::{fixpoint::infer_fixpoints, lexical::LexerDatabase},
+        frontend::lexical::LexerDatabase,
         fusion::fusion_parser,
         nf::{
             fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
             NormalForm, NormalForms, Tag, TagAssigner,
         },
+        type_system::infer_fixpoints,
     };
 
     use super::{syntax::construct_parser, *};
