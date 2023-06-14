@@ -13,7 +13,7 @@ use crate::{
     core_syntax::{ParserRule, Term, TermArena, TermPtr},
     nf::Tag,
     span_errors,
-    type_system::{type_check, TypeError},
+    type_system::{infer_fixpoints, type_check, TypeError},
     utilities::{merge_results, unreachable_branch, Symbol},
 };
 
@@ -33,6 +33,10 @@ pub struct Parser<'src, 'a> {
 }
 
 impl<'src, 'a> Parser<'src, 'a> {
+    pub fn infer_fixpoints(&mut self) {
+        infer_fixpoints(&self.arena, &mut self.bindings);
+    }
+
     pub fn type_check(&self) -> Vec<TypeError<'src>> {
         let target = self.bindings.get(&self.entrypoint).unwrap();
         type_check(&self.bindings, target.term, self.entrypoint)
@@ -71,30 +75,17 @@ pub fn construct_parser<'src, 'a>(
     };
     let mut errs = Vec::new();
     for rule in rules {
-        let ParserRuleDef {
-            active,
-            fixpoint,
-            name,
-            expr,
-        } = &rule.node else {
+        let ParserRuleDef { active, name, expr, } = &rule.node else {
             unreachable_branch!("parser should only contain rule definitions")
         };
         match construct_core_syntax_tree(&parser, expr) {
-            Ok(expr) => {
+            Ok(term) => {
                 let symbol = Symbol::new(name.span.as_str());
-                let node = if *fixpoint {
-                    Term::Fix(symbol, expr)
-                } else {
-                    expr.node.clone()
-                };
                 parser.bindings.insert(
                     symbol,
                     ParserRule {
                         active: *active,
-                        term: parser.arena.alloc(WithSpan {
-                            span: rule.span,
-                            node,
-                        }),
+                        term,
                     },
                 );
             }
@@ -179,6 +170,7 @@ fn construct_core_syntax_tree<'src, 'a>(
         ParserRuleRef { name } => {
             let name = name.span.as_str();
             match context.symbol_set.get(name) {
+                // Symbol::hash depends on the address so use the original &str
                 Some(target) => Ok(spanned(Term::ParserRef(Symbol::new(target)))),
                 None => Err(span_errors!(UndefinedParserRuleReference, sst.span, name)),
             }

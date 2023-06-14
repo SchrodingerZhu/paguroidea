@@ -87,7 +87,6 @@ impl<'src> Type<'src> {
                 guarded: t1.guarded,
             })
         } else {
-            // it is fine to return large error here, they will be stored in vectors anyway
             Err(Box::new(TypeError::SequentialUniquenessViolation {
                 lhs: (lhs, t1.clone()),
                 rhs: (rhs, t2.clone()),
@@ -120,7 +119,6 @@ impl<'src> Type<'src> {
                 guarded: t1.guarded && t2.guarded,
             })
         } else {
-            // it is fine to return large error here, they will be stored in vectors anyway
             Err(Box::new(TypeError::DisjunctiveUniquenessViolation {
                 lhs: (lhs, t1.clone()),
                 rhs: (rhs, t2.clone()),
@@ -137,7 +135,7 @@ impl<'src> Type<'src> {
             guarded: false,
         }
     }
-    
+
     fn fixpoint<F>(mut f: F) -> (Self, Vec<TypeError<'src>>)
     where
         F: FnMut(&Self) -> (Self, Vec<TypeError<'src>>),

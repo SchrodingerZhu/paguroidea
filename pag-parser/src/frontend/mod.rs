@@ -266,7 +266,6 @@ pub enum SurfaceSyntaxTree<'a> {
     Empty,
     ParserRuleDef {
         active: bool,
-        fixpoint: bool,
         name: WithSpan<'a, ()>,
         expr: SpanBox<'a, Self>,
     },
@@ -416,12 +415,7 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                         node: (),
                     };
                     let expr = Box::new(parse_surface_syntax(expr.into_inner(), pratt, src)?);
-                    ParserRuleDef {
-                        active,
-                        fixpoint: false,
-                        name,
-                        expr,
-                    }
+                    ParserRuleDef { active, name, expr }
                 }
                 Rule::parser_expr => return parse_surface_syntax(primary.into_inner(), pratt, src),
                 _ => {
@@ -491,14 +485,13 @@ mod test {
     use typed_arena::Arena;
 
     use crate::{
-        core_syntax::TermArena,
+        core_syntax::{Term, TermArena},
         frontend::lexical::LexerDatabase,
         fusion::fusion_parser,
         nf::{
             fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
             NormalForm, NormalForms, Tag, TagAssigner,
         },
-        type_system::infer_fixpoints,
     };
 
     use super::{syntax::construct_parser, *};
@@ -511,16 +504,8 @@ mod test {
 
         dbg!(size_of::<NormalForm>());
         let pairs = GrammarParser::parse(Rule::grammar, TEST).unwrap();
-        let mut tree = parse_surface_syntax(pairs, &PRATT_PARSER, TEST).unwrap();
-        let Grammar { lexer, parser } = &mut tree.node else { unreachable!() };
-
-        println!("\n---------< infer fixpoints >----------");
-        infer_fixpoints(parser).unwrap();
-        let ParserDef { rules, .. } = &mut parser.node else { unreachable!() };
-        for rule in rules {
-            let ParserRuleDef { name, fixpoint, .. } = &rule.node else { unreachable!() };
-            println!("{}: fixpoint = {fixpoint}", name.span.as_str());
-        }
+        let tree = parse_surface_syntax(pairs, &PRATT_PARSER, TEST).unwrap();
+        let Grammar { lexer, parser } = &tree.node else { unreachable!() };
 
         println!("\n---------< lexer database >----------");
         let database = LexerDatabase::new(lexer).unwrap();
@@ -530,9 +515,16 @@ mod test {
 
         println!("\n---------< parser bindings >----------");
         let arena = TermArena::new();
-        let parser = construct_parser(&arena, database, parser).unwrap();
+        let mut parser = construct_parser(&arena, database, parser).unwrap();
         for (i, rule) in parser.bindings.iter() {
             println!("{i} ::= {}, active = {}", rule.term, rule.active)
+        }
+
+        println!("\n---------< infer fixpoints >----------");
+        parser.infer_fixpoints();
+        for (symbol, rule) in parser.bindings.iter() {
+            let is_fixpoint = matches!(rule.term.node, Term::Fix(_, _));
+            println!("{symbol}: fixpoint = {is_fixpoint}");
         }
 
         println!("\n---------< type check >----------");
