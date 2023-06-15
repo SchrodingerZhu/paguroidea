@@ -13,10 +13,10 @@ use std::rc::Rc;
 use pag_lexer::{normalization::normalize, regex_tree::RegexTree};
 use pest::Span;
 
-use crate::frontend::unicode;
 use crate::utilities::{merge_results, unreachable_branch, Symbol};
 
 use super::{
+    unicode::{encode_char, encode_range},
     FrontendError::{self, *},
     FrontendResult,
     SurfaceSyntaxTree::{self, *},
@@ -48,22 +48,22 @@ impl<'src> LexerDatabase<'src> {
     }
 }
 
-enum State<'src, 'a> {
-    Unresolved(&'a WithSpan<'src, SurfaceSyntaxTree<'src>>),
+enum State<'src, 'local> {
+    Unresolved(&'local WithSpan<'src, SurfaceSyntaxTree<'src>>),
     Pending,
     Resolved(Rc<RegexTree>),
 }
 
-pub fn construct_lexer_database<'a>(
-    sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-) -> FrontendResult<'a, LexerDatabase<'a>> {
+pub fn construct_lexer_database<'src>(
+    sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
+) -> FrontendResult<'src, LexerDatabase<'src>> {
     let LexerDef { rules } = &sst.node else {
         unreachable_branch!("sst should be a lexical definition")
     };
-    let mut errs = Vec::new();
 
     let mut rule_defs = HashMap::new();
     let mut skip_def = None;
+    let mut errs = Vec::new();
     for rule in rules {
         match &rule.node {
             LexicalRuleDef { name, expr } => {
@@ -73,10 +73,8 @@ pub fn construct_lexer_database<'a>(
                 }
             }
             LexicalSkipDef { expr } => {
-                if let Some((previous, _)) = skip_def {
+                if let Some((previous, _)) = skip_def.replace((rule.span, expr)) {
                     errs.push(MultipleSkippingRule(previous, rule.span));
-                } else {
-                    skip_def = Some((rule.span, expr));
                 }
             }
             _ => {}
@@ -118,9 +116,9 @@ pub fn construct_lexer_database<'a>(
     })
 }
 
-fn construct_regex_tree<'src, 'a>(
+fn construct_regex_tree<'src, 'local>(
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
-    rule_defs: &HashMap<&'src str, (Span<'src>, Cell<State<'src, 'a>>)>,
+    rule_defs: &HashMap<&'src str, (Span<'src>, Cell<State<'src, 'local>>)>,
 ) -> FrontendResult<'src, Rc<RegexTree>> {
     match &sst.node {
         LexicalAlternative { lhs, rhs } => {
@@ -160,7 +158,7 @@ fn construct_regex_tree<'src, 'a>(
             let inner = construct_regex_tree(inner, rule_defs)?;
             Ok(Rc::new(RegexTree::Complement(inner)))
         }
-        RangeLit { start, end } => Ok(unicode::encode_range(*start, *end)),
+        RangeLit { start, end } => Ok(encode_range(*start, *end)),
         StringLit(x) => Ok(x
             .bytes()
             .map(|b| Rc::new(RegexTree::single(b)))
@@ -168,7 +166,7 @@ fn construct_regex_tree<'src, 'a>(
             .unwrap_or_else(|| Rc::new(RegexTree::Epsilon))),
         Bottom => Ok(Rc::new(RegexTree::Bottom)),
         Empty => Ok(Rc::new(RegexTree::Epsilon)),
-        CharLit { value } => Ok(unicode::encode_char(value.node)),
+        CharLit { value } => Ok(encode_char(value.node)),
         LexicalRuleRef { name } => match rule_defs.get(name.span.as_str()) {
             Some((_, state)) => match state.replace(State::Pending) {
                 State::Unresolved(expr_sst) => {
