@@ -144,15 +144,6 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
             if matches!(&*r, Top) {
                 return r;
             }
-
-            if matches!(&*r, KleeneClosure(..)) && matches!(&*s, Epsilon) {
-                return r;
-            }
-
-            if matches!(&*s, KleeneClosure(..)) && matches!(&*r, Epsilon) {
-                return s;
-            }
-
             let ordering = r.cmp(&s);
             if ordering.is_eq() {
                 return r;
