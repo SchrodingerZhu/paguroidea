@@ -12,11 +12,11 @@ use pag_lexer::{normalization::normalize, regex_tree::RegexTree};
 use pest::Span;
 
 use crate::frontend::unicode;
-use crate::span_errors;
 use crate::utilities::{merge_results, unreachable_branch, Symbol};
 
 use super::{
-    Error, FrontendErrors, FrontendResult,
+    FrontendError::{self, *},
+    FrontendResult,
     SurfaceSyntaxTree::{self, *},
     WithSpan,
 };
@@ -34,22 +34,16 @@ impl<'a> LexerDatabase<'a> {
         TranslationContext::create_database(sst)
     }
 
-    pub fn nullability_check(&self) -> FrontendErrors<'a> {
+    pub fn nullability_check(&self) -> Vec<FrontendError<'a>> {
         let mut errors = Vec::new();
         for (sym, rule) in &self.entries {
             if rule.node.is_nullable() {
-                errors.push(WithSpan {
-                    span: rule.span,
-                    node: Error::NullableToken(sym.name()),
-                });
+                errors.push(NullableToken(sym.name(), rule.span));
             }
         }
         if let Some(skip) = &self.skip {
             if skip.node.is_nullable() {
-                errors.push(WithSpan {
-                    span: skip.span,
-                    node: Error::NullableToken("<skip>"),
-                });
+                errors.push(FrontendError::NullableToken("<skip>", skip.span));
             }
         }
         errors
@@ -130,11 +124,7 @@ fn construct_definition<'a>(
     sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
 ) -> FrontendResult<'a, (&'a str, SpanRegexTree<'a>)> {
     fn reference_handler(name: WithSpan<()>) -> FrontendResult<Rc<RegexTree>> {
-        Err(span_errors!(
-            InvalidLexicalReference,
-            name.span,
-            name.span.as_str(),
-        ))
+        Err(vec![InvalidLexicalReference(name.span)])
     }
     let LexicalDefinition { name, expr } = &sst.node else {
         unreachable_branch!("sst should be a lexical definition")
@@ -156,11 +146,7 @@ fn construct_lexical_rule<'a>(
 ) -> FrontendResult<'a, (Symbol<'a>, SpanRegexTree<'a>)> {
     let reference_handler = |name: WithSpan<'a, ()>| match definitions.get(name.span.as_str()) {
         Some(x) => Ok(x.node.clone()),
-        _ => Err(span_errors!(
-            UndefinedLexicalReference,
-            name.span,
-            name.span.as_str(),
-        )),
+        _ => Err(vec![UndefinedLexicalRuleReference(name.span)]),
     };
     let LexicalTokenDef { name, expr, .. } = &sst.node else {
         unreachable_branch!("sst should be a lexical token")
@@ -182,11 +168,7 @@ fn construct_skip_rule<'a>(
 ) -> FrontendResult<'a, SpanRegexTree<'a>> {
     let reference_handler = |name: WithSpan<'a, ()>| match definitions.get(name.span.as_str()) {
         Some(x) => Ok(x.node.clone()),
-        _ => Err(span_errors!(
-            UndefinedLexicalReference,
-            name.span,
-            name.span.as_str(),
-        )),
+        _ => Err(vec![UndefinedLexicalRuleReference(name.span)]),
     };
     let LexicalSkipDef { expr, .. } = &sst.node else {
         unreachable_branch!("sst should be a lexical token")
@@ -218,21 +200,16 @@ impl<'a> TranslationContext<'a> {
             unreachable_branch!("sst should be a lexical definition")
         };
         let mut errs = Vec::new();
-        for i in rules
-            .iter()
-            .filter(|x| matches!(x.node, LexicalDefinition { .. }))
-            .map(construct_definition)
-        {
-            match i {
+        for rule in rules {
+            let LexicalDefinition { .. } = &rule.node else { continue };
+            match construct_definition(rule) {
                 Ok((symbol, regex)) => {
                     let current_span = regex.span;
                     match self.definitions.insert(symbol, regex) {
-                        None => (),
-                        Some(x) => {
-                            errs.push(WithSpan {
-                                span: current_span,
-                                node: Error::MultipleDefinition(symbol, x.span),
-                            });
+                        None => {}
+                        Some(previous) => {
+                            // FIXME: should be previous_name.span & current_name.span
+                            errs.push(MultipleDefinition(previous.span, current_span));
                         }
                     }
                 }
@@ -260,10 +237,7 @@ impl<'a> TranslationContext<'a> {
             match &rule.node {
                 LexicalSkipDef { .. } => {
                     if ctx.database.skip.is_some() {
-                        errs.push(WithSpan {
-                            span: rule.span,
-                            node: Error::MultipleSkippingRule,
-                        });
+                        errs.push(MultipleSkippingRule(rule.span));
                         continue;
                     }
                     match construct_skip_rule(&ctx.definitions, rule) {
@@ -274,16 +248,12 @@ impl<'a> TranslationContext<'a> {
                 LexicalTokenDef { name, .. } => {
                     match construct_lexical_rule(&ctx.definitions, rule) {
                         Ok((symbol, regex)) => {
-                            let span = regex.span;
                             match ctx.database.symbol_table.insert(symbol.name(), name.span) {
                                 None => {
                                     ctx.database.entries.insert(symbol, regex);
                                 }
                                 Some(previous) => {
-                                    errs.push(WithSpan {
-                                        span,
-                                        node: Error::MultipleDefinition(symbol.name(), previous),
-                                    });
+                                    errs.push(MultipleDefinition(previous, name.span))
                                 }
                             }
                         }

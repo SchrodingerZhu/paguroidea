@@ -18,29 +18,17 @@ use std::borrow::Cow;
 use std::fmt::Display;
 
 #[derive(Debug, Clone)]
-pub enum Error<'a> {
-    #[allow(clippy::enum_variant_names)]
-    InternalLogicalError(Cow<'a, str>),
-    MultipleDefinition(&'a str, Span<'a>),
-    InvalidLexicalReference(&'a str),
-    MultipleSkippingRule,
-    NullableToken(&'a str),
-    UndefinedLexicalReference(&'a str),
-    UndefinedParserRuleReference(&'a str),
+pub enum FrontendError<'a> {
+    // InternalLogicalError(Span<'a>, Cow<'a, str>),
+    MultipleDefinition(Span<'a>, Span<'a>),
+    InvalidLexicalReference(Span<'a>),
+    MultipleSkippingRule(Span<'a>),
+    NullableToken(&'a str, Span<'a>),
+    UndefinedLexicalRuleReference(Span<'a>),
+    UndefinedParserRuleReference(Span<'a>),
 }
 
-pub type FrontendErrors<'a> = Vec<WithSpan<'a, Error<'a>>>;
-pub type FrontendResult<'a, T> = Result<T, FrontendErrors<'a>>;
-
-#[macro_export]
-macro_rules! span_errors {
-    ($ekind:ident, $span:expr, $($params:expr),* $(,)?) => {
-        vec![WithSpan {
-            span: $span,
-            node: $crate::frontend::Error::$ekind($($params,)*)
-        }]
-    };
-}
+pub type FrontendResult<'a, T> = Result<T, Vec<FrontendError<'a>>>;
 
 macro_rules! unexpected_eoi {
     ($expectation:literal) => {

@@ -12,13 +12,13 @@ use crate::{
     core_syntax::BindingContext,
     core_syntax::{ParserRule, Term, TermArena, TermPtr},
     nf::Tag,
-    span_errors,
     type_system::{infer_fixpoints, type_check, TypeError},
     utilities::{merge_results, unreachable_branch, Symbol},
 };
 
 use super::{
     lexical::LexerDatabase,
+    FrontendError::*,
     FrontendResult,
     SurfaceSyntaxTree::{self, *},
     WithSpan,
@@ -59,11 +59,7 @@ pub fn construct_parser<'src, 'a>(
     let entrypoint = match symbol_set.get(entrypoint.span.as_str()) {
         Some(name) => Symbol::new(name),
         None => {
-            return Err(span_errors!(
-                UndefinedParserRuleReference,
-                entrypoint.span,
-                entrypoint.span.as_str(),
-            ));
+            return Err(vec![UndefinedParserRuleReference(entrypoint.span)]);
         }
     };
     let mut parser = Parser {
@@ -110,12 +106,7 @@ fn construct_symbol_set<'src>(
             unreachable_branch!("parser should only contain rule definitions")
         };
         if let Some(previous) = symbol_table.get(name.span.as_str()) {
-            return Err(span_errors!(
-                MultipleDefinition,
-                name.span,
-                name.span.as_str(),
-                *previous,
-            ));
+            return Err(vec![MultipleDefinition(*previous, name.span)]);
         } else {
             symbol_table.insert(name.span.as_str(), name.span);
         }
@@ -168,19 +159,17 @@ fn construct_core_syntax_tree<'src, 'a>(
         Bottom => Ok(spanned(Term::Bottom)),
         Empty => Ok(spanned(Term::Epsilon)),
         ParserRuleRef { name } => {
-            let name = name.span.as_str();
-            match context.symbol_set.get(name) {
+            match context.symbol_set.get(name.span.as_str()) {
                 // Symbol::hash depends on the address so use the original &str
                 Some(target) => Ok(spanned(Term::ParserRef(Symbol::new(target)))),
-                None => Err(span_errors!(UndefinedParserRuleReference, sst.span, name)),
+                None => Err(vec![UndefinedParserRuleReference(name.span)]),
             }
         }
         LexicalRuleRef { name } => {
-            let name = name.span.as_str();
-            match context.lexer_database.symbol_table.get(name) {
+            match context.lexer_database.symbol_table.get(name.span.as_str()) {
                 // Symbol::hash depends on the address so use the original &str
                 Some(target) => Ok(spanned(Term::LexerRef(Symbol::new(target.as_str())))),
-                None => Err(span_errors!(UndefinedLexicalReference, sst.span, name)),
+                None => Err(vec![UndefinedLexicalRuleReference(name.span)]),
             }
         }
         _ => unreachable_branch!("called with unsupported node: {}", sst.span.as_str()),

@@ -9,7 +9,7 @@
 [workspace]
 members = [
     "pag-lexer",
-    "pag-parser",
+    "pag-parser", 
     "pag-compiler",
     "tests/sexpr-calculator",
     "tests/arith-expr",
