@@ -13,8 +13,7 @@ mod nf;
 mod type_system;
 mod utilities;
 
-use ariadne::{Color, Report, ReportKind, Source};
-use fusion::fusion_parser;
+use ariadne::{Color, Label, Report, ReportKind, Source};
 use proc_macro2::TokenStream;
 use quote::format_ident;
 use typed_arena::Arena;
@@ -23,8 +22,9 @@ use std::ops::Range;
 
 use core_syntax::TermArena;
 use frontend::{
-    lexical::LexerDatabase, syntax::construct_parser, FrontendErrors, GrammarDefinitionError,
+    lexical::LexerDatabase, syntax::construct_parser, FrontendError, GrammarDefinitionError,
 };
+use fusion::fusion_parser;
 use nf::{
     fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize, NormalForms,
     Tag, TagAssigner,
@@ -34,12 +34,12 @@ use utilities::unreachable_branch;
 
 pub enum Error<'src> {
     GrammarDefinitionError(GrammarDefinitionError<'src>),
-    FrontendErrors(FrontendErrors<'src>),
+    FrontendErrors(Vec<FrontendError<'src>>),
     TypeErrors(Vec<TypeError<'src>>),
 }
 
-impl<'src> From<FrontendErrors<'src>> for Error<'src> {
-    fn from(errors: FrontendErrors<'src>) -> Self {
+impl<'src> From<Vec<FrontendError<'src>>> for Error<'src> {
+    fn from(errors: Vec<FrontendError<'src>>) -> Self {
         Error::FrontendErrors(errors)
     }
 }
@@ -58,6 +58,7 @@ impl<'src> Error<'src> {
         }
         Ok(())
     }
+
     pub fn report_stdout(&self, input_name: &str, input: &'src str) -> Result<(), std::io::Error> {
         let mut cache = (input_name, Source::from(input));
         for i in self.to_reports(input_name) {
@@ -65,36 +66,38 @@ impl<'src> Error<'src> {
         }
         Ok(())
     }
+
     pub fn to_reports<'a>(&self, input_name: &'a str) -> Vec<Report<'a, (&'a str, Range<usize>)>> {
         match self {
             Error::GrammarDefinitionError(e) => {
+                use GrammarDefinitionError::*;
                 vec![match e {
-                    GrammarDefinitionError::SyntaxError(x) => {
+                    SyntaxError(x) => {
                         let span = match x.location {
                             pest::error::InputLocation::Pos(x) => x..x+1,
                             pest::error::InputLocation::Span((x, y)) => x..y,
                         };
                         Report::build(ReportKind::Error, input_name, span.start)
                             .with_message("Syntax error in grammar definition")
-                            .with_label(ariadne::Label::new((input_name, span))
+                            .with_label(Label::new((input_name, span))
                                 .with_message(format!("{}", x.variant.message()))
                                 .with_color(Color::Red))
                             .finish()
                     },
-                    GrammarDefinitionError::FormatError { span, message } => {
+                    FormatError { span, message } => {
                         Report::build(ReportKind::Error, input_name, span.start())
                             .with_message("Format error in grammar definition")
-                            .with_label(ariadne::Label::new((input_name, span.start()..span.end()))
+                            .with_label(Label::new((input_name, span.start()..span.end()))
                                 .with_message(format!("{}", message))
                                 .with_color(Color::Red))
                             .finish()
                     },
-                    GrammarDefinitionError::ParserLogicError(e) => {
+                    ParserLogicError(e) => {
                         Report::build(ReportKind::Error, input_name, 0)
                             .with_message(format!("Internal logical error when parsing grammar definition {}", e))
                             .finish()
                     },
-                    GrammarDefinitionError::UnexpectedEOI(e) => {
+                    UnexpectedEOI(e) => {
                         Report::build(ReportKind::Error, input_name, 0)
                             .with_message(format!("Internal logical error when parsing grammar definition, pest parser failed to give {}", e))
                             .finish()
@@ -104,63 +107,64 @@ impl<'src> Error<'src> {
             Error::FrontendErrors(errors) => errors
                 .iter()
                 .map(|e|  {
-                    match &e.node {
-                        frontend::Error::InternalLogicalError(msg) => {
-                            Report::build(ReportKind::Error, input_name, e.span.start())
-                                .with_message("Internal logical error encountered")
-                                .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(msg)
-                                    .with_color(Color::Red))
-                                .finish()
-                        },
-                        frontend::Error::MultipleDefinition(x, y) => {
-                            Report::build(ReportKind::Error, input_name, e.span.start().min(y.start()))
-                                .with_message(format!("Multiple definition of {}", x))
-                                .with_label(ariadne::Label::new((input_name, y.start()..y.end()))
+                    use FrontendError::*;
+                    match &e {
+                        // InternalLogicalError(span, msg) => {
+                        //     Report::build(ReportKind::Error, input_name, span.start())
+                        //         .with_message("Internal logical error encountered")
+                        //         .with_label(Label::new((input_name, span.start()..span.end()))
+                        //             .with_message(msg)
+                        //             .with_color(Color::Red))
+                        //         .finish()
+                        // },
+                        MultipleDefinition(fst, snd) => {
+                            Report::build(ReportKind::Error, input_name, snd.start())
+                                .with_message(format!("Multiple definition of {}", fst.as_str()))
+                                .with_label(Label::new((input_name, fst.start()..fst.end()))
                                     .with_message("first definition")
                                     .with_color(Color::Green))
-                                .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
+                                .with_label(Label::new((input_name, snd.start()..snd.end()))
                                     .with_message("second definition")
                                     .with_color(Color::Blue))
                                 .finish()
                         },
-                        frontend::Error::InvalidLexicalReference(name) => {
-                            Report::build(ReportKind::Error, input_name, e.span.start())
+                        InvalidLexicalReference(span) => {
+                            Report::build(ReportKind::Error, input_name, span.start())
                                 .with_message("Invalid lexical reference")
-                                .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(format!("referencing lexical rule {} is not allowed here", name))
+                                .with_label(Label::new((input_name, span.start()..span.end()))
+                                    .with_message(format!("referencing lexical rule {} is not allowed here", span.as_str()))
                                     .with_color(Color::Red))
                                 .finish()
                         },
-                        frontend::Error::UndefinedLexicalReference(name) => {
-                            Report::build(ReportKind::Error, input_name, e.span.start())
+                        UndefinedLexicalRuleReference(span) => {
+                            Report::build(ReportKind::Error, input_name, span.start())
                                 .with_message("Undefined lexical reference")
-                                .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(format!("lexcical rule {} is undefined", name))
+                                .with_label(Label::new((input_name, span.start()..span.end()))
+                                    .with_message(format!("lexcical rule {} is undefined", span.as_str()))
                                     .with_color(Color::Red))
                                 .finish()
                         },
-                        frontend::Error::UndefinedParserRuleReference(name) => {
-                            Report::build(ReportKind::Error, input_name, e.span.start())
+                        UndefinedParserRuleReference(span) => {
+                            Report::build(ReportKind::Error, input_name, span.start())
                                 .with_message("Undefined parser rule reference")
-                                .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(format!("parser rule {} is undefined", name))
+                                .with_label(Label::new((input_name, span.start()..span.end()))
+                                    .with_message(format!("parser rule {} is undefined", span.as_str()))
                                     .with_color(Color::Red))
                                 .finish()
                         },
-                        frontend::Error::MultipleSkippingRule => {
-                            Report::build(ReportKind::Error, input_name, e.span.start())
+                        MultipleSkippingRule(span) => {
+                            Report::build(ReportKind::Error, input_name, span.start())
                                 .with_message("Skipping lexical rule is already defined")
-                                .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(format!("this definition conflicts with existing one"))
+                                .with_label(Label::new((input_name, span.start()..span.end()))
+                                    .with_message("this definition conflicts with existing one")
                                     .with_color(Color::Red))
                                 .finish()
                         },
-                        frontend::Error::NullableToken(name) => {
-                            Report::build(ReportKind::Error, input_name, e.span.start())
+                        NullableToken(name, span) => {
+                            Report::build(ReportKind::Error, input_name, span.start())
                                 .with_message("Nullable token detected")
-                                .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(format!("token {} is nullable", name))
+                                .with_label(Label::new((input_name, span.start()..span.end()))
+                                    .with_message(format!("token {name} is nullable"))
                                     .with_color(Color::Red))
                                 .finish()
                         },
@@ -170,17 +174,18 @@ impl<'src> Error<'src> {
             Error::TypeErrors(errors) => errors
                 .iter()
                 .map(|e| {
+                    use TypeError::*;
                     match e {
-                        TypeError::SequentialUniquenessViolation { lhs, rhs, total } => {
+                        SequentialUniquenessViolation { lhs, rhs, total } => {
                             Report::build(ReportKind::Error, input_name, total.start())
                                 .with_message("When type checking a sequence of rules, the following rules are ambiguous")
-                                .with_label(ariadne::Label::new((input_name, lhs.0.start()..lhs.0.end()))
+                                .with_label(Label::new((input_name, lhs.0.start()..lhs.0.end()))
                                     .with_message(format!("type info for left-hand side: nullable: {}, first set: {{{}}}, follow set: {{{}}}",
                                     lhs.1.nullable, lhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "),
                                     lhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
                                 ))
                                     .with_color(Color::Green))
-                                .with_label(ariadne::Label::new((input_name, rhs.0.start()..rhs.0.end()))
+                                .with_label(Label::new((input_name, rhs.0.start()..rhs.0.end()))
                                     .with_message(format!("type info for right-hand side: nullable: {}, first set: {{{}}}, follow set: {{{}}}",
                                     rhs.1.nullable, rhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "),
                                     rhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
@@ -188,16 +193,16 @@ impl<'src> Error<'src> {
                                     .with_color(Color::Blue))
                                 .finish()
                         },
-                        TypeError::DisjunctiveUniquenessViolation { lhs, rhs, total } => {
+                        DisjunctiveUniquenessViolation { lhs, rhs, total } => {
                             Report::build(ReportKind::Error, input_name, total.start())
                                 .with_message("When type checking an alternation of rules, the following rules are ambiguous")
-                                .with_label(ariadne::Label::new((input_name, lhs.0.start()..lhs.0.end()))
+                                .with_label(Label::new((input_name, lhs.0.start()..lhs.0.end()))
                                     .with_message(format!("type info for left-hand side: nullable {}, first set: {}, follow set: {}",
                                     lhs.1.nullable, lhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "),
                                     lhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
                                 ))
                                     .with_color(Color::Green))
-                                .with_label(ariadne::Label::new((input_name, rhs.0.start()..rhs.0.end()))
+                                .with_label(Label::new((input_name, rhs.0.start()..rhs.0.end()))
                                     .with_message(format!("type info for right-hand side: nullable {}, first set: {}, follow set: {}",
                                     rhs.1.nullable, rhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "),
                                     rhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
@@ -205,18 +210,18 @@ impl<'src> Error<'src> {
                                     .with_color(Color::Blue))
                                 .finish()
                         },
-                        TypeError::UnguardedFixpoint(sym, s) => {
-                            Report::build(ReportKind::Error, input_name, s.start())
+                        UnguardedFixpoint(sym, span) => {
+                            Report::build(ReportKind::Error, input_name, span.start())
                                 .with_message("Unguarded fixpoint")
-                                .with_label(ariadne::Label::new((input_name,s.start()..s.end()))
+                                .with_label(Label::new((input_name, span.start()..span.end()))
                                     .with_message(format!("fixpoint rule {} is not guarded -- your grammar is left-recursive", sym))
                                     .with_color(Color::Red))
                                 .finish()
                         },
-                        TypeError::UnresolvedReference(sym, s) => {
-                            Report::build(ReportKind::Error, input_name, s.start())
+                        UnresolvedReference(sym, span) => {
+                            Report::build(ReportKind::Error, input_name, span.start())
                                 .with_message("Unresolved reference")
-                                .with_label(ariadne::Label::new((input_name,s.start()..s.end()))
+                                .with_label(Label::new((input_name, span.start()..span.end()))
                                     .with_message(format!("cannot resolve parser rule {} within context -- did you forget to put recursive rule into fixpoint", sym))
                                     .with_color(Color::Red))
                                 .finish()
