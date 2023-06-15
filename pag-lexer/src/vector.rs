@@ -85,7 +85,7 @@ impl Vector {
             regex_trees: self
                 .regex_trees
                 .iter()
-                .map(|t| Rc::new(derivative(t.clone(), x)))
+                .map(|t| derivative(t.clone(), x))
                 .collect(),
         }
     }

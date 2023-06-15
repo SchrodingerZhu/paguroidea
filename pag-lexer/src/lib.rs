@@ -38,7 +38,7 @@ mod tests {
         println!("{}", alt);
         let derivative = derivative(alt, b'a');
         println!("{}", derivative);
-        let normalized = normalize(Rc::new(derivative));
+        let normalized = normalize(derivative);
         println!("{}", normalized);
         println!("{:?}", approximate_congruence_class(&normalized));
     }
