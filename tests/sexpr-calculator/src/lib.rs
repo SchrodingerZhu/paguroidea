@@ -81,10 +81,7 @@ fn simple_test() {
     assert_eq!(276, eval(&tree).0);
     let test = "(+ 1 (# 5 5))";
     let err = parser::parse(test).unwrap_err().to_string();
-    assert_eq!(
-        err,
-        "expecting MULT, PLUS or <skip> for compound at offset 6"
-    );
+    assert_eq!(err, "expecting MULT or PLUS for compound at offset 6");
 }
 
 #[test]

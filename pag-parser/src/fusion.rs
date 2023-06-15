@@ -297,17 +297,13 @@ fn generate_skip() -> TokenStream {
     }
 }
 
-fn generate_expect<'src>(
-    rules: &[&NormalForm<'src>],
-    lexer_database: &LexerDatabase<'src>,
-) -> TokenStream {
+fn generate_expect<'src>(rules: &[&NormalForm<'src>]) -> TokenStream {
     let elements: Vec<&str> = rules
         .iter()
         .filter_map(|x| match x {
             NormalForm::Sequence { terminal, .. } => Some(terminal.name()),
             _ => None,
         })
-        .chain(lexer_database.skip.as_ref().map(|_| "<skip>"))
         .collect();
     quote! {
         const EXPECTING: &[&str] = &[#(#elements),*];
@@ -323,7 +319,7 @@ fn generate_inactive_parser<'src>(
 ) -> TokenStream {
     let tag_name = format!("{tag}");
     let parser_name = format_ident!("parse_{tag_name}");
-    let expect = generate_expect(rules, lexer_database);
+    let expect = generate_expect(rules);
 
     let success_actions = generate_children(&tag, false, parser, rules)
         .into_iter()
@@ -384,7 +380,7 @@ fn generate_active_parser<'src>(
     let tag_name = format!("{tag}");
     let tag_ident = format_ident!("{tag_name}");
     let parser_name = format_ident!("parse_{tag_name}");
-    let expect = generate_expect(rules, lexer_database);
+    let expect = generate_expect(rules);
 
     let success_actions = generate_children(&tag, true, parser, rules)
         .into_iter()
