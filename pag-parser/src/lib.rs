@@ -22,7 +22,8 @@ use std::ops::Range;
 
 use core_syntax::TermArena;
 use frontend::{
-    lexical::LexerDatabase, syntax::construct_parser, FrontendError, GrammarDefinitionError,
+    lexical::construct_lexer_database, syntax::construct_parser, FrontendError,
+    GrammarDefinitionError,
 };
 use fusion::fusion_parser;
 use nf::{
@@ -128,19 +129,19 @@ impl<'src> Error<'src> {
                                     .with_color(Color::Blue))
                                 .finish()
                         },
-                        InvalidLexicalReference(span) => {
+                        UndefinedLexicalRuleReference(span) => {
                             Report::build(ReportKind::Error, input_name, span.start())
-                                .with_message("Invalid lexical reference")
+                                .with_message("Undefined lexical rule reference")
                                 .with_label(Label::new((input_name, span.start()..span.end()))
-                                    .with_message(format!("referencing lexical rule {} is not allowed here", span.as_str()))
+                                    .with_message(format!("lexcical rule {} is undefined", span.as_str()))
                                     .with_color(Color::Red))
                                 .finish()
                         },
-                        UndefinedLexicalRuleReference(span) => {
+                        CyclicLexicalRuleReference(span) => {
                             Report::build(ReportKind::Error, input_name, span.start())
-                                .with_message("Undefined lexical reference")
+                                .with_message("Cyclic lexical rule reference")
                                 .with_label(Label::new((input_name, span.start()..span.end()))
-                                    .with_message(format!("lexcical rule {} is undefined", span.as_str()))
+                                    .with_message("this reference causes cyclic dependency")
                                     .with_color(Color::Red))
                                 .finish()
                         },
@@ -152,12 +153,15 @@ impl<'src> Error<'src> {
                                     .with_color(Color::Red))
                                 .finish()
                         },
-                        MultipleSkippingRule(span) => {
-                            Report::build(ReportKind::Error, input_name, span.start())
+                        MultipleSkippingRule(fst, snd) => {
+                            Report::build(ReportKind::Error, input_name, snd.start())
                                 .with_message("Skipping lexical rule is already defined")
-                                .with_label(Label::new((input_name, span.start()..span.end()))
-                                    .with_message("this definition conflicts with existing one")
-                                    .with_color(Color::Red))
+                                .with_label(Label::new((input_name, fst.start()..fst.end()))
+                                    .with_message("first definition")
+                                    .with_color(Color::Green))
+                                .with_label(Label::new((input_name, snd.start()..snd.end()))
+                                    .with_message("second definition")
+                                    .with_color(Color::Blue))
                                 .finish()
                         },
                         NullableToken(name, span) => {
@@ -240,7 +244,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
     let Grammar { lexer, parser } = &sst.node else {
         unreachable_branch!("the entrypoint of sst can only be Grammar")
     };
-    let lexer_database = LexerDatabase::new(lexer)?;
+    let lexer_database = construct_lexer_database(lexer)?;
     let nullable_errors = lexer_database.nullability_check();
     if !nullable_errors.is_empty() {
         return Err(Error::FrontendErrors(nullable_errors));

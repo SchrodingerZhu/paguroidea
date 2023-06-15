@@ -1,13 +1,13 @@
 lexer {
     // definition in lexer is not a real token, it is just a way to define a set of characters
 
-    definition BLANK = ' ';
-    definition DIGIT = '0' .. '9';
-    definition ALPHA = 'a' .. 'z' | 'A' .. 'Z';
+    BLANK = ' ';
+    DIGIT = '0' .. '9';
+    ALPHA = 'a' .. 'z' | 'A' .. 'Z';
 
-    token LPAREN = '(';
-    token RPAREN = ')';
-    token ATOM   = ALPHA ~ (ALPHA | DIGIT)*;
+    LPAREN = '(';
+    RPAREN = ')';
+    ATOM   = ALPHA ~ (ALPHA | DIGIT)*;
 
     skip = (BLANK | '\t' | '\n' | '\r')+;
 }

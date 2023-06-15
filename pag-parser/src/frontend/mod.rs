@@ -21,10 +21,10 @@ use std::fmt::Display;
 pub enum FrontendError<'a> {
     // InternalLogicalError(Span<'a>, Cow<'a, str>),
     MultipleDefinition(Span<'a>, Span<'a>),
-    InvalidLexicalReference(Span<'a>),
-    MultipleSkippingRule(Span<'a>),
+    MultipleSkippingRule(Span<'a>, Span<'a>),
     NullableToken(&'a str, Span<'a>),
     UndefinedLexicalRuleReference(Span<'a>),
+    CyclicLexicalRuleReference(Span<'a>),
     UndefinedParserRuleReference(Span<'a>),
 }
 
@@ -238,11 +238,7 @@ pub enum SurfaceSyntaxTree<'a> {
     ParserOptional {
         inner: SpanBox<'a, Self>,
     },
-    LexicalDefinition {
-        name: WithSpan<'a, ()>,
-        expr: SpanBox<'a, Self>,
-    },
-    LexicalTokenDef {
+    LexicalRuleDef {
         name: WithSpan<'a, ()>,
         expr: SpanBox<'a, Self>,
     },
@@ -302,21 +298,6 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                         .collect::<Result<_, _>>()?;
                     LexerDef { rules }
                 }
-                Rule::lexical_definition => {
-                    let mut definition = primary.into_inner();
-                    let name = definition
-                        .next()
-                        .ok_or_else(|| unexpected_eoi!("name for lexical definition"))?;
-                    let expr = definition
-                        .next()
-                        .ok_or_else(|| unexpected_eoi!("expr for lexical definition"))?;
-                    let name = WithSpan {
-                        span: name.as_span(),
-                        node: (),
-                    };
-                    let expr = Box::new(parse_surface_syntax(expr.into_inner(), pratt, src)?);
-                    LexicalDefinition { name, expr }
-                }
                 Rule::range => {
                     let mut primary = primary.into_inner();
                     let start = primary
@@ -343,7 +324,7 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                 Rule::lexical_expr => {
                     return parse_surface_syntax(primary.into_inner(), pratt, src)
                 }
-                Rule::lexical_token_def => {
+                Rule::lexical_rule => {
                     let mut token = primary.into_inner();
                     let name = token
                         .next()
@@ -356,9 +337,9 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                         node: (),
                     };
                     let expr = Box::new(parse_surface_syntax(expr.into_inner(), pratt, src)?);
-                    LexicalTokenDef { name, expr }
+                    LexicalRuleDef { name, expr }
                 }
-                Rule::lexical_skip_def => {
+                Rule::lexical_skip => {
                     let mut token = primary.into_inner();
                     let expr = token
                         .next()
@@ -489,7 +470,6 @@ mod test {
 
     use crate::{
         core_syntax::{Term, TermArena},
-        frontend::lexical::LexerDatabase,
         fusion::fusion_parser,
         nf::{
             fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
@@ -497,7 +477,7 @@ mod test {
         },
     };
 
-    use super::{syntax::construct_parser, *};
+    use super::{lexical::construct_lexer_database, syntax::construct_parser, *};
 
     const TEST: &str = include_str!("example.pag");
 
@@ -510,8 +490,8 @@ mod test {
         let tree = parse_surface_syntax(pairs, &PRATT_PARSER, TEST).unwrap();
         let Grammar { lexer, parser } = &tree.node else { unreachable!() };
 
-        println!("\n---------< lexer database >----------");
-        let database = LexerDatabase::new(lexer).unwrap();
+        println!("\n---------< construct lexer database >----------");
+        let database = construct_lexer_database(lexer).unwrap();
         if let Some(skip) = &database.skip {
             println!("<skip> ::= {skip}");
         }
@@ -519,7 +499,7 @@ mod test {
             println!("{symbol} ::= {rule}");
         }
 
-        println!("\n---------< parser bindings >----------");
+        println!("\n---------< construct parser >----------");
         let arena = TermArena::new();
         let mut parser = construct_parser(&arena, database, parser).unwrap();
         for (symbol, rule) in parser.bindings.iter() {

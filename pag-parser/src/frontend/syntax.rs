@@ -166,9 +166,9 @@ fn construct_core_syntax_tree<'src, 'a>(
             }
         }
         LexicalRuleRef { name } => {
-            match context.lexer_database.symbol_table.get(name.span.as_str()) {
+            match context.lexer_database.symbol_set.get(name.span.as_str()) {
                 // Symbol::hash depends on the address so use the original &str
-                Some(target) => Ok(spanned(Term::LexerRef(Symbol::new(target.as_str())))),
+                Some(target) => Ok(spanned(Term::LexerRef(Symbol::new(target)))),
                 None => Err(vec![UndefinedLexicalRuleReference(name.span)]),
             }
         }

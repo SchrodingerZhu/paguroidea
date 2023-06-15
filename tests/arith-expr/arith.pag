@@ -1,12 +1,12 @@
 lexer {
-    definition DIGIT     = '0' .. '9';
+    DIGIT = '0' .. '9';
 
-    token LPAREN     = '(';
-    token RPAREN     = ')';
-    token PLUS     = '+';
-    token MULT     = '*';
-    token INT       = DIGIT+;
-    token SPECIAL  = '\u{FF}' .. '\u{D7FF}';
+    LPAREN  = '(';
+    RPAREN  = ')';
+    PLUS    = '+';
+    MULT    = '*';
+    INT     = DIGIT+;
+    SPECIAL = '\u{FF}' .. '\u{D7FF}';
 
     skip = (' ' | '\t' | '\n' | '\r')+;
 }

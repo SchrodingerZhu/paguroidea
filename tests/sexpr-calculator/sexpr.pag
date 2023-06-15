@@ -1,11 +1,11 @@
 lexer {
-    definition DIGIT     = '0' .. '9';
+    DIGIT = '0' .. '9';
 
-    token LPAREN     = '(';
-    token RPAREN     = ')';
-    token PLUS     = '+' | '加';
-    token MULT     = '*' | '乘';
-    token INT       = DIGIT+;
+    LPAREN = '(';
+    RPAREN = ')';
+    PLUS   = '+' | '加';
+    MULT   = '*' | '乘';
+    INT    = DIGIT+;
 
     skip = (' ' | '\t' | '\n' | '\r')+;
 }

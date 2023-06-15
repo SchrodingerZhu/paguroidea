@@ -1,20 +1,20 @@
 lexer {
-    definition DIGIT = '0'..'9';
-    definition NONZERO = '1'..'9';
-    definition HEX_DIGIT = '0' .. '9' | 'a' .. 'f' | 'A' .. 'F';
-    definition ESCAPED = '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't';
+    DIGIT     = '0'..'9';
+    NONZERO   = '1'..'9';
+    HEX_DIGIT = '0' .. '9' | 'a' .. 'f' | 'A' .. 'F';
+    ESCAPED   = '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't';
 
-    token LBRACKET = '{';
-    token RBRACKET = '}';
-    token COMMA = ',';
-    token COLON = ':';
-    token LSQUARE = '[';
-    token RSQUARE = ']';
-    token TRUE = "true";
-    token FALSE = "false";
-    token NULL = "null";
-    token STRING = '"' ~ ( !('\\' | '"') | '\\' ~ (ESCAPED | 'u' ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT) )* ~ '"';
-    token NUMBER = '-'? ~ ('0' | NONZERO ~ DIGIT*) ~ ('.' ~ DIGIT+)? ~ (('e' | 'E') ~ ('+' | '-')? ~ DIGIT+)?;
+    LBRACKET = '{';
+    RBRACKET = '}';
+    COMMA    = ',';
+    COLON    = ':';
+    LSQUARE  = '[';
+    RSQUARE  = ']';
+    TRUE     = "true";
+    FALSE    = "false";
+    NULL     = "null";
+    STRING   = '"' ~ ( !('\\' | '"') | '\\' ~ (ESCAPED | 'u' ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT) )* ~ '"';
+    NUMBER   = '-'? ~ ('0' | NONZERO ~ DIGIT*) ~ ('.' ~ DIGIT+)? ~ (('e' | 'E') ~ ('+' | '-')? ~ DIGIT+)?;
 
     skip = ('\n' | '\r' | '\t' | ' ')+;
 }
