@@ -14,9 +14,8 @@ pub fn encode_char(x: char) -> Rc<RegexTree> {
     let mut buf = [0; 4];
     x.encode_utf8(&mut buf)
         .bytes()
-        .map(RegexTree::single)
-        .reduce(|acc, e| RegexTree::Concat(Rc::new(acc), Rc::new(e)))
-        .map(Rc::new)
+        .map(|b| Rc::new(RegexTree::single(b)))
+        .reduce(|acc, e| Rc::new(RegexTree::Concat(acc, e)))
         .unwrap()
 }
 

@@ -6,7 +6,9 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use std::{collections::HashMap, rc::Rc};
+use std::cell::Cell;
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use pag_lexer::{normalization::normalize, regex_tree::RegexTree};
 use pest::Span;
@@ -21,20 +23,16 @@ use super::{
     WithSpan,
 };
 
-type SpanRegexTree<'a> = WithSpan<'a, Rc<RegexTree>>;
+type SpanRegexTree<'src> = WithSpan<'src, Rc<RegexTree>>;
 
-pub struct LexerDatabase<'a> {
-    pub symbol_table: HashMap<&'a str, Span<'a>>,
-    pub entries: HashMap<Symbol<'a>, SpanRegexTree<'a>>,
-    pub skip: Option<SpanRegexTree<'a>>,
+pub struct LexerDatabase<'src> {
+    pub symbol_set: HashSet<&'src str>,
+    pub entries: HashMap<Symbol<'src>, SpanRegexTree<'src>>,
+    pub skip: Option<SpanRegexTree<'src>>,
 }
 
-impl<'a> LexerDatabase<'a> {
-    pub fn new(sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>) -> FrontendResult<'a, Self> {
-        TranslationContext::create_database(sst)
-    }
-
-    pub fn nullability_check(&self) -> Vec<FrontendError<'a>> {
+impl<'src> LexerDatabase<'src> {
+    pub fn nullability_check(&self) -> Vec<FrontendError<'src>> {
         let mut errors = Vec::new();
         for (sym, rule) in &self.entries {
             if rule.node.is_nullable() {
@@ -50,222 +48,143 @@ impl<'a> LexerDatabase<'a> {
     }
 }
 
-struct TranslationContext<'a> {
-    definitions: HashMap<&'a str, SpanRegexTree<'a>>,
-    database: LexerDatabase<'a>,
+enum State<'src, 'a> {
+    Unresolved(&'a WithSpan<'src, SurfaceSyntaxTree<'src>>),
+    Pending,
+    Resolved(Rc<RegexTree>),
 }
 
-fn construct_regex_tree<'a, F>(
+pub fn construct_lexer_database<'a>(
     sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-    reference_handler: &F,
-) -> FrontendResult<'a, Rc<RegexTree>>
-where
-    F: Fn(WithSpan<'a, ()>) -> FrontendResult<'a, Rc<RegexTree>>,
-{
+) -> FrontendResult<'a, LexerDatabase<'a>> {
+    let LexerDef { rules } = &sst.node else {
+        unreachable_branch!("sst should be a lexical definition")
+    };
+    let mut errs = Vec::new();
+
+    let mut rule_defs = HashMap::new();
+    let mut skip_def = None;
+    for rule in rules {
+        match &rule.node {
+            LexicalRuleDef { name, expr } => {
+                let value = (name.span, Cell::new(State::Unresolved(expr)));
+                if let Some((previous, _)) = rule_defs.insert(name.span.as_str(), value) {
+                    errs.push(MultipleDefinition(previous, name.span));
+                }
+            }
+            LexicalSkipDef { expr } => {
+                if let Some((previous, _)) = skip_def {
+                    errs.push(MultipleSkippingRule(previous, rule.span));
+                } else {
+                    skip_def = Some((rule.span, expr));
+                }
+            }
+            _ => {}
+        }
+    }
+    if !errs.is_empty() {
+        return Err(errs);
+    }
+
+    let mut entries = HashMap::new();
+    for (name, (span, state)) in &rule_defs {
+        let node = match state.replace(State::Pending) {
+            State::Unresolved(expr_sst) => {
+                let expr_regex = construct_regex_tree(expr_sst, &rule_defs)?;
+                let expr_regex = normalize(expr_regex);
+                state.set(State::Resolved(expr_regex.clone()));
+                expr_regex
+            }
+            State::Pending => unreachable!(),
+            State::Resolved(expr_regex) => {
+                state.set(State::Resolved(expr_regex.clone()));
+                expr_regex
+            }
+        };
+        entries.insert(Symbol::new(name), WithSpan { span: *span, node });
+    }
+
+    let mut skip = None;
+    if let Some((span, skip_sst)) = skip_def {
+        let node = construct_regex_tree(skip_sst, &rule_defs)?;
+        let node = normalize(node);
+        skip = Some(WithSpan { span, node });
+    }
+
+    Ok(LexerDatabase {
+        entries,
+        symbol_set: rule_defs.keys().copied().collect(),
+        skip,
+    })
+}
+
+fn construct_regex_tree<'src, 'a>(
+    sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
+    rule_defs: &HashMap<&'src str, (Span<'src>, Cell<State<'src, 'a>>)>,
+) -> FrontendResult<'src, Rc<RegexTree>> {
     match &sst.node {
         LexicalAlternative { lhs, rhs } => {
-            let lhs = construct_regex_tree(lhs, reference_handler);
-            let rhs = construct_regex_tree(rhs, reference_handler);
+            let lhs = construct_regex_tree(lhs, rule_defs);
+            let rhs = construct_regex_tree(rhs, rule_defs);
             merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Union(l, r)))
         }
         LexicalSequence { lhs, rhs } => {
-            let lhs = construct_regex_tree(lhs, reference_handler);
-            let rhs = construct_regex_tree(rhs, reference_handler);
+            let lhs = construct_regex_tree(lhs, rule_defs);
+            let rhs = construct_regex_tree(rhs, rule_defs);
             merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Concat(l, r)))
         }
         LexicalAnd { lhs, rhs } => {
-            let lhs = construct_regex_tree(lhs, reference_handler);
-            let rhs = construct_regex_tree(rhs, reference_handler);
+            let lhs = construct_regex_tree(lhs, rule_defs);
+            let rhs = construct_regex_tree(rhs, rule_defs);
             merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Intersection(l, r)))
         }
         LexicalStar { inner } => {
-            let inner = construct_regex_tree(inner, reference_handler)?;
+            let inner = construct_regex_tree(inner, rule_defs)?;
             Ok(Rc::new(RegexTree::KleeneClosure(inner)))
         }
         LexicalPlus { inner } => {
-            let inner = construct_regex_tree(inner, reference_handler)?;
+            let inner = construct_regex_tree(inner, rule_defs)?;
             Ok(Rc::new(RegexTree::Concat(
                 inner.clone(),
                 Rc::new(RegexTree::KleeneClosure(inner)),
             )))
         }
         LexicalOptional { inner } => {
-            let inner = construct_regex_tree(inner, reference_handler)?;
+            let inner = construct_regex_tree(inner, rule_defs)?;
             Ok(Rc::new(RegexTree::Union(
                 inner,
                 Rc::new(RegexTree::Epsilon),
             )))
         }
         LexicalNot { inner } => {
-            let inner = construct_regex_tree(inner, reference_handler)?;
+            let inner = construct_regex_tree(inner, rule_defs)?;
             Ok(Rc::new(RegexTree::Complement(inner)))
         }
         RangeLit { start, end } => Ok(unicode::encode_range(*start, *end)),
-        StringLit(x) => {
-            if x.is_empty() {
-                Ok(Rc::new(RegexTree::Epsilon))
-            } else {
-                let mut iter = x.bytes();
-                let fst = Rc::new(RegexTree::single(unsafe { iter.next().unwrap_unchecked() }));
-                Ok(iter.fold(fst, |acc, c| {
-                    Rc::new(RegexTree::Concat(acc, Rc::new(RegexTree::single(c))))
-                }))
-            }
-        }
+        StringLit(x) => Ok(x
+            .bytes()
+            .map(|b| Rc::new(RegexTree::single(b)))
+            .reduce(|acc, b| Rc::new(RegexTree::Concat(acc, b)))
+            .unwrap_or_else(|| Rc::new(RegexTree::Epsilon))),
         Bottom => Ok(Rc::new(RegexTree::Bottom)),
         Empty => Ok(Rc::new(RegexTree::Epsilon)),
         CharLit { value } => Ok(unicode::encode_char(value.node)),
-        LexicalRuleRef { name } => reference_handler(name.clone()),
-        _ => unreachable_branch!("called with unsupported node: {}", sst.span.as_str()),
-    }
-}
-
-fn construct_definition<'a>(
-    sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-) -> FrontendResult<'a, (&'a str, SpanRegexTree<'a>)> {
-    fn reference_handler(name: WithSpan<()>) -> FrontendResult<Rc<RegexTree>> {
-        Err(vec![InvalidLexicalReference(name.span)])
-    }
-    let LexicalDefinition { name, expr } = &sst.node else {
-        unreachable_branch!("sst should be a lexical definition")
-    };
-    let name = name.span.as_str();
-    let tree = construct_regex_tree(expr, &reference_handler)?;
-    Ok((
-        name,
-        WithSpan {
-            span: expr.span,
-            node: normalize(tree),
-        },
-    ))
-}
-
-fn construct_lexical_rule<'a>(
-    definitions: &HashMap<&'a str, SpanRegexTree<'a>>,
-    sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-) -> FrontendResult<'a, (Symbol<'a>, SpanRegexTree<'a>)> {
-    let reference_handler = |name: WithSpan<'a, ()>| match definitions.get(name.span.as_str()) {
-        Some(x) => Ok(x.node.clone()),
-        _ => Err(vec![UndefinedLexicalRuleReference(name.span)]),
-    };
-    let LexicalTokenDef { name, expr, .. } = &sst.node else {
-        unreachable_branch!("sst should be a lexical token")
-    };
-    let name = name.span.as_str();
-    let tree = construct_regex_tree(expr, &reference_handler)?;
-    Ok((
-        Symbol::new(name),
-        WithSpan {
-            span: expr.span,
-            node: normalize(tree),
-        },
-    ))
-}
-
-fn construct_skip_rule<'a>(
-    definitions: &HashMap<&'a str, SpanRegexTree<'a>>,
-    sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-) -> FrontendResult<'a, SpanRegexTree<'a>> {
-    let reference_handler = |name: WithSpan<'a, ()>| match definitions.get(name.span.as_str()) {
-        Some(x) => Ok(x.node.clone()),
-        _ => Err(vec![UndefinedLexicalRuleReference(name.span)]),
-    };
-    let LexicalSkipDef { expr, .. } = &sst.node else {
-        unreachable_branch!("sst should be a lexical token")
-    };
-    let tree = construct_regex_tree(expr, &reference_handler)?;
-    Ok(WithSpan {
-        span: expr.span,
-        node: normalize(tree),
-    })
-}
-
-impl<'a> TranslationContext<'a> {
-    fn new() -> Self {
-        TranslationContext {
-            definitions: HashMap::new(),
-            database: LexerDatabase {
-                entries: HashMap::new(),
-                symbol_table: HashMap::new(),
-                skip: None,
+        LexicalRuleRef { name } => match rule_defs.get(name.span.as_str()) {
+            Some((_, state)) => match state.replace(State::Pending) {
+                State::Unresolved(expr_sst) => {
+                    let expr_regex = construct_regex_tree(expr_sst, rule_defs)?;
+                    let expr_regex = normalize(expr_regex);
+                    state.set(State::Resolved(expr_regex.clone()));
+                    Ok(expr_regex)
+                }
+                State::Pending => Err(vec![CyclicLexicalRuleReference(name.span)]),
+                State::Resolved(expr_regex) => {
+                    state.set(State::Resolved(expr_regex.clone()));
+                    Ok(expr_regex)
+                }
             },
-        }
-    }
-
-    fn populate_definitions(
-        &mut self,
-        sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-    ) -> FrontendResult<'a, ()> {
-        let LexerDef { rules } = &sst.node else {
-            unreachable_branch!("sst should be a lexical definition")
-        };
-        let mut errs = Vec::new();
-        for rule in rules {
-            let LexicalDefinition { .. } = &rule.node else { continue };
-            match construct_definition(rule) {
-                Ok((symbol, regex)) => {
-                    let current_span = regex.span;
-                    match self.definitions.insert(symbol, regex) {
-                        None => {}
-                        Some(previous) => {
-                            // FIXME: should be previous_name.span & current_name.span
-                            errs.push(MultipleDefinition(previous.span, current_span));
-                        }
-                    }
-                }
-                Err(e) => errs.extend(e),
-            }
-        }
-        if !errs.is_empty() {
-            return Err(errs);
-        }
-        Ok(())
-    }
-
-    fn create_database(
-        sst: &WithSpan<'a, SurfaceSyntaxTree<'a>>,
-    ) -> FrontendResult<'a, LexerDatabase<'a>> {
-        let LexerDef { rules } = &sst.node else {
-            unreachable_branch!("sst should be a lexical definition")
-        };
-        let mut ctx = Self::new();
-        let mut errs = match ctx.populate_definitions(sst) {
-            Ok(_) => Vec::new(),
-            Err(errs) => errs,
-        };
-        for rule in rules {
-            match &rule.node {
-                LexicalSkipDef { .. } => {
-                    if ctx.database.skip.is_some() {
-                        errs.push(MultipleSkippingRule(rule.span));
-                        continue;
-                    }
-                    match construct_skip_rule(&ctx.definitions, rule) {
-                        Ok(regex) => ctx.database.skip = Some(regex),
-                        Err(e) => errs.extend(e),
-                    }
-                }
-                LexicalTokenDef { name, .. } => {
-                    match construct_lexical_rule(&ctx.definitions, rule) {
-                        Ok((symbol, regex)) => {
-                            match ctx.database.symbol_table.insert(symbol.name(), name.span) {
-                                None => {
-                                    ctx.database.entries.insert(symbol, regex);
-                                }
-                                Some(previous) => {
-                                    errs.push(MultipleDefinition(previous, name.span))
-                                }
-                            }
-                        }
-                        Err(e) => errs.extend(e),
-                    }
-                }
-                _ => {}
-            }
-        }
-        if !errs.is_empty() {
-            return Err(errs);
-        }
-        Ok(ctx.database)
+            None => Err(vec![UndefinedLexicalRuleReference(name.span)]),
+        },
+        _ => unreachable_branch!("called with unsupported node: {}", sst.span.as_str()),
     }
 }
