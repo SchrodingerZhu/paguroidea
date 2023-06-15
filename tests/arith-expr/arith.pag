@@ -1,12 +1,14 @@
 lexer {
     definition DIGIT     = '0' .. '9';
-    active token LPAREN     = '(';
-    active token RPAREN     = ')';
-    active token PLUS     = '+';
-    active token MULT     = '*';
-    active token INT       = DIGIT+;
-    active token SPECIAL  = '\u{FF}' .. '\u{D7FF}';
-    silent token WHITESPACE = (' ' | '\t' | '\n' | '\r')+;
+
+    token LPAREN     = '(';
+    token RPAREN     = ')';
+    token PLUS     = '+';
+    token MULT     = '*';
+    token INT       = DIGIT+;
+    token SPECIAL  = '\u{FF}' .. '\u{D7FF}';
+
+    skip = (' ' | '\t' | '\n' | '\r')+;
 }
 
 parser expr {

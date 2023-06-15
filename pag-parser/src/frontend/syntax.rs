@@ -52,10 +52,10 @@ pub fn construct_parser<'src, 'a>(
     lexer_database: LexerDatabase<'src>,
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
 ) -> FrontendResult<'src, Parser<'src, 'a>> {
-    let symbol_set = construct_symbol_table(sst)?;
     let ParserDef { entrypoint, rules } = &sst.node else {
         unreachable_branch!("sst should be a parser definition")
     };
+    let symbol_set = construct_symbol_set(sst)?;
     let entrypoint = match symbol_set.get(entrypoint.span.as_str()) {
         Some(name) => Symbol::new(name),
         None => {
@@ -98,7 +98,7 @@ pub fn construct_parser<'src, 'a>(
     Ok(parser)
 }
 
-fn construct_symbol_table<'src>(
+fn construct_symbol_set<'src>(
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
 ) -> FrontendResult<'src, HashSet<&'src str>> {
     let ParserDef { rules, .. } = &sst.node else {
@@ -178,13 +178,11 @@ fn construct_core_syntax_tree<'src, 'a>(
         LexicalRuleRef { name } => {
             let name = name.span.as_str();
             match context.lexer_database.symbol_table.get(name) {
-                Some(target) => Ok(spanned(Term::LexerRef(*target))),
+                // Symbol::hash depends on the address so use the original &str
+                Some(target) => Ok(spanned(Term::LexerRef(Symbol::new(target.as_str())))),
                 None => Err(span_errors!(UndefinedLexicalReference, sst.span, name)),
             }
         }
-        _ => unreachable_branch!(
-            "core syntax tree construction should not be called on this node: {}",
-            sst.span.as_str()
-        ),
+        _ => unreachable_branch!("called with unsupported node: {}", sst.span.as_str()),
     }
 }

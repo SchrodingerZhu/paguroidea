@@ -23,7 +23,7 @@ pub enum Error<'a> {
     InternalLogicalError(Cow<'a, str>),
     MultipleDefinition(&'a str, Span<'a>),
     InvalidLexicalReference(&'a str),
-    MultipleSkippingRule(&'a str),
+    MultipleSkippingRule,
     NullableToken(&'a str),
     UndefinedLexicalReference(&'a str),
     UndefinedParserRuleReference(&'a str),
@@ -254,9 +254,11 @@ pub enum SurfaceSyntaxTree<'a> {
         name: WithSpan<'a, ()>,
         expr: SpanBox<'a, Self>,
     },
-    LexicalToken {
-        active: bool,
+    LexicalTokenDef {
         name: WithSpan<'a, ()>,
+        expr: SpanBox<'a, Self>,
+    },
+    LexicalSkipDef {
         expr: SpanBox<'a, Self>,
     },
     RangeLit {
@@ -353,8 +355,7 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                 Rule::lexical_expr => {
                     return parse_surface_syntax(primary.into_inner(), pratt, src)
                 }
-                Rule::active_token | Rule::silent_token => {
-                    let active = matches!(primary.as_rule(), Rule::active_token);
+                Rule::lexical_token_def => {
                     let mut token = primary.into_inner();
                     let name = token
                         .next()
@@ -367,7 +368,15 @@ fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
                         node: (),
                     };
                     let expr = Box::new(parse_surface_syntax(expr.into_inner(), pratt, src)?);
-                    LexicalToken { active, name, expr }
+                    LexicalTokenDef { name, expr }
+                }
+                Rule::lexical_skip_def => {
+                    let mut token = primary.into_inner();
+                    let expr = token
+                        .next()
+                        .ok_or_else(|| unexpected_eoi!("expr for token rule"))?;
+                    let expr = Box::new(parse_surface_syntax(expr.into_inner(), pratt, src)?);
+                    LexicalSkipDef { expr }
                 }
                 Rule::character => {
                     let character = unescape_qouted(primary.as_str())
@@ -515,15 +524,18 @@ mod test {
 
         println!("\n---------< lexer database >----------");
         let database = LexerDatabase::new(lexer).unwrap();
-        for (i, rule) in database.entries.iter() {
-            println!("{i} ::= {}, active = {}", rule.rule, rule.active)
+        if let Some(skip) = &database.skip {
+            println!("<skip> ::= {skip}");
+        }
+        for (symbol, rule) in database.entries.iter() {
+            println!("{symbol} ::= {rule}");
         }
 
         println!("\n---------< parser bindings >----------");
         let arena = TermArena::new();
         let mut parser = construct_parser(&arena, database, parser).unwrap();
-        for (i, rule) in parser.bindings.iter() {
-            println!("{i} ::= {}, active = {}", rule.term, rule.active)
+        for (symbol, rule) in parser.bindings.iter() {
+            println!("{symbol} ::= {}, active = {}", rule.term, rule.active);
         }
 
         println!("\n---------< infer fixpoints >----------");
@@ -548,10 +560,10 @@ mod test {
         let mut assigner = TagAssigner::new();
 
         println!("\n---------< semi normalize >----------");
-        for (i, rule) in parser.bindings.iter() {
+        for (symbol, rule) in parser.bindings.iter() {
             semi_normalize(
                 &rule.term.node,
-                Tag::new(*i),
+                Tag::new(*symbol),
                 &nf_arena,
                 &mut nfs,
                 &mut assigner,

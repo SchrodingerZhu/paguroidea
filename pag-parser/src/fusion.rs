@@ -307,7 +307,7 @@ fn generate_expect<'src>(
             NormalForm::Sequence { terminal, .. } => Some(terminal.name()),
             _ => None,
         })
-        .chain(lexer_database.skip.map(|x| x.name()))
+        .chain(lexer_database.skip.as_ref().map(|_| "<skip>"))
         .collect();
     quote! {
         const EXPECTING: &[&str] = &[#(#elements),*];
@@ -327,7 +327,7 @@ fn generate_inactive_parser<'src>(
 
     let success_actions = generate_children(&tag, false, parser, rules)
         .into_iter()
-        .chain(lexer_database.skip.map(|_| generate_skip()))
+        .chain(lexer_database.skip.as_ref().map(|_| generate_skip()))
         .collect::<Vec<_>>();
     let failure_action = match rules.iter().find_map(|x| match x {
         NormalForm::Empty(e) => Some(e),
@@ -388,7 +388,7 @@ fn generate_active_parser<'src>(
 
     let success_actions = generate_children(&tag, true, parser, rules)
         .into_iter()
-        .chain(lexer_database.skip.map(|_| generate_skip()))
+        .chain(lexer_database.skip.as_ref().map(|_| generate_skip()))
         .collect::<Vec<_>>();
     let failure_action = match rules.iter().find_map(|x| match x {
         NormalForm::Empty(e) => Some(e),
@@ -488,15 +488,10 @@ pub fn fusion_lexer<'src>(
             .filter_map(|x| match x {
                 NormalForm::Empty(..) => None,
                 NormalForm::Unexpanded(..) => None,
-                NormalForm::Sequence { terminal, .. } => lexer_database
-                    .entries
-                    .get(terminal)
-                    .map(|x| x.rule.node.clone()),
+                NormalForm::Sequence { terminal, .. } => {
+                    lexer_database.entries.get(terminal).map(|x| x.node.clone())
+                }
             })
-            .chain(
-                lexer_database
-                    .skip
-                    .and_then(|x| lexer_database.entries.get(&x).map(|x| x.rule.node.clone())),
-            ),
+            .chain(lexer_database.skip.as_ref().map(|x| x.node.clone())),
     )
 }

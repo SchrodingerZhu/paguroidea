@@ -2,13 +2,14 @@ any = { "." }
 bottom = { "<bottom>" | "⊥" }
 silent = _{ "silent" }
 active = _{ "active" }
+skip = _{ "skip" }
 token = _{ "token" }
 lexer = _{ "lexer" }
 parser = _{ "parser" }
 empty = { "_" }
 definition = _{ "definition" }
 
-KEYWORD = { any | active | empty | bottom | silent | token | lexer | parser | definition }
+KEYWORD = { any | empty | bottom | silent | active | skip | token | lexer | parser | definition }
 
 /// A newline character.
 newline = _{ "\n" | "\r\n" }
@@ -64,11 +65,10 @@ parser_alternative = { "|" }
 
 // lexer definition
 lexer_def = { lexer ~ "{" ~ lexer_rules ~ "}" }
-lexer_rules = { ( (token_rule | lexical_definition) ~ ";")+ }
+lexer_rules = { ( (lexical_definition | lexical_token_def | lexical_skip_def) ~ ";")+ }
 lexical_definition = { definition ~ token_id ~ "=" ~ lexical_expr }
-token_rule = _{ active_token | silent_token }
-active_token = { active ~ token ~ token_id ~ "=" ~ lexical_expr }
-silent_token = { silent ~ token ~ token_id ~ "=" ~ lexical_expr }
+lexical_token_def = { token ~ token_id ~ "=" ~ lexical_expr }
+lexical_skip_def = { skip ~ "=" ~ lexical_expr }
 
 // parser definition
 parser_def = { parser ~ parser_id ~ "{" ~ parser_rules ~ "}" }

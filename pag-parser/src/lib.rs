@@ -148,11 +148,11 @@ impl<'src> Error<'src> {
                                     .with_color(Color::Red))
                                 .finish()
                         },
-                        frontend::Error::MultipleSkippingRule(name) => {
+                        frontend::Error::MultipleSkippingRule => {
                             Report::build(ReportKind::Error, input_name, e.span.start())
                                 .with_message("Skipping lexical rule is already defined")
                                 .with_label(ariadne::Label::new((input_name, e.span.start()..e.span.end()))
-                                    .with_message(format!("this definition conflicts with previous definition for {name}"))
+                                    .with_message(format!("this definition conflicts with existing one"))
                                     .with_color(Color::Red))
                                 .finish()
                         },
@@ -250,10 +250,10 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
     let nf_arena = Arena::new();
     let mut nfs = NormalForms::new();
     let mut assigner = TagAssigner::new();
-    for (i, rule) in parser.bindings.iter() {
+    for (symbol, rule) in parser.bindings.iter() {
         semi_normalize(
             &rule.term.node,
-            Tag::new(*i),
+            Tag::new(*symbol),
             &nf_arena,
             &mut nfs,
             &mut assigner,

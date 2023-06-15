@@ -1,12 +1,15 @@
 lexer {
     // definition in lexer is not a real token, it is just a way to define a set of characters
-    definition BLANK     = ' ';
-    definition DIGIT     = '0' .. '9';
-    definition ALPHA     = 'a' .. 'z' | 'A' .. 'Z';
-    active token LPAREN     = '(';
-    active token RPAREN     = ')';
-    active token ATOM       = ALPHA ~ (ALPHA | DIGIT)*;
-    silent token WHITESPACE = (BLANK | '\t' | '\n' | '\r')+;
+
+    definition BLANK = ' ';
+    definition DIGIT = '0' .. '9';
+    definition ALPHA = 'a' .. 'z' | 'A' .. 'Z';
+
+    token LPAREN = '(';
+    token RPAREN = ')';
+    token ATOM   = ALPHA ~ (ALPHA | DIGIT)*;
+
+    skip = (BLANK | '\t' | '\n' | '\r')+;
 }
 
 // parser must have a entry point
