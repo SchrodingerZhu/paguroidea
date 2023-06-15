@@ -110,9 +110,9 @@ fn tarjan(node_id: NodeId, dfn_cnt: &mut u32, stack: &mut Vec<NodeId>, graph: &G
     }
 }
 
-pub fn infer_fixpoints<'src, 'a>(
-    arena: &'a TermArena<'src, 'a>,
-    binding_ctx: &mut BindingContext<'src, 'a>,
+pub fn infer_fixpoints<'src, 'arena>(
+    arena: &'arena TermArena<'src, 'arena>,
+    binding_ctx: &mut BindingContext<'src, 'arena>,
 ) {
     let (graph, id_to_sym) = construct_graph(binding_ctx);
     let mut dfn_cnt = 0;

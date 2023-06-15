@@ -18,17 +18,17 @@ use std::borrow::Cow;
 use std::fmt::Display;
 
 #[derive(Debug, Clone)]
-pub enum FrontendError<'a> {
-    // InternalLogicalError(Span<'a>, Cow<'a, str>),
-    MultipleDefinition(Span<'a>, Span<'a>),
-    MultipleSkippingRule(Span<'a>, Span<'a>),
-    NullableToken(&'a str, Span<'a>),
-    UndefinedLexicalRuleReference(Span<'a>),
-    CyclicLexicalRuleReference(Span<'a>),
-    UndefinedParserRuleReference(Span<'a>),
+pub enum FrontendError<'src> {
+    // InternalLogicalError(Span<'src>, Cow<'src, str>),
+    MultipleDefinition(Span<'src>, Span<'src>),
+    MultipleSkippingRule(Span<'src>, Span<'src>),
+    NullableToken(&'src str, Span<'src>),
+    UndefinedLexicalRuleReference(Span<'src>),
+    CyclicLexicalRuleReference(Span<'src>),
+    UndefinedParserRuleReference(Span<'src>),
 }
 
-pub type FrontendResult<'a, T> = Result<T, Vec<FrontendError<'a>>>;
+pub type FrontendResult<'src, T> = Result<T, Vec<FrontendError<'src>>>;
 
 macro_rules! unexpected_eoi {
     ($expectation:literal) => {
@@ -177,73 +177,74 @@ pub struct WithSpan<'a, T> {
     pub node: T,
 }
 
-impl<'a, T: Display> Display for WithSpan<'a, T> {
+impl<T: Display> Display for WithSpan<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.node.fmt(f)
     }
 }
+
 pub type SpanBox<'a, T> = Box<WithSpan<'a, T>>;
 
 #[derive(Debug)]
-pub enum SurfaceSyntaxTree<'a> {
+pub enum SurfaceSyntaxTree<'src> {
     Grammar {
-        lexer: SpanBox<'a, Self>,
-        parser: SpanBox<'a, Self>,
+        lexer: SpanBox<'src, Self>,
+        parser: SpanBox<'src, Self>,
     },
     ParserDef {
-        entrypoint: WithSpan<'a, ()>,
-        rules: Vec<WithSpan<'a, Self>>,
+        entrypoint: WithSpan<'src, ()>,
+        rules: Vec<WithSpan<'src, Self>>,
     },
     LexerDef {
-        rules: Vec<WithSpan<'a, Self>>,
+        rules: Vec<WithSpan<'src, Self>>,
     },
     LexicalAlternative {
-        lhs: SpanBox<'a, Self>,
-        rhs: SpanBox<'a, Self>,
+        lhs: SpanBox<'src, Self>,
+        rhs: SpanBox<'src, Self>,
     },
     LexicalSequence {
-        lhs: SpanBox<'a, Self>,
-        rhs: SpanBox<'a, Self>,
+        lhs: SpanBox<'src, Self>,
+        rhs: SpanBox<'src, Self>,
     },
     LexicalAnd {
-        lhs: SpanBox<'a, Self>,
-        rhs: SpanBox<'a, Self>,
+        lhs: SpanBox<'src, Self>,
+        rhs: SpanBox<'src, Self>,
     },
     LexicalStar {
-        inner: SpanBox<'a, Self>,
+        inner: SpanBox<'src, Self>,
     },
     LexicalPlus {
-        inner: SpanBox<'a, Self>,
+        inner: SpanBox<'src, Self>,
     },
     LexicalOptional {
-        inner: SpanBox<'a, Self>,
+        inner: SpanBox<'src, Self>,
     },
     LexicalNot {
-        inner: SpanBox<'a, Self>,
+        inner: SpanBox<'src, Self>,
     },
     ParserAlternative {
-        lhs: SpanBox<'a, Self>,
-        rhs: SpanBox<'a, Self>,
+        lhs: SpanBox<'src, Self>,
+        rhs: SpanBox<'src, Self>,
     },
     ParserSequence {
-        lhs: SpanBox<'a, Self>,
-        rhs: SpanBox<'a, Self>,
+        lhs: SpanBox<'src, Self>,
+        rhs: SpanBox<'src, Self>,
     },
     ParserStar {
-        inner: SpanBox<'a, Self>,
+        inner: SpanBox<'src, Self>,
     },
     ParserPlus {
-        inner: SpanBox<'a, Self>,
+        inner: SpanBox<'src, Self>,
     },
     ParserOptional {
-        inner: SpanBox<'a, Self>,
+        inner: SpanBox<'src, Self>,
     },
     LexicalRuleDef {
-        name: WithSpan<'a, ()>,
-        expr: SpanBox<'a, Self>,
+        name: WithSpan<'src, ()>,
+        expr: SpanBox<'src, Self>,
     },
     LexicalSkipDef {
-        expr: SpanBox<'a, Self>,
+        expr: SpanBox<'src, Self>,
     },
     RangeLit {
         start: char,
@@ -251,30 +252,30 @@ pub enum SurfaceSyntaxTree<'a> {
     },
     StringLit(String),
     CharLit {
-        value: WithSpan<'a, char>,
+        value: WithSpan<'src, char>,
     },
     Bottom,
     Empty,
     ParserRuleDef {
         active: bool,
-        name: WithSpan<'a, ()>,
-        expr: SpanBox<'a, Self>,
+        name: WithSpan<'src, ()>,
+        expr: SpanBox<'src, Self>,
     },
     ParserRuleRef {
-        name: WithSpan<'a, ()>,
+        name: WithSpan<'src, ()>,
     },
     LexicalRuleRef {
-        name: WithSpan<'a, ()>,
+        name: WithSpan<'src, ()>,
     },
 }
 
 use SurfaceSyntaxTree::*;
 
-fn parse_surface_syntax<'a, I: IntoIterator<Item = Pair<'a, Rule>>>(
+fn parse_surface_syntax<'src, I: IntoIterator<Item = Pair<'src, Rule>>>(
     pairs: I,
     pratt: &PrattParser<Rule>,
-    src: &'a str,
-) -> Result<WithSpan<'a, SurfaceSyntaxTree<'a>>, GrammarDefinitionError<'a>> {
+    src: &'src str,
+) -> Result<WithSpan<'src, SurfaceSyntaxTree<'src>>, GrammarDefinitionError<'src>> {
     pratt
         .map_primary(|primary| {
             let span = primary.as_span();

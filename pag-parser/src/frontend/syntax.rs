@@ -24,15 +24,15 @@ use super::{
     WithSpan,
 };
 
-pub struct Parser<'src, 'a> {
+pub struct Parser<'src, 'arena> {
     pub entrypoint: Symbol<'src>,
-    pub arena: &'a TermArena<'src, 'a>,
-    pub bindings: BindingContext<'src, 'a>,
+    pub arena: &'arena TermArena<'src, 'arena>,
+    pub bindings: BindingContext<'src, 'arena>,
     pub symbol_set: HashSet<&'src str>,
     pub lexer_database: LexerDatabase<'src>,
 }
 
-impl<'src, 'a> Parser<'src, 'a> {
+impl<'src, 'arena> Parser<'src, 'arena> {
     pub fn infer_fixpoints(&mut self) {
         infer_fixpoints(self.arena, &mut self.bindings);
     }
@@ -47,11 +47,11 @@ impl<'src, 'a> Parser<'src, 'a> {
     }
 }
 
-pub fn construct_parser<'src, 'a>(
-    arena: &'a TermArena<'src, 'a>,
+pub fn construct_parser<'src, 'arena>(
+    arena: &'arena TermArena<'src, 'arena>,
     lexer_database: LexerDatabase<'src>,
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
-) -> FrontendResult<'src, Parser<'src, 'a>> {
+) -> FrontendResult<'src, Parser<'src, 'arena>> {
     let ParserDef { entrypoint, rules } = &sst.node else {
         unreachable_branch!("sst should be a parser definition")
     };
@@ -114,11 +114,11 @@ fn construct_symbol_set<'src>(
     Ok(symbol_table.keys().copied().collect())
 }
 
-fn construct_core_syntax_tree<'src, 'a>(
-    context: &Parser<'src, 'a>,
+fn construct_core_syntax_tree<'src, 'arena>(
+    context: &Parser<'src, 'arena>,
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
-) -> FrontendResult<'src, TermPtr<'src, 'a>> {
-    let spanned = |node: Term<'src, 'a>| {
+) -> FrontendResult<'src, TermPtr<'src, 'arena>> {
+    let spanned = |node: Term<'src, 'arena>| {
         context.arena.alloc(WithSpan {
             span: sst.span,
             node,

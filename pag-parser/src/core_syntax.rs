@@ -6,33 +6,36 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use std::{collections::HashMap, fmt::Display};
+use std::collections::HashMap;
+use std::fmt::Display;
+
+use typed_arena::Arena;
 
 use crate::frontend::WithSpan;
 use crate::utilities::Symbol;
 
 #[derive(Debug, Clone)]
-pub enum Term<'src, 'a> {
+pub enum Term<'src, 'arena> {
     Epsilon,
-    Sequence(TermPtr<'src, 'a>, TermPtr<'src, 'a>),
+    Sequence(TermPtr<'src, 'arena>, TermPtr<'src, 'arena>),
     LexerRef(Symbol<'src>),
     Bottom,
-    Alternative(TermPtr<'src, 'a>, TermPtr<'src, 'a>),
-    Fix(Symbol<'src>, TermPtr<'src, 'a>),
+    Alternative(TermPtr<'src, 'arena>, TermPtr<'src, 'arena>),
+    Fix(Symbol<'src>, TermPtr<'src, 'arena>),
     ParserRef(Symbol<'src>),
 }
 
-pub type TermPtr<'src, 'a> = &'a WithSpan<'src, Term<'src, 'a>>;
-pub type TermArena<'src, 'a> = typed_arena::Arena<WithSpan<'src, Term<'src, 'a>>>;
+pub type TermPtr<'src, 'arena> = &'arena WithSpan<'src, Term<'src, 'arena>>;
+pub type TermArena<'src, 'arena> = Arena<WithSpan<'src, Term<'src, 'arena>>>;
 
-pub struct ParserRule<'src, 'a> {
+pub struct ParserRule<'src, 'arena> {
     pub active: bool,
-    pub term: TermPtr<'src, 'a>,
+    pub term: TermPtr<'src, 'arena>,
 }
 
-pub type BindingContext<'src, 'a> = HashMap<Symbol<'src>, ParserRule<'src, 'a>>;
+pub type BindingContext<'src, 'arena> = HashMap<Symbol<'src>, ParserRule<'src, 'arena>>;
 
-impl<'src, 'a> Display for Term<'src, 'a> {
+impl Display for Term<'_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Term::Epsilon => write!(f, "ε"),
