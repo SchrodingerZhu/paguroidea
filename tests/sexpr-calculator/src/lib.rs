@@ -83,7 +83,7 @@ fn simple_test() {
     let err = parser::parse(test).unwrap_err().to_string();
     assert_eq!(
         err,
-        "expecting MULT, PLUS or WHITESPACE for compound at offset 6"
+        "expecting MULT, PLUS or <skip> for compound at offset 6"
     );
 }
 

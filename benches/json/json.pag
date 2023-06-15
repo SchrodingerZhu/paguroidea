@@ -4,18 +4,19 @@ lexer {
     definition HEX_DIGIT = '0' .. '9' | 'a' .. 'f' | 'A' .. 'F';
     definition ESCAPED = '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't';
 
-    silent token WHITESPACE = ('\n' | '\r' | '\t' | ' ')+;
-    active token LBRACKET = '{';
-    active token RBRACKET = '}';
-    active token COMMA = ',';
-    active token COLON = ':';
-    active token LSQUARE = '[';
-    active token RSQUARE = ']';
-    active token TRUE = "true";
-    active token FALSE = "false";
-    active token NULL = "null";
-    active token STRING = '"' ~ ( !('\\' | '"') | '\\' ~ (ESCAPED | 'u' ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT) )* ~ '"';
-    active token NUMBER = '-'? ~ ('0' | NONZERO ~ DIGIT*) ~ ('.' ~ DIGIT+)? ~ (('e' | 'E') ~ ('+' | '-')? ~ DIGIT+)?;
+    token LBRACKET = '{';
+    token RBRACKET = '}';
+    token COMMA = ',';
+    token COLON = ':';
+    token LSQUARE = '[';
+    token RSQUARE = ']';
+    token TRUE = "true";
+    token FALSE = "false";
+    token NULL = "null";
+    token STRING = '"' ~ ( !('\\' | '"') | '\\' ~ (ESCAPED | 'u' ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT) )* ~ '"';
+    token NUMBER = '-'? ~ ('0' | NONZERO ~ DIGIT*) ~ ('.' ~ DIGIT+)? ~ (('e' | 'E') ~ ('+' | '-')? ~ DIGIT+)?;
+
+    skip = ('\n' | '\r' | '\t' | ' ')+;
 }
 
 parser json {

@@ -14,10 +14,8 @@ use std::rc::Rc;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Clone, Hash)]
 pub enum RegexTree {
-    Top,
-    // any character
-    Bottom,
-    // no character
+    Top, // any character
+    Bottom, // no character
     Set(Intervals),
     Epsilon,
     Concat(Rc<RegexTree>, Rc<RegexTree>),

@@ -1,8 +1,8 @@
 lexer {
-    active token TEXT     = (!('"' | '\r' | '\n' | ','))+;
-    active token STRING     = '"' ~ ('"' ~ '"' | !'"')* ~ '"';
-    active token CRLF       = '\r'? ~ '\n';
-    active token COMMA    = ',';
+    token TEXT     = (!('"' | '\r' | '\n' | ','))+;
+    token STRING     = '"' ~ ('"' ~ '"' | !'"')* ~ '"';
+    token CRLF       = '\r'? ~ '\n';
+    token COMMA    = ',';
 }
 
 parser csv {
