@@ -83,6 +83,13 @@ fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream 
     }
 }
 
+fn estimated_cost(intervals: &Intervals) -> u32 {
+    intervals
+        .iter()
+        .map(|Interval(l, r)| if l == r { 1 } else { 2 })
+        .sum()
+}
+
 #[derive(Default)]
 pub struct LoopOptimizer {
     global_lut: Vec<[u8; 256]>,
@@ -132,15 +139,15 @@ impl LoopOptimizer {
     }
 
     pub fn generate_lookahead(&mut self, dfa: &DfaTable, state: &DfaState) -> Option<TokenStream> {
-        let limit = if cfg!(target_arch = "aarch64") { 2 } else { 4 };
+        let limit = 4;
 
         let positives = direct_self_loops(dfa, state)?;
-        if positives.len() <= limit {
+        if estimated_cost(&positives) <= limit {
             return Some(generate_lookahead_routine(&positives, Kind::Positive));
         }
 
         let negatives = positives.complement()?;
-        if negatives.len() <= limit {
+        if estimated_cost(&negatives) <= limit {
             return Some(generate_lookahead_routine(&negatives, Kind::Negative));
         }
 
