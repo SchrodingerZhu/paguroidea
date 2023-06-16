@@ -110,7 +110,7 @@ impl Intervals {
         self.0.len() == 1 && self.0[0] == Interval(0, u8::MAX)
     }
 
-    // it is okay is contains non-unicode code points; they will never be read anyway.
+    // it is okay it contains non-unicode code points; they will never be read anyway.
     pub fn complement(&self) -> Option<Self> {
         let mut current = Some(0);
         let mut result = SmallVec::new();
