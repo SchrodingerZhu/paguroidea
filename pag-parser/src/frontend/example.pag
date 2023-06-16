@@ -27,4 +27,6 @@ parser sexpr {
 
     active sexpr
         = compound | atom;
+
+    active unreachable = unreachable;
 }

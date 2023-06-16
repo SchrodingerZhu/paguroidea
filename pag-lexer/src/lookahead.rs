@@ -151,8 +151,7 @@ impl LoopOptimizer {
 
 fn direct_self_loops(dfa: &DfaTable, state: &DfaState) -> Option<Intervals> {
     let mut intervals: Option<Intervals> = None;
-    let info = dfa.get(state)?;
-    for (edge, target) in info.transitions.iter() {
+    for (edge, target) in &dfa.get(state)?.transitions {
         if target == state {
             intervals = Some(intervals.map_or_else(|| edge.clone(), |x| x.union(edge)));
         }

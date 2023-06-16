@@ -141,10 +141,9 @@ impl Vector {
         };
         let mut dfa = build_dfa(initial_state.state_vec.clone());
         let leaf_states = extract_leaf_states(&mut dfa);
-        let initial_label = format_ident!("S{}", dfa.get(&initial_state).unwrap().state_id);
+        let initial_label = format_ident!("S{}", dfa[&initial_state].state_id);
         let actions = dfa.iter().map(|(state, info)| {
             let label = format_ident!("S{}", info.state_id);
-
             if let Some((rule_idx, seq)) = state.state_vec.as_byte_sequence() {
                 let literal = Literal::byte_string(&seq);
                 let length = seq.len();
@@ -166,10 +165,9 @@ impl Vector {
                     let on_success = &success_actions[rule_idx];
                     return quote! { Some(#interval) => { idx += 1; #on_success }, };
                 }
-                let target_label = format_ident!("S{}", dfa.get(target).unwrap().state_id);
+                let target_label = format_ident!("S{}", dfa[target].state_id);
                 quote! { Some(#interval) => state = State::#target_label, }
             });
-            //
             let lookahead = optimizer.generate_lookahead(&dfa, state);
             let otherwise = state
                 .last_success
@@ -180,7 +178,7 @@ impl Vector {
                     #lookahead
                     match input.get(idx) {
                         #(#transitions)*
-                        _ => #otherwise,
+                        _ => { #otherwise }
                     }
                 },
             }

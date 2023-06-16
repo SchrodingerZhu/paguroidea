@@ -26,8 +26,6 @@ struct Node {
     in_cycle: Cell<bool>, // scc size > 1 or self reference
 }
 
-type Graph = Vec<Node>;
-
 fn find_neighbors(
     term: TermPtr,
     neighbors: &mut Vec<NodeId>,
@@ -48,7 +46,54 @@ fn find_neighbors(
     }
 }
 
-fn construct_graph<'src>(binding_ctx: &BindingContext<'src, '_>) -> (Graph, Vec<Symbol<'src>>) {
+fn tarjan(node_id: NodeId, dfn_cnt: &mut u32, stack: &mut Vec<NodeId>, nodes: &Vec<Node>) {
+    let node = &nodes[node_id as usize];
+
+    *dfn_cnt += 1;
+    node.low.set(*dfn_cnt);
+    node.dfn.set(*dfn_cnt);
+    stack.push(node_id);
+    node.in_stack.set(true);
+
+    for &next_id in &node.neighbors {
+        // self reference
+        if next_id == node_id {
+            node.in_cycle.set(true);
+            continue;
+        }
+        let next = &nodes[next_id as usize];
+        if next.dfn.get() == 0 {
+            tarjan(next_id, dfn_cnt, stack, nodes);
+            node.low.set(node.low.get().min(next.low.get())); // u.low = min(u.low, v.low)
+        } else if next.in_stack.get() {
+            node.low.set(node.low.get().min(next.dfn.get())); // u.low = min(u.low, v.dfn)
+        }
+    }
+
+    if node.low.get() == node.dfn.get() {
+        // scc size == 1
+        if stack.last() == Some(&node_id) {
+            node.in_stack.set(false);
+            stack.pop();
+            return;
+        }
+        // scc size > 1
+        while let Some(top_id) = stack.pop() {
+            let top = &nodes[top_id as usize];
+            top.in_stack.set(false);
+            top.in_cycle.set(true);
+            if top_id == node_id {
+                break;
+            }
+        }
+    }
+}
+
+pub fn infer_fixpoints<'src, 'arena>(
+    entrypoint: Symbol<'src>,
+    arena: &'arena TermArena<'src, 'arena>,
+    binding_ctx: &mut BindingContext<'src, 'arena>,
+) {
     let mut sym_to_id = HashMap::new();
     let mut id_to_sym = Vec::new();
     for (idx, (symbol, _)) in binding_ctx.iter().enumerate() {
@@ -66,67 +111,19 @@ fn construct_graph<'src>(binding_ctx: &BindingContext<'src, '_>) -> (Graph, Vec<
         })
     }
 
-    (nodes, id_to_sym)
-}
-
-fn tarjan(node_id: NodeId, dfn_cnt: &mut u32, stack: &mut Vec<NodeId>, graph: &Graph) {
-    let node = &graph[node_id as usize];
-
-    *dfn_cnt += 1;
-    node.low.set(*dfn_cnt);
-    node.dfn.set(*dfn_cnt);
-    stack.push(node_id);
-    node.in_stack.set(true);
-
-    for &next_id in &node.neighbors {
-        // self reference
-        if next_id == node_id {
-            node.in_cycle.set(true);
-            continue;
-        }
-        let next = &graph[next_id as usize];
-        if next.dfn.get() == 0 {
-            tarjan(next_id, dfn_cnt, stack, graph);
-            node.low.set(node.low.get().min(next.low.get())); // u.low = min(u.low, v.low)
-        } else if next.in_stack.get() {
-            node.low.set(node.low.get().min(next.dfn.get())); // u.low = min(u.low, v.dfn)
-        }
-    }
-
-    if node.low.get() == node.dfn.get() {
-        // scc size == 1
-        if stack.last() == Some(&node_id) {
-            node.in_stack.set(false);
-            stack.pop();
-            return;
-        }
-        // scc size > 1
-        while let Some(top_id) = stack.pop() {
-            let top = &graph[top_id as usize];
-            top.in_stack.set(false);
-            top.in_cycle.set(true);
-            if top_id == node_id {
-                break;
-            }
-        }
-    }
-}
-
-pub fn infer_fixpoints<'src, 'arena>(
-    arena: &'arena TermArena<'src, 'arena>,
-    binding_ctx: &mut BindingContext<'src, 'arena>,
-) {
-    let (graph, id_to_sym) = construct_graph(binding_ctx);
+    let begin = sym_to_id[&entrypoint] as NodeId;
     let mut dfn_cnt = 0;
     let mut stack = Vec::new();
+    tarjan(begin, &mut dfn_cnt, &mut stack, &nodes);
 
-    for (id, node) in graph.iter().enumerate() {
+    for (id, node) in nodes.iter().enumerate() {
+        // unreachable rules
         if node.dfn.get() == 0 {
-            tarjan(id as NodeId, &mut dfn_cnt, &mut stack, &graph);
+            let symbol = id_to_sym[id];
+            binding_ctx.remove(&symbol);
+            continue;
         }
-    }
-
-    for (id, node) in graph.iter().enumerate() {
+        // fixpoints
         if node.in_cycle.get() {
             let symbol = id_to_sym[id];
             let rule = binding_ctx.get_mut(&symbol).unwrap();

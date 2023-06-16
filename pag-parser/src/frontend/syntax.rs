@@ -34,11 +34,11 @@ pub struct Parser<'src, 'arena> {
 
 impl<'src, 'arena> Parser<'src, 'arena> {
     pub fn infer_fixpoints(&mut self) {
-        infer_fixpoints(self.arena, &mut self.bindings);
+        infer_fixpoints(self.entrypoint, self.arena, &mut self.bindings);
     }
 
     pub fn type_check(&self) -> Vec<TypeError<'src>> {
-        let target = self.bindings.get(&self.entrypoint).unwrap();
+        let target = &self.bindings[&self.entrypoint];
         type_check(&self.bindings, target.term, self.entrypoint)
     }
 

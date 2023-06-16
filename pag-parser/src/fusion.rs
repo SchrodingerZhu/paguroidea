@@ -259,18 +259,18 @@ fn generate_children<'src>(
                 }
             }
             if add_continue {
-                quote! {{
+                quote! {
                     cursor = idx;
                     #(#actions)*
                     offset = cursor;
                     continue 'parser;
-                }}
+                }
             } else {
-                quote! {{
+                quote! {
                     cursor = idx;
                     #(#actions)*
                     break 'parser;
-                }}
+                }
             }
         })
         .collect()
@@ -318,10 +318,8 @@ fn generate_inactive_parser<'src>(
         Some(e) => {
             let actions = generate_empty_actions(false, e);
             quote! {
-                {
-                    #(#actions)*
-                    break 'parser;
-                }
+                #(#actions)*
+                break 'parser;
             }
         }
         None => quote! {
@@ -329,7 +327,7 @@ fn generate_inactive_parser<'src>(
                 active_rule: parent.tag,
                 expecting: EXPECTING,
                 offset,
-            })
+            });
         },
     };
 
@@ -378,17 +376,17 @@ fn generate_active_parser<'src>(
     }) {
         Some(e) => {
             let actions = generate_empty_actions(true, e);
-            quote! {{
+            quote! {
                 #(#actions)*
                 break 'parser;
-            }}
+            }
         }
         None => quote! {
             return Err(Error{
                 active_rule: tree.tag,
                 expecting: EXPECTING,
                 offset,
-            })
+            });
         },
     };
     let fused = fusion_lexer(rules, lexer_database).generate_dfa(
