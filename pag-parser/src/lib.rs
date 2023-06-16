@@ -13,6 +13,9 @@ mod nf;
 mod type_system;
 mod utilities;
 
+#[cfg(test)]
+mod tests;
+
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use proc_macro2::TokenStream;
 use quote::format_ident;
@@ -201,13 +204,13 @@ impl<'src> Error<'src> {
                             Report::build(ReportKind::Error, input_name, total.start())
                                 .with_message("When type checking an alternation of rules, the following rules are ambiguous")
                                 .with_label(Label::new((input_name, lhs.0.start()..lhs.0.end()))
-                                    .with_message(format!("type info for left-hand side: nullable {}, first set: {}, follow set: {}",
+                                    .with_message(format!("type info for left-hand side: nullable: {}, first set:  {{{}}}, follow set:  {{{}}}",
                                     lhs.1.nullable, lhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "),
                                     lhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
                                 ))
                                     .with_color(Color::Green))
                                 .with_label(Label::new((input_name, rhs.0.start()..rhs.0.end()))
-                                    .with_message(format!("type info for right-hand side: nullable {}, first set: {}, follow set: {}",
+                                    .with_message(format!("type info for right-hand side: nullable: {}, first set: {{{}}}, follow set: {{{}}}",
                                     rhs.1.nullable, rhs.1.first.iter().map(|x|x.name()).collect::<Vec<_>>().join(", "),
                                     rhs.1.follow.iter().map(|x|x.name()).collect::<Vec<_>>().join(", ")
                                 ))
