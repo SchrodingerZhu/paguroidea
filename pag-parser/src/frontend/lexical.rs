@@ -119,9 +119,9 @@ pub fn construct_lexer_database<'src>(
     })
 }
 
-fn construct_regex_tree<'src, 'local>(
+fn construct_regex_tree<'src>(
     sst: &WithSpan<'src, SurfaceSyntaxTree<'src>>,
-    rule_defs: &HashMap<&'src str, (Span<'src>, Cell<State<'src, 'local>>)>,
+    rule_defs: &HashMap<&'src str, (Span<'src>, Cell<State<'src, '_>>)>,
 ) -> FrontendResult<'src, Rc<RegexTree>> {
     match &sst.node {
         LexicalAlternative { lhs, rhs } => {

@@ -285,6 +285,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
             clippy::single_match,
             clippy::never_loop,
             clippy::match_single_binding,
+            clippy::double_parens,
         )]
         #parser_routines
         pub fn parse(input: &str) -> Result<ParserTree, Error> {

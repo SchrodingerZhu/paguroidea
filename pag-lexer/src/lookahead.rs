@@ -145,7 +145,7 @@ impl LoopOptimizer {
         }
 
         let index = self.assign_table(&negatives);
-        return Some(generate_lut_routine(index));
+        Some(generate_lut_routine(index))
     }
 }
 
