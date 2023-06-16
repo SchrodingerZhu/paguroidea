@@ -202,9 +202,12 @@ pub fn encode_range(x: char, y: char) -> Rc<RegexTree> {
         _ => unreachable!(),
     };
     // fold union
-    normalize(ranges.iter().skip(1).fold(ranges[0].clone(), |acc, x| {
-        Rc::new(RegexTree::Union(acc, x.clone()))
-    }))
+    normalize(
+        ranges
+            .into_iter()
+            .reduce(|acc, x| Rc::new(RegexTree::Union(acc, x)))
+            .unwrap(),
+    )
 }
 
 #[cfg(test)]
