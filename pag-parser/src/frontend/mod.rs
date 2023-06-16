@@ -500,6 +500,9 @@ mod test {
             println!("{symbol} ::= {rule}");
         }
 
+        println!("\n---------< nullability check >----------");
+        database.nullability_check().unwrap();
+
         println!("\n---------< construct parser >----------");
         let arena = TermArena::new();
         let mut parser = construct_parser(&arena, database, parser).unwrap();

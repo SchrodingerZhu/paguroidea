@@ -245,10 +245,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
         unreachable_branch!("the entrypoint of sst can only be Grammar")
     };
     let lexer_database = construct_lexer_database(lexer)?;
-    let nullable_errors = lexer_database.nullability_check();
-    if !nullable_errors.is_empty() {
-        return Err(Error::FrontendErrors(nullable_errors));
-    }
+    lexer_database.nullability_check()?;
     let term_arena = TermArena::new();
     let mut parser = construct_parser(&term_arena, lexer_database, parser)?;
     parser.infer_fixpoints();

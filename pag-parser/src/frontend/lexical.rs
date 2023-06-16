@@ -17,7 +17,7 @@ use crate::utilities::{merge_results, unreachable_branch, Symbol};
 
 use super::{
     unicode::{encode_char, encode_range},
-    FrontendError::{self, *},
+    FrontendError::*,
     FrontendResult,
     SurfaceSyntaxTree::{self, *},
     WithSpan,
@@ -32,19 +32,22 @@ pub struct LexerDatabase<'src> {
 }
 
 impl<'src> LexerDatabase<'src> {
-    pub fn nullability_check(&self) -> Vec<FrontendError<'src>> {
-        let mut errors = Vec::new();
+    pub fn nullability_check(&self) -> FrontendResult<'src, ()> {
+        let mut errs = Vec::new();
         for (sym, rule) in &self.entries {
             if rule.node.is_nullable() {
-                errors.push(NullableToken(sym.name(), rule.span));
+                errs.push(NullableToken(sym.name(), rule.span));
             }
         }
         if let Some(skip) = &self.skip {
             if skip.node.is_nullable() {
-                errors.push(FrontendError::NullableToken("<skip>", skip.span));
+                errs.push(NullableToken("<skip>", skip.span));
             }
         }
-        errors
+        if !errs.is_empty() {
+            return Err(errs);
+        }
+        Ok(())
     }
 }
 
