@@ -57,14 +57,11 @@ fn construct_graph<'src>(binding_ctx: &BindingContext<'src, '_>) -> (Graph, Vec<
     }
 
     let mut nodes = Vec::new();
-    for (idx, (_, rule)) in binding_ctx.iter().enumerate() {
+    for (_, rule) in binding_ctx.iter() {
         let mut neighbors = Vec::new();
         find_neighbors(rule.term, &mut neighbors, &sym_to_id);
-        // detect self reference
-        let in_cycle = Cell::new(neighbors.iter().any(|id| *id == idx as _));
         nodes.push(Node {
             neighbors,
-            in_cycle,
             ..Node::default()
         })
     }
@@ -82,6 +79,11 @@ fn tarjan(node_id: NodeId, dfn_cnt: &mut u32, stack: &mut Vec<NodeId>, graph: &G
     node.in_stack.set(true);
 
     for &next_id in &node.neighbors {
+        // self reference
+        if next_id == node_id {
+            node.in_cycle.set(true);
+            continue;
+        }
         let next = &graph[next_id as usize];
         if next.dfn.get() == 0 {
             tarjan(next_id, dfn_cnt, stack, graph);
