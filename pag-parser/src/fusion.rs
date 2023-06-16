@@ -283,7 +283,7 @@ fn generate_skip() -> TokenStream {
     }}
 }
 
-fn generate_expect<'src>(rules: &[&NormalForm<'src>]) -> TokenStream {
+fn generate_expect(rules: &[&NormalForm]) -> TokenStream {
     let elements: Vec<&str> = rules
         .iter()
         .filter_map(|x| match x {
