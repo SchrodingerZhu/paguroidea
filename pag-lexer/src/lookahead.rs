@@ -119,8 +119,8 @@ impl LoopOptimizer {
         if self.global_lut.len() <= table {
             self.global_lut.push([0; 256]);
         }
-        for i in u8::MIN..=u8::MAX {
-            if negatives.contains(i) {
+        for &Interval(l, r) in negatives.iter() {
+            for i in l..=r {
                 self.global_lut[table][i as usize] |= 1u8 << offset;
             }
         }
