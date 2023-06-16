@@ -26,18 +26,25 @@ impl<'a> std::hash::Hash for Symbol<'a> {
     }
 }
 
-fn is_ascii_ident_body(x: char) -> bool {
-    x.is_ascii_alphanumeric() || x == '_'
+impl<'a, 'b> PartialEq<Symbol<'b>> for Symbol<'a> {
+    fn eq(&self, other: &Symbol<'b>) -> bool {
+        self.0.as_ptr() == other.0.as_ptr() && self.0.len() == other.0.len()
+    }
 }
 
-fn is_ascii_ident_head(x: char) -> bool {
-    x.is_ascii_alphabetic() || x == '_'
+impl<'a> Eq for Symbol<'a> {}
+
+fn is_ascii_ident_body(x: &u8) -> bool {
+    x.is_ascii_alphanumeric() || *x == b'_'
 }
 
-fn is_ascii_ident(x: &str) -> bool {
-    !x.is_empty()
-        && is_ascii_ident_head(unsafe { x.chars().next().unwrap_unchecked() })
-        && x[1..].chars().all(is_ascii_ident_body)
+fn is_ascii_ident_head(x: &u8) -> bool {
+    x.is_ascii_alphabetic() || *x == b'_'
+}
+
+fn is_ascii_ident(s: &str) -> bool {
+    let [x, xs@..] = s.as_bytes() else { return false };
+    is_ascii_ident_head(x) && xs.iter().all(is_ascii_ident_body)
 }
 
 impl<'a> std::fmt::Display for Symbol<'a> {
@@ -49,14 +56,6 @@ impl<'a> std::fmt::Display for Symbol<'a> {
         }
     }
 }
-
-impl<'a, 'b> PartialEq<Symbol<'b>> for Symbol<'a> {
-    fn eq(&self, other: &Symbol<'b>) -> bool {
-        self.0.as_ptr() == other.0.as_ptr() && self.0.len() == other.0.len()
-    }
-}
-
-impl<'a> Eq for Symbol<'a> {}
 
 pub fn merge_results<T, E, U>(
     a: Result<T, Vec<E>>,

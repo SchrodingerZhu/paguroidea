@@ -191,7 +191,7 @@ impl Vector {
         quote! {
             enum State {
                 #(#labels,)*
-            };
+            }
             let mut idx = #initial_idx;
             let mut state = State::#initial_label;
             loop {

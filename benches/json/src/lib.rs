@@ -53,24 +53,29 @@ pub fn generate_random_json(depth: usize) -> String {
     unsafe { String::from_utf8_unchecked(buffer) }
 }
 
-#[test]
-fn test_json() {
-    let json = r#"{ "hello": { "values": [{}, [], [1, 1e3, -0.5, 9.99]] }, "age" : 13 }"#;
-    let tree = parser::parse(json).unwrap();
-    println!("{:#?}", tree);
-}
-#[test]
-fn test_random() {
-    for _ in 0..10 {
-        let json = generate_random_json(10);
-        let parsed = parser::parse(&json).unwrap();
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_json() {
+        let json = r#"{ "hello": { "values": [{}, [], [1, 1e3, -0.5, 9.99]] }, "age" : 13 }"#;
+        let tree = parser::parse(json).unwrap();
+        println!("{:#?}", tree);
+    }
+    #[test]
+    fn test_random() {
+        for _ in 0..10 {
+            let json = generate_random_json(10);
+            let parsed = parser::parse(&json).unwrap();
+            assert_eq!(json.len(), parsed.len())
+        }
+    }
+
+    #[test]
+    fn test_twitter() {
+        let json = include_str!("../benches/twitter.json");
+        let parsed = parser::parse(json).unwrap();
         assert_eq!(json.len(), parsed.len())
     }
-}
-
-#[test]
-fn test_twitter() {
-    let json = include_str!("../benches/twitter.json");
-    let parsed = parser::parse(json).unwrap();
-    assert_eq!(json.len(), parsed.len())
 }

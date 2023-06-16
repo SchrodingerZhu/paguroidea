@@ -54,9 +54,7 @@ impl RegexTree {
     }
     pub fn as_byte_sequence(&self) -> Option<Vec<u8>> {
         match self {
-            Set(intervals) if intervals.is_single_byte() => {
-                Some([intervals.representative()].into())
-            }
+            Set(intervals) if intervals.is_single_byte() => Some(vec![intervals.representative()]),
             Concat(a, b) => {
                 let mut a = a.as_byte_sequence()?;
                 let b = b.as_byte_sequence()?;

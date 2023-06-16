@@ -110,24 +110,20 @@ fn generate_error() -> TokenStream {
 
 fn generate_inactive_to_active_call(target: &Tag<'_>) -> TokenStream {
     let target_function = format_ident!("parse_{}", format!("{}", target));
-    quote! {
-        {
-            let child = #target_function(src, cursor)?;
-            cursor = child.span.end;
-            parent.add_child(child);
-        }
-    }
+    quote! {{
+        let child = #target_function(src, cursor)?;
+        cursor = child.span.end;
+        parent.add_child(child);
+    }}
 }
 
 fn generate_active_to_active_call(target: &Tag<'_>) -> TokenStream {
     let target_function = format_ident!("parse_{}", format!("{}", target));
-    quote! {
-        {
-            let child = #target_function(src, cursor)?;
-            cursor = child.span.end;
-            tree.add_child(child);
-        }
-    }
+    quote! {{
+        let child = #target_function(src, cursor)?;
+        cursor = child.span.end;
+        tree.add_child(child);
+    }}
 }
 
 fn generate_active_to_inactive_call(target: &Tag<'_>) -> TokenStream {
@@ -153,13 +149,11 @@ fn generate_subtree_to_inactive_call(target: &Tag<'_>) -> TokenStream {
 
 fn generate_subtree_to_active_call(target: &Tag<'_>) -> TokenStream {
     let target_function = format_ident!("parse_{}", format!("{}", target));
-    quote! {
-        {
-            let child = #target_function(src, cursor)?;
-            cursor = child.span.end;
-            subtree.add_child(child);
-        }
-    }
+    quote! {{
+        let child = #target_function(src, cursor)?;
+        cursor = child.span.end;
+        subtree.add_child(child);
+    }}
 }
 
 fn generate_empty_actions(active: bool, symbols: &[Symbol<'_>]) -> Vec<TokenStream> {
@@ -172,13 +166,11 @@ fn generate_empty_actions(active: bool, symbols: &[Symbol<'_>]) -> Vec<TokenStre
             } else {
                 format_ident!("parent")
             };
-            quote! {
-                {
-                    let mut subtree = ParserTree::new(Tag::#tag, src);
-                    subtree.set_span(cursor..cursor);
-                    #target.add_child(subtree);
-                }
-            }
+            quote! {{
+                let mut subtree = ParserTree::new(Tag::#tag, src);
+                subtree.set_span(cursor..cursor);
+                #target.add_child(subtree);
+            }}
         })
         .collect()
 }
@@ -267,34 +259,28 @@ fn generate_children<'src>(
                 }
             }
             if add_continue {
-                quote! {
-                    {
-                        cursor = idx;
-                        #(#actions)*
-                        offset = cursor;
-                        continue 'parser;
-                    }
-                }
+                quote! {{
+                    cursor = idx;
+                    #(#actions)*
+                    offset = cursor;
+                    continue 'parser;
+                }}
             } else {
-                quote! {
-                    {
-                        cursor = idx;
-                        #(#actions)*
-                        break 'parser;
-                    }
-                }
+                quote! {{
+                    cursor = idx;
+                    #(#actions)*
+                    break 'parser;
+                }}
             }
         })
         .collect()
 }
 
 fn generate_skip() -> TokenStream {
-    quote! {
-        {
-            offset = idx;
-            continue 'parser;
-        }
-    }
+    quote! {{
+        offset = idx;
+        continue 'parser;
+    }}
 }
 
 fn generate_expect<'src>(rules: &[&NormalForm<'src>]) -> TokenStream {
@@ -392,19 +378,17 @@ fn generate_active_parser<'src>(
     }) {
         Some(e) => {
             let actions = generate_empty_actions(true, e);
-            quote! {
-                {
-                    #(#actions)*
-                    break 'parser;
-                }
-            }
+            quote! {{
+                #(#actions)*
+                break 'parser;
+            }}
         }
         None => quote! {
-                return Err(Error{
-                    active_rule: tree.tag,
-                    expecting: EXPECTING,
-                    offset,
-                })
+            return Err(Error{
+                active_rule: tree.tag,
+                expecting: EXPECTING,
+                offset,
+            })
         },
     };
     let fused = fusion_lexer(rules, lexer_database).generate_dfa(
@@ -461,16 +445,15 @@ pub fn fusion_parser<'src>(
                 )
             }
         })
-        .collect::<Vec<_>>()
-        .into_iter();
-    let lut = loop_optimizer.generate_lut().into_iter();
+        .collect::<Vec<_>>();
+    let lut = loop_optimizer.generate_lut();
     quote! {
         extern crate alloc;
         #tag
         #tree
         #error
+        #lut
         #(#parsers)*
-        #(#lut)*
     }
 }
 

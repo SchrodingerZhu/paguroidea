@@ -9,22 +9,21 @@
 use proc_macro2::{Literal, TokenStream};
 use quote::{quote, ToTokens};
 use smallvec::{smallvec, SmallVec};
-use std::ascii::escape_default;
 use std::fmt::{Display, Formatter};
 
 #[macro_export]
 macro_rules! interval {
     ($start:expr, $end:expr) => {
-        $crate::intervals::Interval::new($start as u8, $end as u8)
+        $crate::intervals::Interval($start as u8, $end as u8)
     };
 }
 
 #[macro_export]
 macro_rules! intervals {
-    ($(($start:expr, $end:expr)),+) => {
+    ($(($start:expr, $end:expr)),+ $(,)?) => {
         unsafe {
             $crate::intervals::Intervals::new(
-                vec![$($crate::interval!($start, $end)),+]
+                [$($crate::interval!($start, $end)),+]
             ).unwrap_unchecked()
         }
     };
@@ -36,8 +35,8 @@ pub struct Interval(pub u8, pub u8);
 
 impl Display for Interval {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let start = escape_default(self.0);
-        let end = escape_default(self.1);
+        let start = self.0.escape_ascii();
+        let end = self.1.escape_ascii();
         if self.0 == self.1 {
             write!(f, "{start}")
         } else {
@@ -47,9 +46,6 @@ impl Display for Interval {
 }
 
 impl Interval {
-    pub fn new(start: u8, end: u8) -> Self {
-        Self(start, end)
-    }
     pub fn mangle(&self) -> String {
         if self.0 == self.1 {
             format!("C{:X}X", self.0)
@@ -57,29 +53,26 @@ impl Interval {
             format!("R{:X}X{:X}X", self.0, self.1)
         }
     }
+
     // Check if two intervals overlap.
     pub fn overlaps(&self, other: &Self) -> bool {
         self.0 <= other.1 && other.0 <= self.1
     }
-    // Check if two intervals are consecutive.
-    pub fn is_consecutive(&self, other: &Self) -> bool {
-        (self.1 != u8::MAX && self.1 + 1 == other.0)
-            || (other.1 != u8::MAX && other.1 + 1 == self.0)
-    }
-    // Merge two intervals.
-    pub fn merge(&self, other: &Self) -> Self {
-        debug_assert!(self.overlaps(other) || self.is_consecutive(other));
-        Self(self.0.min(other.0), self.1.max(other.1))
-    }
+
     pub fn intersection(&self, other: &Self) -> Self {
         debug_assert!(self.overlaps(other));
         Self(self.0.max(other.0), self.1.min(other.1))
     }
+
     pub fn contains(&self, other: &Self) -> bool {
         self.0 <= other.0 && other.1 <= self.1
     }
 }
 
+// Invariants:
+// - Ordered
+// - Non-empty
+// - Non-consecutive
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Intervals(SmallVec<[Interval; 8]>);
 
@@ -91,6 +84,14 @@ impl Intervals {
         data.into_iter()
             .map(|x| Self(smallvec![x]))
             .reduce(|acc, x| acc.union(&x))
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Interval> {
+        self.0.iter()
     }
 
     pub fn is_single_byte(&self) -> bool {
@@ -110,7 +111,7 @@ impl Intervals {
     }
 
     pub fn is_full_set(&self) -> bool {
-        self.0.len() == 1 && self.0[0] == interval!(0, u8::MAX)
+        self.0.len() == 1 && self.0[0] == Interval(0, u8::MAX)
     }
 
     // it is okay is contains non-unicode code points; they will never be read anyway.
@@ -120,13 +121,13 @@ impl Intervals {
         for i in self.0.iter() {
             if let Some(c) = current {
                 if c < i.0 {
-                    result.push(interval!(c, i.0 - 1));
+                    result.push(Interval(c, i.0 - 1));
                 }
             }
             current = i.1.checked_add(1);
         }
         if let Some(current) = current {
-            result.push(interval!(current, u8::MAX));
+            result.push(Interval(current, u8::MAX));
         }
         if result.is_empty() {
             None
@@ -138,14 +139,8 @@ impl Intervals {
     pub fn contains(&self, target: u8) -> bool {
         match self.0.binary_search_by_key(&target, |x| x.0) {
             Ok(_) => true,
-            Err(idx) => {
-                if idx == 0 {
-                    false
-                } else {
-                    let idx = idx - 1;
-                    self.0[idx].1 >= target
-                }
-            }
+            Err(0) => false,
+            Err(idx) => self.0[idx - 1].1 >= target,
         }
     }
 
@@ -180,11 +175,11 @@ impl Intervals {
             };
             loop {
                 match (i.peek(), j.peek()) {
-                    (Some(x), _) if current.overlaps(x) || current.is_consecutive(x) => {
-                        current = current.merge(&i.next().unwrap());
+                    (Some(x), _) if current.1.wrapping_add(1) >= x.0 => {
+                        current.1 = current.1.max(i.next().unwrap().1);
                     }
-                    (_, Some(y)) if current.overlaps(y) || current.is_consecutive(y) => {
-                        current = current.merge(&j.next().unwrap());
+                    (_, Some(y)) if current.1.wrapping_add(1) >= y.0 => {
+                        current.1 = current.1.max(j.next().unwrap().1);
                     }
                     _ => break,
                 }
@@ -209,7 +204,7 @@ impl Display for Intervals {
 }
 
 pub fn byte_char(c: u8) -> Literal {
-    format!("b'{}'", escape_default(c)).parse().unwrap()
+    format!("b'{}'", c.escape_ascii()).parse().unwrap()
 }
 
 impl ToTokens for Intervals {
@@ -254,9 +249,9 @@ mod test {
         let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9'));
         assert_eq!(x.union(&x), x);
         let y = intervals!(('!', '7'));
-        assert_eq!(intervals!(('!', '9'), ('A', 'Z'), ('a', 'z')), x.union(&y));
+        assert_eq!(x.union(&y), intervals!(('!', '9'), ('A', 'Z'), ('a', 'z')));
         let z = intervals!(('!', '7'), ('C', 'e'));
-        assert_eq!(intervals!(('!', '9'), ('A', 'z')), x.union(&z));
+        assert_eq!(x.union(&z), intervals!(('!', '9'), ('A', 'z')));
     }
 
     #[test]
