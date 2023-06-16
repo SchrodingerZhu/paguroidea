@@ -86,10 +86,6 @@ impl Intervals {
             .reduce(|acc, x| acc.union(&x))
     }
 
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = &Interval> {
         self.0.iter()
     }
