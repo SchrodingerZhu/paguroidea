@@ -28,7 +28,7 @@ use frontend::{
 use fusion::fusion_parser;
 use nf::{
     fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize, NormalForms,
-    Tag, TagAssigner,
+    Tag,
 };
 use type_system::TypeError;
 use utilities::unreachable_branch;
@@ -255,14 +255,12 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
     }
     let nf_arena = Arena::new();
     let mut nfs = NormalForms::new();
-    let mut assigner = TagAssigner::new();
     for (symbol, rule) in parser.bindings.iter() {
         semi_normalize(
             &rule.term.node,
             Tag::new(*symbol),
             &nf_arena,
             &mut nfs,
-            &mut assigner,
             &parser,
         );
     }
@@ -286,7 +284,6 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
             clippy::single_match,
             clippy::never_loop,
             clippy::match_single_binding,
-            clippy::double_parens,
         )]
         #parser_routines
         pub fn parse(input: &str) -> Result<ParserTree, Error> {

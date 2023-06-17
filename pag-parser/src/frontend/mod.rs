@@ -474,7 +474,7 @@ mod test {
         fusion::fusion_parser,
         nf::{
             fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
-            NormalForm, NormalForms, Tag, TagAssigner,
+            NormalForm, NormalForms, Tag,
         },
     };
 
@@ -527,18 +527,15 @@ mod test {
         }
         assert!(reports.is_empty());
 
+        println!("\n---------< semi normalize >----------");
         let nf_arena = Arena::new();
         let mut nfs = NormalForms::new();
-        let mut assigner = TagAssigner::new();
-
-        println!("\n---------< semi normalize >----------");
         for (symbol, rule) in parser.bindings.iter() {
             semi_normalize(
                 &rule.term.node,
                 Tag::new(*symbol),
                 &nf_arena,
                 &mut nfs,
-                &mut assigner,
                 &parser,
             );
         }
