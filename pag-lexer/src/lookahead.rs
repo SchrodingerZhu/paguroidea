@@ -42,7 +42,7 @@ fn range_simd(min: u8, max: u8) -> TokenStream {
     let min = byte_char(min);
     let max = byte_char(max);
     quote! {
-        (data.simd_ge(u8x16::splat(#min)) & data.simd_le(u8x16::splat(#max)))
+        data.simd_ge(u8x16::splat(#min)) & data.simd_le(u8x16::splat(#max))
     }
 }
 

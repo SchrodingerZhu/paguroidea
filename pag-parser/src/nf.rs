@@ -6,12 +6,8 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-    num::NonZeroUsize,
-    write,
-};
+use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 
 use smallvec::{smallvec, SmallVec};
 use typed_arena::Arena;
@@ -23,19 +19,16 @@ use crate::{core_syntax::Term, frontend::syntax::Parser, utilities::Symbol};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Tag<'src> {
     symbol: Symbol<'src>,
-    version: Option<NonZeroUsize>,
+    version: u32,
 }
 
 impl<'src> Tag<'src> {
     pub fn new(symbol: Symbol<'src>) -> Self {
-        Self {
-            symbol,
-            version: None,
-        }
+        Self { symbol, version: 0 }
     }
 
     pub fn is_versioned(&self) -> bool {
-        self.version.is_some()
+        self.version > 0
     }
 
     pub fn symbol(&self) -> Symbol<'src> {
@@ -43,27 +36,19 @@ impl<'src> Tag<'src> {
     }
 }
 
-pub struct TagAssigner<'src> {
-    counters: HashMap<Symbol<'src>, NonZeroUsize>,
+pub struct TagAssigner {
+    counter: u32,
 }
 
-impl<'src> TagAssigner<'src> {
-    pub fn new() -> Self {
-        Self {
-            counters: HashMap::new(),
-        }
+impl TagAssigner {
+    fn new() -> Self {
+        Self { counter: 0 }
     }
 
-    fn next(&mut self, symbol: Symbol<'src>) -> Tag<'src> {
-        let version = *self
-            .counters
-            .entry(symbol)
-            .and_modify(|x| *x = x.saturating_add(1))
-            .or_insert(NonZeroUsize::MIN);
-        Tag {
-            symbol,
-            version: Some(version),
-        }
+    fn next<'src>(&mut self, symbol: Symbol<'src>) -> Tag<'src> {
+        self.counter += 1;
+        let version = self.counter;
+        Tag { symbol, version }
     }
 }
 
@@ -104,8 +89,8 @@ pub enum NormalForm<'src> {
 impl<'src> Display for Tag<'src> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.symbol.fmt(f)?;
-        if let Some(x) = self.version {
-            write!(f, "_{x}")?;
+        if self.version > 0 {
+            write!(f, "_{}", self.version)?;
         }
         Ok(())
     }
@@ -166,10 +151,10 @@ pub fn semi_normalize<'src, 'p, 'nf>(
     tag: Tag<'src>,
     arena: &'nf Arena<NormalForm<'src>>,
     nfs: &mut NormalForms<'src, 'nf>,
-    assigner: &mut TagAssigner<'src>,
     parser: &Parser<'src, 'p>,
 ) {
-    let ret_tag = semi_normalize_helper(target, tag, arena, nfs, assigner, parser);
+    let mut assigner = TagAssigner::new();
+    let ret_tag = semi_normalize_helper(target, tag, arena, nfs, &mut assigner, parser);
     nfs.entries
         .entry(tag)
         .or_insert(smallvec![&*arena.alloc(NormalForm::Unexpanded(smallvec![
@@ -182,7 +167,7 @@ pub fn semi_normalize_helper<'src, 'p, 'nf>(
     tag: Tag<'src>,
     arena: &'nf Arena<NormalForm<'src>>,
     nfs: &mut NormalForms<'src, 'nf>,
-    assigner: &mut TagAssigner<'src>,
+    assigner: &mut TagAssigner,
     parser: &Parser<'src, 'p>,
 ) -> Tag<'src> {
     match target {
