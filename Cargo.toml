@@ -13,6 +13,7 @@ members = [
     "pag-compiler",
     "tests/sexpr-calculator",
     "tests/arith-expr",
+    "tests/tokenizer",
     "benches/csv",
     "benches/json",
 ]
