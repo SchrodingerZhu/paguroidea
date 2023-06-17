@@ -47,11 +47,7 @@ fn random_length_differential_test() {
         let trimmed = buffer.trim();
         let tree = crate::generated::length_differential::parse(trimmed).unwrap();
         assert_eq!(tree.len(), trimmed.len());
-        let tokens = tree
-            .children()
-            .iter()
-            .map(|x| x.tag().clone())
-            .collect::<Vec<_>>();
+        let tokens = tree.children().iter().map(|x| x.tag()).collect::<Vec<_>>();
         assert_eq!(tokens, tags);
     }
 }
