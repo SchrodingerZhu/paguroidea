@@ -39,11 +39,11 @@ fn random_generate<G: Rng>(gen: &mut G, length: usize) -> (Vec<Tag>, String) {
     let mut buffer = String::new();
     let mut tags = Vec::new();
     for _ in 0..length {
-        let inner_length = 4;
+        let inner_length = gen.next_u64() as usize % 64 + 1;
         if gen.next_u64() % 2 == 0 {
-            // generate_random_comment(gen, inner_length, &mut buffer);
-            // buffer.push('\n');
-            // tags.push(Tag::comment);
+            generate_random_comment(gen, inner_length, &mut buffer);
+            buffer.push('\n');
+            tags.push(Tag::comment);
         } else {
             generate_random_string(gen, inner_length, &mut buffer);
             buffer.push('\n');
@@ -55,6 +55,14 @@ fn random_generate<G: Rng>(gen: &mut G, length: usize) -> (Vec<Tag>, String) {
 
 #[test]
 fn random_comment_and_string_test() {
-    let x = crate::generated::comment_and_string::parse("abcccc").unwrap();
-    println!("{}", x.as_slice());
+    let mut gen = rand::thread_rng();
+    for _ in 0..100 {
+        let length = gen.next_u64() as usize % 64 + 1;
+        let (tags, buffer) = random_generate(&mut gen, length);
+        let trimmed = buffer.trim();
+        let tree = crate::generated::comment_and_string::parse(trimmed).unwrap();
+        assert_eq!(tree.len(), trimmed.len(), "{}", buffer.escape_default());
+        let tokens = tree.children().iter().map(|x| x.tag()).collect::<Vec<_>>();
+        assert_eq!(tokens, tags, "{buffer}");
+    }
 }
