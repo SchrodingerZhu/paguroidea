@@ -1,0 +1,8 @@
+lexer {
+    skip = "SKIP";
+    skip = "ANOTHER_SKIP";
+}
+
+parser test {
+    active test = _;
+}

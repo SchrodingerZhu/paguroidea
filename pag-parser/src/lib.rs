@@ -13,9 +13,6 @@ mod nf;
 mod type_system;
 mod utilities;
 
-#[cfg(test)]
-mod tests;
-
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use proc_macro2::TokenStream;
 use quote::format_ident;
@@ -284,6 +281,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
             unreachable_patterns,
             unreachable_code,
             unused_assignments,
+            unused_parens,
             clippy::identity_op,
             clippy::single_match,
             clippy::never_loop,
@@ -296,3 +294,6 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
         }
     })
 }
+
+#[cfg(test)]
+mod tests;

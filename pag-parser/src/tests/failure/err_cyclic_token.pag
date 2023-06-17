@@ -1,0 +1,7 @@
+lexer {
+    A = 'a' ~ A;
+}
+
+parser test {
+    active test = _;
+}
