@@ -67,12 +67,22 @@ fn main() {
     generate_tokenizer(
         "comment_and_string",
         [
-            ("STRING", r#"'\"' ~ ( (!'\"')* | "\"\"") ~ '\"'"#),
-            // (
-            //     "COMMENT",
-            //     r#""/*" ~ (!('\x00'..'\xff'* ~ "*/" ~ '\x00'..'\xff'*))* ~ "*/""#,
-            // ),
+            ("STRING", r#"'\"' ~ ( (!'\"') | '"' ~ '"')* ~ '\"'"#),
+            (
+                "COMMENT",
+                r#""/*" ~ !('\x00'..'\xff'* ~ "*/" ~ ('\x00'..'\xff')*) ~ "*/""#,
+            ),
         ],
         Some(r"'\n' | '\r' | '\t' | ' '"),
+    );
+    generate_tokenizer(
+        "tail_differential",
+        [
+            ("ABCD", r#"'a' ~ 'b' ~ ('c'* ~ 'd')?"#),
+            ("ABCE", r#"'a' ~ 'b' ~ ('c'* ~ 'e')"#),
+            ("ABCDM", r#"'a' ~ 'b' ~ 'c'* ~ 'd' ~ 'd'+"#),
+            ("CS", r#"'c'+"#),
+        ],
+        None,
     );
 }
