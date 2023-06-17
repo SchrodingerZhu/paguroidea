@@ -3,5 +3,5 @@ lexer {
 }
 
 parser test {
-    active test = test ~ A;
+    active test = test2;
 }

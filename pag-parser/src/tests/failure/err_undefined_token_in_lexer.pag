@@ -1,0 +1,7 @@
+lexer {
+    A     = C;
+}
+
+parser test {
+    active test = _;
+}
