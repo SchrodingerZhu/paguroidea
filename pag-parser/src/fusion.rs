@@ -58,8 +58,8 @@ fn generate_parse_tree() -> TokenStream {
             pub fn children(&self) -> &[Self] {
                 &self.children
             }
-            pub fn tag(&self) -> &Tag {
-                &self.tag
+            pub fn tag(&self) -> Tag {
+                self.tag
             }
             pub fn as_slice(&self) -> &'a str {
                 &self.src[self.span.clone()]
