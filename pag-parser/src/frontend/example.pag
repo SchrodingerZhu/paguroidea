@@ -1,7 +1,7 @@
 lexer {
     // definition in lexer is not a real token, it is just a way to define a set of characters
 
-    COMMENT = "/*" ~ (!("*/"))* ~ "*/";
+    COMMENT = "/*" ~ !('\x00'..'\xff'* ~ "*/" ~ ('\x00'..'\xff')*) ~ "*/";
 }
 
 // parser must have a entry point

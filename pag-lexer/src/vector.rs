@@ -151,7 +151,7 @@ impl Vector {
                 return quote! {
                     State::#label => {
                         if input[idx..].starts_with(#literal) {
-                            idx += #length;
+                            cursor = idx + #length;
                             #on_success
                         } else {
                             #failure_action
@@ -163,7 +163,7 @@ impl Vector {
                 if leaf_states.contains(target) {
                     let rule_idx = target.last_success.unwrap();
                     let on_success = &success_actions[rule_idx];
-                    return quote! { Some(#interval) => { idx += 1; #on_success }, };
+                    return quote! { Some(#interval) => { cursor = idx + 1; #on_success }, };
                 }
                 let target_label = format_ident!("S{}", dfa[target].state_id);
                 quote! { Some(#interval) => state = State::#target_label, }
@@ -173,9 +173,15 @@ impl Vector {
                 .last_success
                 .and_then(|x| success_actions.get(x))
                 .unwrap_or(failure_action);
+            let advance_cursor = if state.state_vec.accepting_state().is_some() {
+                Some(quote!(cursor = idx;))
+            } else {
+                None
+            };
             quote! {
                 State::#label => {
                     #lookahead
+                    #advance_cursor
                     match input.get(idx) {
                         #(#transitions)*
                         _ => { #otherwise }
@@ -285,7 +291,10 @@ fn extract_leaf_states(dfa: &mut DfaTable) -> HashSet<DfaState> {
 
 fn print_dfa(dfa: &DfaTable) {
     for (state, info) in dfa {
-        println!("S{}({:?}): {}", info.state_id, state.last_success, state.state_vec);
+        println!(
+            "S{}({:?}): {}",
+            info.state_id, state.last_success, state.state_vec
+        );
         for (intervals, target) in &info.transitions {
             println!("  {} -> S{}", intervals, dfa[target].state_id);
         }

@@ -173,7 +173,7 @@ pub fn normalize(tree: Rc<RegexTree>) -> Rc<RegexTree> {
                 return normalize(Rc::new(Union(r1.clone(), Rc::new(Union(r2.clone(), s)))));
             }
 
-            if s.contains_in_union(&*r) {
+            if s.contains_in_union(&r) {
                 return s;
             }
 

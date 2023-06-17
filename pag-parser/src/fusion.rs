@@ -260,14 +260,12 @@ fn generate_children<'src>(
             }
             if add_continue {
                 quote! {
-                    cursor = idx;
                     #(#actions)*
                     offset = cursor;
                     continue 'parser;
                 }
             } else {
                 quote! {
-                    cursor = idx;
                     #(#actions)*
                     break 'parser;
                 }
@@ -278,7 +276,7 @@ fn generate_children<'src>(
 
 fn generate_skip() -> TokenStream {
     quote! {{
-        offset = idx;
+        offset = cursor;
         continue 'parser;
     }}
 }
@@ -344,8 +342,9 @@ fn generate_inactive_parser<'src>(
             parent: &mut ParserTree<'a>,
         ) -> Result<usize, Error> {
             #expect
-            let mut cursor = offset;
+            let mut cursor;
             'parser: loop {
+                cursor = offset;
                 let input = src.as_bytes();
                 #fused
             }
@@ -402,8 +401,9 @@ fn generate_active_parser<'src>(
         ) -> Result<ParserTree, Error> {
             #expect
             let mut tree = ParserTree::new(Tag::#tag_ident, src);
-            let mut cursor = offset;
+            let mut cursor;
             'parser: loop {
+                cursor = offset;
                 let input = src.as_bytes();
                 #fused
             }
