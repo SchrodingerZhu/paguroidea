@@ -161,7 +161,7 @@ impl Vector {
             }
             let transitions = info.transitions.iter().map(|(interval, target)| {
                 if leaf_states.contains(target) {
-                    let rule_idx = target.state_vec.accepting_state().unwrap();
+                    let rule_idx = target.last_success.unwrap();
                     let on_success = &success_actions[rule_idx];
                     return quote! { Some(#interval) => { idx += 1; #on_success }, };
                 }
