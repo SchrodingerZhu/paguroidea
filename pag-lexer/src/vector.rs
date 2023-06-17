@@ -267,6 +267,7 @@ pub fn build_dfa(state: Vector) -> DfaTable {
         last_success,
     };
     explore_dfa_node(&mut dfa, state, &mut state_id);
+    #[cfg(feature = "__trace_dfa")]
     print_dfa(&dfa);
     dfa
 }
@@ -289,6 +290,7 @@ fn extract_leaf_states(dfa: &mut DfaTable) -> HashSet<DfaState> {
     leaf_states
 }
 
+#[cfg(feature = "__trace_dfa")]
 fn print_dfa(dfa: &DfaTable) {
     for (state, info) in dfa {
         println!(
