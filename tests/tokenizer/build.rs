@@ -75,4 +75,14 @@ fn main() {
         ],
         Some(r"'\n' | '\r' | '\t' | ' '"),
     );
+    generate_tokenizer(
+        "tail_differential",
+        [
+            ("ABCD", r#"'a' ~ 'b' ~ ('c'* ~ 'd')?"#),
+            ("ABCE", r#"'a' ~ 'b' ~ ('c'* ~ 'e')"#),
+            ("ABCDM", r#"'a' ~ 'b' ~ 'c'* ~ 'd' ~ 'd'+"#),
+            ("CS", r#"'c'+"#),
+        ],
+        None,
+    );
 }

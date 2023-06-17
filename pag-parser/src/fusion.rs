@@ -52,6 +52,9 @@ fn generate_parse_tree() -> TokenStream {
                     children: alloc::vec::Vec::new(),
                 }
             }
+            pub fn span(&self) -> core::ops::Range<usize> {
+                self.span.clone()
+            }
             pub fn len(&self) -> usize {
                 self.span.len()
             }
