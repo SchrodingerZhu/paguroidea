@@ -44,6 +44,15 @@ impl Display for RegexTree {
 }
 
 impl RegexTree {
+    pub fn contains_in_union(&self, target: &Self) -> bool {
+        if self == target {
+            return true;
+        }
+        match self {
+            Union(a, b) => a.contains_in_union(target) || b.contains_in_union(target),
+            _ => false,
+        }
+    }
     pub fn is_byte_sequence(&self) -> bool {
         match self {
             Set(intervals) => intervals.is_single_byte(),

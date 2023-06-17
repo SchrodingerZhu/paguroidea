@@ -261,6 +261,7 @@ pub fn build_dfa(state: Vector) -> DfaTable {
         last_success,
     };
     explore_dfa_node(&mut dfa, state, &mut state_id);
+    print_dfa(&dfa);
     dfa
 }
 
@@ -280,4 +281,13 @@ fn extract_leaf_states(dfa: &mut DfaTable) -> HashSet<DfaState> {
         dfa.remove(s);
     }
     leaf_states
+}
+
+fn print_dfa(dfa: &DfaTable) {
+    for (state, info) in dfa {
+        println!("S{}({:?}): {}", info.state_id, state.last_success, state.state_vec);
+        for (intervals, target) in &info.transitions {
+            println!("  {} -> S{}", intervals, dfa[target].state_id);
+        }
+    }
 }

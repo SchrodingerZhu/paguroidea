@@ -1,32 +1,12 @@
 lexer {
     // definition in lexer is not a real token, it is just a way to define a set of characters
 
-    BLANK = ' ';
-    DIGIT = '0' .. '9';
-    ALPHA = 'a' .. 'z' | 'A' .. 'Z';
-
-    LPAREN = '(';
-    RPAREN = ')';
-    ATOM   = ALPHA ~ (ALPHA | DIGIT)*;
-
-    skip = (BLANK | '\t' | '\n' | '\r')+;
+    COMMENT = "/*" ~ (!("*/"))* ~ "*/";
 }
 
 // parser must have a entry point
-parser sexpr {
+parser test {
     // definition in parser can be a real grammer rule.
 
-    active compound
-        = LPAREN ~ sexprs ~ RPAREN;
-
-    active atom
-        = ATOM;
-
-    silent sexprs
-        = (compound | atom) *;
-
-    active sexpr
-        = compound | atom;
-
-    active unreachable = unreachable;
+    active test = COMMENT;
 }
