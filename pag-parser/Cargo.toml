@@ -31,7 +31,7 @@ pag-lexer = { version = "0.1.0-alpha.1", path = "../pag-lexer" }
 typed-arena = "2.0.2"
 quote = "1.0.26"
 proc-macro2 = "1.0"
-ariadne = { version = "0.2", features = ["auto-color"] }
+ariadne = { version = "0.3", features = ["auto-color"] }
 
 [dev-dependencies]
 strip-ansi-escapes = "0.1.1"
