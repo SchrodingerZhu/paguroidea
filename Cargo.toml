@@ -9,7 +9,7 @@
 [workspace]
 members = [
     "pag-lexer",
-    "pag-parser", 
+    "pag-parser",
     "pag-compiler",
     "tests/sexpr-calculator",
     "tests/arith-expr",
@@ -23,7 +23,7 @@ resolver = "2"
 version = "0.1.0-alpha.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-exclude = [".github/workflows/*"]
+exclude = [".github/*"]
 categories = ["parsing"]
 repository = "https://github.com/SchrodingerZhu/paguroidea"
 rust-version = "1.71.0"
