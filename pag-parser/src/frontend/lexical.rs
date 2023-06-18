@@ -6,6 +6,7 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
+use smallvec::smallvec;
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -128,17 +129,19 @@ fn construct_regex_tree<'src>(
         LexicalAlternative { lhs, rhs } => {
             let lhs = construct_regex_tree(lhs, rule_defs);
             let rhs = construct_regex_tree(rhs, rule_defs);
-            merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Union(l, r)))
+            merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Union(smallvec![l, r])))
         }
         LexicalSequence { lhs, rhs } => {
             let lhs = construct_regex_tree(lhs, rule_defs);
             let rhs = construct_regex_tree(rhs, rule_defs);
-            merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Concat(l, r)))
+            merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Concat(smallvec![l, r])))
         }
         LexicalAnd { lhs, rhs } => {
             let lhs = construct_regex_tree(lhs, rule_defs);
             let rhs = construct_regex_tree(rhs, rule_defs);
-            merge_results(lhs, rhs, |l, r| Rc::new(RegexTree::Intersection(l, r)))
+            merge_results(lhs, rhs, |l, r| {
+                Rc::new(RegexTree::Intersection(smallvec![l, r]))
+            })
         }
         LexicalStar { inner } => {
             let inner = construct_regex_tree(inner, rule_defs)?;
@@ -146,17 +149,17 @@ fn construct_regex_tree<'src>(
         }
         LexicalPlus { inner } => {
             let inner = construct_regex_tree(inner, rule_defs)?;
-            Ok(Rc::new(RegexTree::Concat(
+            Ok(Rc::new(RegexTree::Concat(smallvec![
                 inner.clone(),
-                Rc::new(RegexTree::KleeneClosure(inner)),
-            )))
+                Rc::new(RegexTree::KleeneClosure(inner))
+            ])))
         }
         LexicalOptional { inner } => {
             let inner = construct_regex_tree(inner, rule_defs)?;
-            Ok(Rc::new(RegexTree::Union(
+            Ok(Rc::new(RegexTree::Union(smallvec![
                 inner,
-                Rc::new(RegexTree::Epsilon),
-            )))
+                RegexTree::epsilon()
+            ])))
         }
         LexicalNot { inner } => {
             let inner = construct_regex_tree(inner, rule_defs)?;
@@ -166,10 +169,10 @@ fn construct_regex_tree<'src>(
         StringLit(x) => Ok(x
             .bytes()
             .map(|b| Rc::new(RegexTree::single(b)))
-            .reduce(|acc, b| Rc::new(RegexTree::Concat(acc, b)))
-            .unwrap_or_else(|| Rc::new(RegexTree::Epsilon))),
-        Bottom => Ok(Rc::new(RegexTree::Bottom)),
-        Empty => Ok(Rc::new(RegexTree::Epsilon)),
+            .reduce(|acc, b| Rc::new(RegexTree::Concat(smallvec![acc, b])))
+            .unwrap_or_else(RegexTree::epsilon)),
+        Bottom => Ok(RegexTree::bottom()),
+        Empty => Ok(RegexTree::epsilon()),
         CharLit { value } => Ok(encode_char(value.node)),
         LexicalRuleRef { name } => match rule_defs.get(name.span.as_str()) {
             Some((_, state)) => match state.replace(State::Pending) {

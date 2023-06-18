@@ -8,32 +8,32 @@
 
 use pag_lexer::normalization::normalize;
 use pag_lexer::regex_tree::RegexTree;
+use smallvec::smallvec;
 use std::rc::Rc;
 
 pub fn encode_char(x: char) -> Rc<RegexTree> {
     let mut buf = [0; 4];
-    x.encode_utf8(&mut buf)
-        .bytes()
-        .map(|b| Rc::new(RegexTree::single(b)))
-        .reduce(|acc, e| Rc::new(RegexTree::Concat(acc, e)))
-        .unwrap()
+    normalize(Rc::new(RegexTree::Concat(
+        x.encode_utf8(&mut buf)
+            .bytes()
+            .map(|b| Rc::new(RegexTree::single(b)))
+            .collect(),
+    )))
 }
 
 fn full_range_2() -> Rc<RegexTree> {
-    Rc::new(RegexTree::Concat(
+    Rc::new(RegexTree::Concat(smallvec![
         Rc::new(RegexTree::range(0xc0..=0xdf)),
-        Rc::new(RegexTree::range(0x80..=0xbf)),
-    ))
+        Rc::new(RegexTree::range(0x80..=0xbf))
+    ]))
 }
 
 fn full_range_3() -> Rc<RegexTree> {
-    Rc::new(RegexTree::Concat(
-        Rc::new(RegexTree::Concat(
-            Rc::new(RegexTree::range(0xe0..=0xef)),
-            Rc::new(RegexTree::range(0x80..=0xbf)),
-        )),
+    Rc::new(RegexTree::Concat(smallvec![
+        Rc::new(RegexTree::range(0xe0..=0xef)),
         Rc::new(RegexTree::range(0x80..=0xbf)),
-    ))
+        Rc::new(RegexTree::range(0x80..=0xbf))
+    ]))
 }
 
 fn encode_same_level1(x: char, y: char) -> Rc<RegexTree> {
@@ -82,27 +82,25 @@ fn encode_same_level_expanded(level: usize, tuple_x: &[u8], tuple_y: &[u8]) -> R
         return Rc::new(RegexTree::range(tuple_x[0]..=tuple_y[0]));
     }
     if tuple_x[0] == tuple_y[0] {
-        Rc::new(RegexTree::Concat(
+        Rc::new(RegexTree::Concat(smallvec![
             Rc::new(RegexTree::single(tuple_x[0])),
             encode_same_level_expanded(level - 1, &tuple_x[1..], &tuple_y[1..]),
-        ))
+        ]))
     } else {
-        Rc::new(RegexTree::Union(
-            Rc::new(RegexTree::Union(
-                Rc::new(RegexTree::Concat(
-                    Rc::new(RegexTree::single(tuple_x[0])),
-                    encode_same_level_expanded(level - 1, &tuple_x[1..], &ALL_BF),
-                )),
-                Rc::new(RegexTree::Concat(
-                    Rc::new(RegexTree::range(tuple_x[0] + 1..=tuple_y[0] - 1)),
-                    encode_same_level_expanded(level - 1, &ALL_80, &ALL_BF),
-                )),
-            )),
-            Rc::new(RegexTree::Concat(
+        Rc::new(RegexTree::Union(smallvec![
+            Rc::new(RegexTree::Concat(smallvec![
+                Rc::new(RegexTree::single(tuple_x[0])),
+                encode_same_level_expanded(level - 1, &tuple_x[1..], &ALL_BF),
+            ])),
+            Rc::new(RegexTree::Concat(smallvec![
+                Rc::new(RegexTree::range(tuple_x[0] + 1..=tuple_y[0] - 1)),
+                encode_same_level_expanded(level - 1, &ALL_80, &ALL_BF),
+            ])),
+            Rc::new(RegexTree::Concat(smallvec![
                 Rc::new(RegexTree::single(tuple_y[0])),
                 encode_same_level_expanded(level - 1, &ALL_80, &tuple_y[1..]),
-            )),
-        ))
+            ])),
+        ]))
     }
 }
 
@@ -110,32 +108,32 @@ fn encode_le_expanded(level: usize, fst_bound: u8, tuple: &[u8]) -> Rc<RegexTree
     if level == 1 {
         return Rc::new(RegexTree::range(fst_bound..=tuple[0]));
     }
-    Rc::new(RegexTree::Union(
-        Rc::new(RegexTree::Concat(
+    Rc::new(RegexTree::Union(smallvec![
+        Rc::new(RegexTree::Concat(smallvec![
             Rc::new(RegexTree::single(tuple[0])),
             encode_le_expanded(level - 1, 0x80, &tuple[1..]),
-        )),
-        Rc::new(RegexTree::Concat(
+        ])),
+        Rc::new(RegexTree::Concat(smallvec![
             Rc::new(RegexTree::range(fst_bound..=tuple[0] - 1)),
             encode_le_expanded(level - 1, 0x80, &ALL_BF),
-        )),
-    ))
+        ])),
+    ]))
 }
 
 fn encode_ge_expanded(level: usize, fst_bound: u8, tuple: &[u8]) -> Rc<RegexTree> {
     if level == 1 {
         return Rc::new(RegexTree::range(tuple[0]..=fst_bound));
     }
-    Rc::new(RegexTree::Union(
-        Rc::new(RegexTree::Concat(
+    Rc::new(RegexTree::Union(smallvec![
+        Rc::new(RegexTree::Concat(smallvec![
             Rc::new(RegexTree::single(tuple[0])),
             encode_ge_expanded(level - 1, 0xBF, &tuple[1..]),
-        )),
-        Rc::new(RegexTree::Concat(
+        ])),
+        Rc::new(RegexTree::Concat(smallvec![
             Rc::new(RegexTree::range(tuple[0] + 1..=fst_bound)),
             encode_ge_expanded(level - 1, 0xBF, &ALL_80),
-        )),
-    ))
+        ])),
+    ]))
 }
 
 fn encode_ge1(x: char) -> Rc<RegexTree> {
@@ -202,12 +200,7 @@ pub fn encode_range(x: char, y: char) -> Rc<RegexTree> {
         _ => unreachable!(),
     };
     // fold union
-    normalize(
-        ranges
-            .into_iter()
-            .reduce(|acc, x| Rc::new(RegexTree::Union(acc, x)))
-            .unwrap(),
-    )
+    normalize(Rc::new(RegexTree::Union(ranges.into_iter().collect())))
 }
 
 #[cfg(test)]
@@ -219,7 +212,7 @@ mod test {
         assert_eq!(encode_char('a').to_string(), "a");
         assert_eq!(encode_char('b').to_string(), "b");
         assert_eq!(encode_char('æ').to_string(), r"(\xc3 ~ \xa6)");
-        assert_eq!(encode_char('我').to_string(), r"((\xe6 ~ \x88) ~ \x91)");
+        assert_eq!(encode_char('我').to_string(), r"(\xe6 ~ \x88 ~ \x91)");
     }
 
     #[test]
@@ -232,31 +225,31 @@ mod test {
         );
         assert_eq!(
             encode_range('\u{81}', '\u{7FA}').to_string(),
-            r"((\xc2 ~ [\x81, \xbf]) ∪ (([\xc3, \xde] ~ [\x80, \xbf]) ∪ (\xdf ~ [\x80, \xba])))"
+            r"((\xc2 ~ [\x81, \xbf]) ∪ ([\xc3, \xde] ~ [\x80, \xbf]) ∪ (\xdf ~ [\x80, \xba]))"
         );
         assert_eq!(
             encode_range('\u{800}', '\u{808}').to_string(),
-            r"(\xe0 ~ (\xa0 ~ [\x80, \x88]))"
+            r"(\xe0 ~ \xa0 ~ [\x80, \x88])"
         );
         assert_eq!(
             encode_range('\u{881}', '\u{FFA}').to_string(),
-            r"(\xe0 ~ ((\xa2 ~ [\x81, \xbf]) ∪ (([\xa3, \xbe] ~ [\x80, \xbf]) ∪ (\xbf ~ [\x80, \xba]))))"
+            r"(\xe0 ~ ((\xa2 ~ [\x81, \xbf]) ∪ ([\xa3, \xbe] ~ [\x80, \xbf]) ∪ (\xbf ~ [\x80, \xba])))"
         );
         assert_eq!(
             encode_range('\u{901}', '\u{FF00}').to_string(),
-            r"((\xe0 ~ ((\xa4 ~ [\x81, \xbf]) ∪ ([\xa5, \xbf] ~ [\x80, \xbf]))) ∪ (([\xe1, \xee] ~ ([\x80, \xbf] ~ [\x80, \xbf])) ∪ (\xef ~ (([\x80, \xbb] ~ [\x80, \xbf]) ∪ (\xbc ~ \x80)))))"
+            "((\\xe0 ~ ((\\xa4 ~ [\\x81, \\xbf]) ∪ ([\\xa5, \\xbe] ~ [\\x80, \\xbf]) ∪ (\\xbf ~ [\\x80, \\xbf]))) ∪ ([\\xe1, \\xee] ~ ((\\x80 ~ [\\x80, \\xbf]) ∪ ([\\x81, \\xbe] ~ [\\x80, \\xbf]) ∪ (\\xbf ~ [\\x80, \\xbf]))) ∪ (\\xef ~ ((\\x80 ~ [\\x80, \\xbf]) ∪ ([\\x81, \\xbb] ~ [\\x80, \\xbf]) ∪ (\\xbc ~ \\x80))))"
         );
         assert_eq!(
             encode_range('a', '\u{90}').to_string(),
-            r"([a, \x7f] ∪ (([\xc0, \xc1] ~ [\x80, \xbf]) ∪ (\xc2 ~ [\x80, \x90])))"
+            r"([a, \x7f] ∪ ([\xc0, \xc1] ~ [\x80, \xbf]) ∪ (\xc2 ~ [\x80, \x90]))"
         );
         assert_eq!(
             encode_range('a', '\u{801}').to_string(),
-            r"([a, \x7f] ∪ (([\xc0, \xdf] ~ [\x80, \xbf]) ∪ (\xe0 ~ (([\x80, \x9f] ~ [\x80, \xbf]) ∪ (\xa0 ~ [\x80, \x81])))))"
+            r"([a, \x7f] ∪ ([\xc0, \xdf] ~ [\x80, \xbf]) ∪ (\xe0 ~ (([\x80, \x9f] ~ [\x80, \xbf]) ∪ (\xa0 ~ [\x80, \x81]))))"
         );
         assert_eq!(
             encode_range('\u{99}', '\u{2771}').to_string(),
-            r"((\xc2 ~ [\x99, \xbf]) ∪ (([\xc3, \xdf] ~ [\x80, \xbf]) ∪ (([\xe0, \xe1] ~ ([\x80, \xbf] ~ [\x80, \xbf])) ∪ (\xe2 ~ (([\x80, \x9c] ~ [\x80, \xbf]) ∪ (\x9d ~ [\x80, \xb1]))))))"
+            "((\\xc2 ~ [\\x99, \\xbf]) ∪ ([\\xc3, \\xdf] ~ [\\x80, \\xbf]) ∪ ([\\xe0, \\xe1] ~ (([\\x80, \\xbe] ~ [\\x80, \\xbf]) ∪ (\\xbf ~ [\\x80, \\xbf]))) ∪ (\\xe2 ~ (([\\x80, \\x9c] ~ [\\x80, \\xbf]) ∪ (\\x9d ~ [\\x80, \\xb1]))))"
         )
     }
 }

@@ -6,8 +6,11 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
+use std::rc::Rc;
+
 use crate::intervals;
 use crate::intervals::Intervals;
+use crate::normalization::normalize;
 use crate::regex_tree::RegexTree;
 
 pub fn meet(a: &[Intervals], b: &[Intervals]) -> Vec<Intervals> {
@@ -24,10 +27,11 @@ pub fn meet(a: &[Intervals], b: &[Intervals]) -> Vec<Intervals> {
     result
 }
 
+// TODO: this part can be optimized
 pub fn approximate_congruence_class(tree: &RegexTree) -> Vec<Intervals> {
     use RegexTree::*;
     match tree {
-        Epsilon | Top | Bottom => vec![intervals!((0, u8::MAX))],
+        Epsilon | Bottom => vec![intervals!((0, u8::MAX))],
         Set(x) => {
             let x = x.clone();
             match x.complement() {
@@ -41,20 +45,36 @@ pub fn approximate_congruence_class(tree: &RegexTree) -> Vec<Intervals> {
                 None => vec![x],
             }
         }
-        Concat(r, s) => {
+        Concat(children) => {
+            let r = children[0].clone();
+            let s = normalize(Rc::new(Concat(children[1..].iter().cloned().collect())));
             if !r.is_nullable() {
-                approximate_congruence_class(r)
+                approximate_congruence_class(r.as_ref())
             } else {
                 meet(
-                    &approximate_congruence_class(r),
-                    &approximate_congruence_class(s),
+                    &approximate_congruence_class(r.as_ref()),
+                    &approximate_congruence_class(s.as_ref()),
                 )
             }
         }
         KleeneClosure(r) | Complement(r) => approximate_congruence_class(r),
-        Union(r, s) | Intersection(r, s) => meet(
-            &approximate_congruence_class(r),
-            &approximate_congruence_class(s),
-        ),
+        Union(children) => {
+            let r = children[0].clone();
+            let s = normalize(Rc::new(Union(children[1..].iter().cloned().collect())));
+            meet(
+                &approximate_congruence_class(r.as_ref()),
+                &approximate_congruence_class(s.as_ref()),
+            )
+        }
+        Intersection(children) => {
+            let r = children[0].clone();
+            let s = normalize(Rc::new(Intersection(
+                children[1..].iter().cloned().collect(),
+            )));
+            meet(
+                &approximate_congruence_class(r.as_ref()),
+                &approximate_congruence_class(s.as_ref()),
+            )
+        }
     }
 }

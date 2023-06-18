@@ -280,6 +280,10 @@ fn parse_surface_syntax<'src, I: IntoIterator<Item = Pair<'src, Rule>>>(
         .map_primary(|primary| {
             let span = primary.as_span();
             let node = match primary.as_rule() {
+                Rule::any => RangeLit {
+                    start: '\u{00}',
+                    end: '\u{FF}',
+                },
                 Rule::grammar => {
                     let mut grammar = primary.into_inner();
                     let lexer = grammar.next().ok_or_else(|| unexpected_eoi!("lexer"))?;
