@@ -478,7 +478,7 @@ mod test {
         fusion::fusion_parser,
         nf::{
             fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize,
-            NormalForm, NormalForms, Tag,
+            NormalForm, NormalForms,
         },
     };
 
@@ -537,9 +537,10 @@ mod test {
         for (symbol, rule) in parser.bindings.iter() {
             semi_normalize(
                 &rule.term.node,
-                Tag::new(*symbol),
+                *symbol,
                 &nf_arena,
                 &mut nfs,
+                &mut 0,
                 &parser,
             );
         }

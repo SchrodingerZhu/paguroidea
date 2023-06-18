@@ -28,7 +28,6 @@ use frontend::{
 use fusion::fusion_parser;
 use nf::{
     fully_normalize, merge_inactive_rules, remove_unreachable_rules, semi_normalize, NormalForms,
-    Tag,
 };
 use type_system::TypeError;
 use utilities::unreachable_branch;
@@ -258,9 +257,10 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
     for (symbol, rule) in parser.bindings.iter() {
         semi_normalize(
             &rule.term.node,
-            Tag::new(*symbol),
+            *symbol,
             &nf_arena,
             &mut nfs,
+            &mut 0,
             &parser,
         );
     }

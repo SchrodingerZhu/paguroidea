@@ -27,28 +27,12 @@ impl<'src> Tag<'src> {
         Self { symbol, version: 0 }
     }
 
-    pub fn is_versioned(&self) -> bool {
-        self.version > 0
+    pub fn is_original(&self) -> bool {
+        self.version == 0
     }
 
     pub fn symbol(&self) -> Symbol<'src> {
         self.symbol
-    }
-}
-
-pub struct TagAssigner {
-    counter: u32,
-}
-
-impl TagAssigner {
-    fn new() -> Self {
-        Self { counter: 0 }
-    }
-
-    fn next<'src>(&mut self, symbol: Symbol<'src>) -> Tag<'src> {
-        self.counter += 1;
-        let version = self.counter;
-        Tag { symbol, version }
     }
 }
 
@@ -148,28 +132,16 @@ impl<'src, 'a> Display for NormalForms<'src, 'a> {
 
 pub fn semi_normalize<'src, 'p, 'nf>(
     target: &Term<'src, 'p>,
-    tag: Tag<'src>,
+    symbol: Symbol<'src>,
     arena: &'nf Arena<NormalForm<'src>>,
     nfs: &mut NormalForms<'src, 'nf>,
-    parser: &Parser<'src, 'p>,
-) {
-    let mut assigner = TagAssigner::new();
-    let ret_tag = semi_normalize_helper(target, tag, arena, nfs, &mut assigner, parser);
-    nfs.entries
-        .entry(tag)
-        .or_insert(smallvec![&*arena.alloc(NormalForm::Unexpanded(smallvec![
-            Action::Subroutine(ret_tag)
-        ]))]);
-}
-
-pub fn semi_normalize_helper<'src, 'p, 'nf>(
-    target: &Term<'src, 'p>,
-    tag: Tag<'src>,
-    arena: &'nf Arena<NormalForm<'src>>,
-    nfs: &mut NormalForms<'src, 'nf>,
-    assigner: &mut TagAssigner,
+    tag_cnt: &mut u32,
     parser: &Parser<'src, 'p>,
 ) -> Tag<'src> {
+    let version = *tag_cnt;
+    *tag_cnt += 1;
+    let tag = Tag { symbol, version };
+
     match target {
         Term::Epsilon => {
             let nf = smallvec![&*arena.alloc(NormalForm::Empty(Default::default()))];
@@ -177,10 +149,8 @@ pub fn semi_normalize_helper<'src, 'p, 'nf>(
             tag
         }
         Term::Sequence(x, y) => {
-            let mut x_tag = assigner.next(tag.symbol);
-            let mut y_tag = assigner.next(tag.symbol);
-            x_tag = semi_normalize_helper(&x.node, x_tag, arena, nfs, assigner, parser);
-            y_tag = semi_normalize_helper(&y.node, y_tag, arena, nfs, assigner, parser);
+            let x_tag = semi_normalize(&x.node, symbol, arena, nfs, tag_cnt, parser);
+            let y_tag = semi_normalize(&y.node, symbol, arena, nfs, tag_cnt, parser);
             let acts = smallvec![Action::Subroutine(x_tag), Action::Subroutine(y_tag)];
             let nf = smallvec![&*arena.alloc(NormalForm::Unexpanded(acts))];
             nfs.entries.insert(tag, nf);
@@ -200,10 +170,8 @@ pub fn semi_normalize_helper<'src, 'p, 'nf>(
             tag
         }
         Term::Alternative(x, y) => {
-            let mut x_tag = assigner.next(tag.symbol);
-            let mut y_tag = assigner.next(tag.symbol);
-            x_tag = semi_normalize_helper(&x.node, x_tag, arena, nfs, assigner, parser);
-            y_tag = semi_normalize_helper(&y.node, y_tag, arena, nfs, assigner, parser);
+            let x_tag = semi_normalize(&x.node, symbol, arena, nfs, tag_cnt, parser);
+            let y_tag = semi_normalize(&y.node, symbol, arena, nfs, tag_cnt, parser);
             let nf = smallvec![
                 &*arena.alloc(NormalForm::Unexpanded(smallvec![Action::Subroutine(x_tag)])),
                 &*arena.alloc(NormalForm::Unexpanded(smallvec![Action::Subroutine(y_tag)])),
@@ -212,12 +180,9 @@ pub fn semi_normalize_helper<'src, 'p, 'nf>(
             tag
         }
         Term::Fix(var, body) => {
-            let body_tag = Tag::new(*var);
-            semi_normalize_helper(&body.node, body_tag, arena, nfs, assigner, parser);
-            // copy tag for fixpoint
-            if tag != body_tag {
-                let body_nf = &nfs.entries[&body_tag];
-                nfs.entries.insert(tag, body_nf.clone());
+            let body_tag = semi_normalize(&body.node, *var, arena, nfs, &mut 0, parser);
+            if symbol != *var {
+                nfs.entries.insert(tag, nfs.entries[&body_tag].clone());
             }
             body_tag
         }
@@ -225,6 +190,11 @@ pub fn semi_normalize_helper<'src, 'p, 'nf>(
             let ref_tag = Tag::new(*x);
             if parser.is_active(&ref_tag) {
                 let acts = smallvec![Action::Subroutine(ref_tag), Action::Summarize(*x)];
+                let nf = smallvec![&*arena.alloc(NormalForm::Unexpanded(acts))];
+                nfs.entries.insert(tag, nf);
+                tag
+            } else if tag.version == 0 {
+                let acts = smallvec![Action::Subroutine(ref_tag)];
                 let nf = smallvec![&*arena.alloc(NormalForm::Unexpanded(acts))];
                 nfs.entries.insert(tag, nf);
                 tag
