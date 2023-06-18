@@ -19,7 +19,11 @@ parser sexpr {
     active compound
         = LPAREN ~ sexprs ~ RPAREN;
 
+    // just for testing
     active atom
+        = real_atom;
+
+    silent real_atom
         = ATOM;
 
     silent sexprs

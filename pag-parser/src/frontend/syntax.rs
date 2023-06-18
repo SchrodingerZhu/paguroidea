@@ -43,7 +43,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
     }
 
     pub fn is_active(&self, tag: &Tag<'src>) -> bool {
-        !tag.is_versioned() && self.bindings.get(&tag.symbol()).map_or(false, |x| x.active)
+        tag.is_original() && self.bindings.get(&tag.symbol()).map_or(false, |x| x.active)
     }
 }
 
