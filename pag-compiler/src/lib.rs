@@ -19,7 +19,8 @@ pub fn compile<I: AsRef<Path>, O: AsRef<Path>>(input: I, output: O) {
     let data = std::fs::read_to_string(input.as_ref()).unwrap();
     match pag_parser::generate_parser(&data) {
         Ok(tokens) => {
-            eprintln!("{tokens}");
+            #[cfg(pag_print_tokens)]
+            println!("{tokens}");
             let tree: File = syn::parse2(tokens).unwrap();
             let prettified = prettyplease::unparse(&tree);
             let mut file = std::fs::File::create(output.as_ref()).unwrap();
