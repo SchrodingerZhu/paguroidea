@@ -26,6 +26,7 @@ readme.workspace = true
 quote = "1.0.26"
 proc-macro2 = "1.0"
 smallvec = { version = "1", features = ["union"] }
+typed-arena = "2"
 
 [dev-dependencies]
 syn = { version = "2.0", features = ["full"] }

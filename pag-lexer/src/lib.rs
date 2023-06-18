@@ -14,7 +14,9 @@ pub mod derivative;
 pub mod intervals;
 pub mod lookahead;
 pub mod normalization;
+pub mod normalization2;
 pub mod regex_tree;
+pub mod regex_tree2;
 pub mod vector;
 
 #[cfg(test)]
