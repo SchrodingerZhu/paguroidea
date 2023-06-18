@@ -31,21 +31,18 @@ pub fn derivative(tree: Rc<RegexTree>, x: u8) -> Rc<RegexTree> {
             }
         }
         KleeneClosure(r) => Rc::new(Concat(smallvec![derivative(r.clone(), x), tree.clone()])),
-        Union(children) => {
-            let head = children[0].clone();
-            let tail = normalize(Rc::new(Union(children[1..].iter().cloned().collect())));
-            Rc::new(Union(smallvec![derivative(head, x), derivative(tail, x)]))
-        }
-        Intersection(children) => {
-            let head = children[0].clone();
-            let tail = normalize(Rc::new(Intersection(
-                children[1..].iter().cloned().collect(),
-            )));
-            Rc::new(Intersection(smallvec![
-                derivative(head, x),
-                derivative(tail, x)
-            ]))
-        }
+        Union(children) => Rc::new(Union(
+            children
+                .iter()
+                .map(|tree| derivative(tree.clone(), x))
+                .collect(),
+        )),
+        Intersection(children) => Rc::new(Intersection(
+            children
+                .iter()
+                .map(|tree| derivative(tree.clone(), x))
+                .collect(),
+        )),
         Complement(r) => Rc::new(Complement(derivative(r.clone(), x))),
         Bottom | Epsilon => RegexTree::bottom(),
     }
