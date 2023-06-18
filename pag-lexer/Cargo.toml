@@ -29,6 +29,3 @@ smallvec = { version = "1", features = ["union"] }
 
 [dev-dependencies]
 syn = { version = "2.0", features = ["full"] }
-
-[features]
-__trace_dfa = []

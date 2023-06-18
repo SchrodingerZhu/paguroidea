@@ -36,6 +36,16 @@ impl<'src> Tag<'src> {
     }
 }
 
+impl<'src> Display for Tag<'src> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.symbol.fmt(f)?;
+        if self.version > 0 {
+            write!(f, "_{}", self.version)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Action<'src> {
     Subroutine(Tag<'src>),
@@ -68,16 +78,6 @@ pub enum NormalForm<'src> {
         terminal: Symbol<'src>,
         nonterminals: SmallVec<[Action<'src>; 1]>,
     },
-}
-
-impl<'src> Display for Tag<'src> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.symbol.fmt(f)?;
-        if self.version > 0 {
-            write!(f, "_{}", self.version)?;
-        }
-        Ok(())
-    }
 }
 
 impl<'src> Display for NormalForm<'src> {
