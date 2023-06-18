@@ -6,7 +6,8 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use crate::regex_tree::RegexTree;
+use crate::{normalization::normalize, regex_tree::RegexTree};
+use smallvec::smallvec;
 use std::rc::Rc;
 
 pub fn derivative(tree: Rc<RegexTree>, x: u8) -> Rc<RegexTree> {
@@ -14,27 +15,38 @@ pub fn derivative(tree: Rc<RegexTree>, x: u8) -> Rc<RegexTree> {
     match tree.as_ref() {
         Set(set) => {
             if set.contains(x) {
-                Rc::new(Epsilon)
+                RegexTree::epsilon()
             } else {
-                Rc::new(Bottom)
+                RegexTree::bottom()
             }
         }
-        Concat(r, s) => {
-            let lhs = Rc::new(Concat(derivative(r.clone(), x), s.clone()));
-            if r.is_nullable() {
-                Rc::new(Union(lhs, derivative(s.clone(), x)))
+        Concat(children) => {
+            let head = children[0].clone();
+            let tail = normalize(Rc::new(Concat(children[1..].iter().cloned().collect())));
+            let lhs = Rc::new(Concat(smallvec![derivative(head.clone(), x), tail.clone()]));
+            if head.is_nullable() {
+                Rc::new(Union(smallvec![lhs, derivative(tail, x)]))
             } else {
                 lhs
             }
         }
-        KleeneClosure(r) => Rc::new(Concat(derivative(r.clone(), x), tree.clone())),
-        Union(r, s) => Rc::new(Union(derivative(r.clone(), x), derivative(s.clone(), x))),
-        Intersection(r, s) => Rc::new(Intersection(
-            derivative(r.clone(), x),
-            derivative(s.clone(), x),
-        )),
+        KleeneClosure(r) => Rc::new(Concat(smallvec![derivative(r.clone(), x), tree.clone()])),
+        Union(children) => {
+            let head = children[0].clone();
+            let tail = normalize(Rc::new(Union(children[1..].iter().cloned().collect())));
+            Rc::new(Union(smallvec![derivative(head, x), derivative(tail, x)]))
+        }
+        Intersection(children) => {
+            let head = children[0].clone();
+            let tail = normalize(Rc::new(Intersection(
+                children[1..].iter().cloned().collect(),
+            )));
+            Rc::new(Intersection(smallvec![
+                derivative(head, x),
+                derivative(tail, x)
+            ]))
+        }
         Complement(r) => Rc::new(Complement(derivative(r.clone(), x))),
-        Top => Rc::new(Epsilon),
-        Bottom | Epsilon => Rc::new(Bottom),
+        Bottom | Epsilon => RegexTree::bottom(),
     }
 }

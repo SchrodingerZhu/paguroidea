@@ -86,6 +86,10 @@ impl Intervals {
             .reduce(|acc, x| acc.union(&x))
     }
 
+    pub fn full_set() -> Self {
+        Self(smallvec![Interval(u8::MIN, u8::MAX)])
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &Interval> {
         self.0.iter()
     }

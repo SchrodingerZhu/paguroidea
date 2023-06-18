@@ -8,21 +8,21 @@
 
 use crate::intervals;
 use crate::intervals::Intervals;
+use smallvec::SmallVec;
 use std::fmt::{Display, Formatter};
 use std::ops::RangeInclusive;
 use std::rc::Rc;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Clone, Hash)]
 pub enum RegexTree {
-    Top,    // any character
     Bottom, // no character
     Set(Intervals),
     Epsilon,
-    Concat(Rc<RegexTree>, Rc<RegexTree>),
-    KleeneClosure(Rc<RegexTree>),
-    Union(Rc<RegexTree>, Rc<RegexTree>),
-    Intersection(Rc<RegexTree>, Rc<RegexTree>),
-    Complement(Rc<RegexTree>),
+    Concat(SmallVec<[Rc<Self>; 2]>),
+    KleeneClosure(Rc<Self>),
+    Union(SmallVec<[Rc<Self>; 2]>),
+    Intersection(SmallVec<[Rc<Self>; 2]>),
+    Complement(Rc<Self>),
 }
 
 use RegexTree::*;
@@ -30,33 +30,53 @@ use RegexTree::*;
 impl Display for RegexTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Top => write!(f, "⊤"),
             Bottom => write!(f, "⊥"),
+            Concat(x) | Intersection(x) | Union(x) if x.is_empty() => write!(f, "⊥"),
             Set(x) => write!(f, "{x}"),
             Epsilon => write!(f, "ε"),
-            Concat(x, y) => write!(f, "({x} ~ {y})"),
+            Concat(children) => {
+                write!(f, "({}", children[0])?;
+                for i in &children[1..] {
+                    write!(f, " ~ {i}")?;
+                }
+                write!(f, ")")
+            }
             KleeneClosure(x) => write!(f, "{x}*"),
-            Union(x, y) => write!(f, "({x} ∪ {y})"),
-            Intersection(x, y) => write!(f, "({x} ∩ {y})"),
-            Complement(x) => write!(f, "¬({x})"),
+            Union(children) => {
+                write!(f, "({}", children[0])?;
+                for i in &children[1..] {
+                    write!(f, " ∪ {i}")?;
+                }
+                write!(f, ")")
+            }
+            Intersection(children) => {
+                write!(f, "({}", children[0])?;
+                for i in &children[1..] {
+                    write!(f, " ∩ {i}")?;
+                }
+                write!(f, ")")
+            }
+            Complement(x) => write!(f, "¬{x}"),
         }
     }
 }
 
+thread_local! {
+    static EPSILON: Rc<RegexTree> = Rc::new(RegexTree::Epsilon);
+    static BOTTOM: Rc<RegexTree> = Rc::new(RegexTree::Bottom);
+}
+
 impl RegexTree {
-    pub fn contains_in_union(&self, target: &Self) -> bool {
-        if self == target {
-            return true;
-        }
-        match self {
-            Union(a, b) => a.contains_in_union(target) || b.contains_in_union(target),
-            _ => false,
-        }
+    pub fn epsilon() -> Rc<Self> {
+        EPSILON.with(Rc::clone)
+    }
+    pub fn bottom() -> Rc<Self> {
+        BOTTOM.with(Rc::clone)
     }
     pub fn is_byte_sequence(&self) -> bool {
         match self {
             Set(intervals) => intervals.is_single_byte(),
-            Concat(a, b) => a.is_byte_sequence() && b.is_byte_sequence(),
+            Concat(children) => children.iter().all(|x| x.is_byte_sequence()),
             Epsilon => true,
             _ => false,
         }
@@ -64,11 +84,21 @@ impl RegexTree {
     pub fn as_byte_sequence(&self) -> Option<Vec<u8>> {
         match self {
             Set(intervals) if intervals.is_single_byte() => Some(vec![intervals.representative()]),
-            Concat(a, b) => {
-                let mut a = a.as_byte_sequence()?;
-                let b = b.as_byte_sequence()?;
-                a.extend(b);
-                Some(a)
+            Concat(children) => {
+                let init = if let Some(x) = children.get(0) {
+                    x.as_byte_sequence()
+                } else {
+                    return Some(Vec::new());
+                };
+
+                children[1..].iter().fold(init, |acc, x| {
+                    acc.and_then(|mut acc| {
+                        Some({
+                            acc.extend(x.as_byte_sequence()?);
+                            acc
+                        })
+                    })
+                })
             }
             Epsilon => Some(Vec::new()),
             _ => None,
@@ -83,47 +113,14 @@ impl RegexTree {
         }
         Set(intervals!((*x.start(), *x.end())))
     }
-    pub fn mangle(&self) -> String {
-        match self {
-            Top => "T".to_string(),
-            Bottom => "B".to_string(),
-            Set(x) => x.mangle(),
-            Epsilon => "E".to_string(),
-            Concat(x, y) => {
-                let x = x.mangle();
-                let y = y.mangle();
-                format!("C{}{}{}{}", x.len(), x, y.len(), y)
-            }
-            KleeneClosure(x) => {
-                let x = x.mangle();
-                format!("K{}{}", x.len(), x)
-            }
-            Union(x, y) => {
-                let x = x.mangle();
-                let y = y.mangle();
-                format!("U{}{}{}{}", x.len(), x, y.len(), y)
-            }
-            Intersection(x, y) => {
-                let x = x.mangle();
-                let y = y.mangle();
-                format!("I{}{}{}{}", x.len(), x, y.len(), y)
-            }
-            Complement(x) => {
-                let x = x.mangle();
-                format!("N{}{}", x.len(), x)
-            }
-        }
-    }
     pub fn is_nullable(&self) -> bool {
         match self {
-            Top => false,
             Bottom => false,
             Set(_) => false,
             Epsilon => true,
-            Concat(left, right) => left.is_nullable() && right.is_nullable(),
+            Concat(children) | Intersection(children) => children.iter().all(|x| x.is_nullable()),
             KleeneClosure(_) => true,
-            Union(left, right) => left.is_nullable() || right.is_nullable(),
-            Intersection(left, right) => left.is_nullable() && right.is_nullable(),
+            Union(children) => children.iter().any(|x| x.is_nullable()),
             Complement(r) => !r.is_nullable(),
         }
     }

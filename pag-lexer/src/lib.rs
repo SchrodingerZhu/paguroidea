@@ -14,9 +14,7 @@ pub mod derivative;
 pub mod intervals;
 pub mod lookahead;
 pub mod normalization;
-pub mod normalization2;
 pub mod regex_tree;
-pub mod regex_tree2;
 pub mod vector;
 
 #[cfg(test)]
@@ -28,6 +26,7 @@ mod tests {
     use crate::regex_tree::*;
     use crate::vector::Vector;
     use quote::quote;
+    use smallvec::smallvec;
     use std::rc::Rc;
     use RegexTree::*;
 
@@ -35,8 +34,8 @@ mod tests {
     fn it_prints_basic() {
         let a = Rc::new(RegexTree::single(b'a'));
         let b = Rc::new(RegexTree::single(b'b'));
-        let ab = Rc::new(Concat(a, b));
-        let alt = Rc::new(Union(ab.clone(), ab));
+        let ab = Rc::new(Concat(smallvec![a, b]));
+        let alt = Rc::new(Union(smallvec![ab.clone(), ab]));
         println!("{}", alt);
         let derivative = derivative(alt, b'a');
         println!("{}", derivative);
@@ -50,7 +49,7 @@ mod tests {
         // concat
         let a = Rc::new(RegexTree::single(b'a'));
         let b = Rc::new(RegexTree::single(b'b'));
-        let concat = Rc::new(Concat(a.clone(), b));
+        let concat = Rc::new(Concat(smallvec![a.clone(), b]));
         let normalized = normalize(concat.clone());
         assert!(Rc::ptr_eq(&concat, &normalized));
         // kleene closure
@@ -66,10 +65,11 @@ mod tests {
         let b = Rc::new(RegexTree::single(b'b'));
         let c = Rc::new(RegexTree::single(b'c'));
         let d = Rc::new(RegexTree::single(b'd'));
-        let ba = Rc::new(Concat(b, a.clone()));
-        let a_or_ba = Rc::new(Union(a, ba));
-        let a_or_ba_or_c = Rc::new(Union(a_or_ba, c));
-        let a_or_ba_or_c_con_d = Rc::new(KleeneClosure(Rc::new(Concat(a_or_ba_or_c, d))));
+        let ba = Rc::new(Concat(smallvec![b, a.clone()]));
+        let a_or_ba = Rc::new(Union(smallvec![a, ba]));
+        let a_or_ba_or_c = Rc::new(Union(smallvec![a_or_ba, c]));
+        let a_or_ba_or_c_con_d =
+            Rc::new(KleeneClosure(Rc::new(Concat(smallvec![a_or_ba_or_c, d]))));
         let normalized = normalize(a_or_ba_or_c_con_d);
         let congruence = approximate_congruence_class(&normalized);
         println!("{:?}", congruence);
@@ -95,14 +95,15 @@ mod tests {
         let a = Rc::new(RegexTree::single(b'a'));
         let b = Rc::new(RegexTree::single(b'b'));
         let c = Rc::new(RegexTree::single(b'c'));
-        let ba = Rc::new(Concat(b, a.clone()));
-        let a_or_ba = Rc::new(Union(a, ba));
-        let a_or_ba_or_c = Rc::new(Union(a_or_ba, c));
+        let ba = Rc::new(Concat(smallvec![b, a.clone()]));
+        let a_or_ba = Rc::new(Union(smallvec![a, ba]));
+        let a_or_ba_or_c = Rc::new(Union(smallvec![a_or_ba, c]));
+        println!("normalized: {}", normalize(a_or_ba_or_c.clone()));
         let star = Rc::new(KleeneClosure(a_or_ba_or_c.clone()));
-        let a_or_ba_or_c = Rc::new(Concat(a_or_ba_or_c, star));
+        let a_or_ba_or_c = Rc::new(Concat(smallvec![a_or_ba_or_c, star]));
         println!("{}", a_or_ba_or_c);
         let normalized = normalize(a_or_ba_or_c);
-        println!("{}", normalized);
+        println!("normalized: {}", normalized);
         let congruence = approximate_congruence_class(&normalized);
         println!("{:?}", congruence);
         println!();

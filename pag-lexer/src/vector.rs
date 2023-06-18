@@ -71,15 +71,6 @@ impl Vector {
         }
     }
 
-    pub fn mangle(&self) -> String {
-        let mut s = "V".to_string();
-        for regex_tree in &self.regex_trees {
-            let mangled = regex_tree.mangle();
-            s.push_str(&format!("{}{}", mangled.len(), mangled));
-        }
-        s
-    }
-
     pub fn derivative(&self, x: u8) -> Self {
         Vector {
             regex_trees: self
