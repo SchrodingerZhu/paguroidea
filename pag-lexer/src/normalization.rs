@@ -72,9 +72,9 @@ pub fn normalize(node: Rc<RegexTree>) -> Rc<RegexTree> {
             // temporary workaround for (x* | eps)
             if new
                 .iter()
-                .any(|x| !matches!(x.as_ref(), Epsilon) && x.is_nullable())
+                .any(|x| x.as_ref() != &Epsilon && x.is_nullable())
             {
-                new.retain(|x| !matches!(x.as_ref(), Epsilon));
+                new.retain(|x| x.as_ref() != &Epsilon);
             }
 
             match new.as_slice() {

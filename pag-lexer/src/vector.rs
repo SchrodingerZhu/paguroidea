@@ -52,7 +52,7 @@ impl Vector {
             .iter()
             .filter(|x| x.is_bottom())
             .map(|x| x.is_byte_sequence());
-        matches!(iter.next(), Some(true)) && iter.next().is_none()
+        iter.next() == Some(true) && iter.next().is_none()
     }
 
     pub fn as_byte_sequence(&self) -> Option<(usize, Vec<u8>)> {

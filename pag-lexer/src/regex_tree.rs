@@ -100,20 +100,11 @@ impl RegexTree {
         match self {
             Set(intervals) if intervals.is_single_byte() => Some(vec![intervals.representative()]),
             Concat(children) => {
-                let init = if let Some(x) = children.get(0) {
-                    x.as_byte_sequence()
-                } else {
-                    return Some(Vec::new());
-                };
-
-                children[1..].iter().fold(init, |acc, x| {
-                    acc.and_then(|mut acc| {
-                        Some({
-                            acc.extend(x.as_byte_sequence()?);
-                            acc
-                        })
-                    })
-                })
+                let mut result = Vec::new();
+                for child in children {
+                    result.extend(child.as_byte_sequence()?);
+                }
+                Some(result)
             }
             Epsilon => Some(Vec::new()),
             _ => None,
