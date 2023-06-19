@@ -7,11 +7,27 @@
 // modified, or distributed except according to those terms.
 
 use crate::{intervals::Intervals, regex_tree::RegexTree};
-use smallvec::{smallvec, SmallVec};
-use std::rc::Rc;
+use smallvec::SmallVec;
+use std::{iter::Cloned, rc::Rc, slice::Iter};
 use RegexTree::*;
 
 type RcVec = SmallVec<[Rc<RegexTree>; 2]>;
+
+enum FlattenIter<'a> {
+    Single(Option<Rc<RegexTree>>),
+    Multiple(Cloned<Iter<'a, Rc<RegexTree>>>),
+}
+
+impl<'a> Iterator for FlattenIter<'a> {
+    type Item = Rc<RegexTree>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            FlattenIter::Single(x) => x.take(),
+            FlattenIter::Multiple(x) => x.next(),
+        }
+    }
+}
 
 macro_rules! recursive_flatten {
     ($name:ident, $ctor:ident) => {
@@ -19,8 +35,8 @@ macro_rules! recursive_flatten {
             nodes
                 .iter()
                 .flat_map(|x| match x.as_ref() {
-                    $ctor(inner) => inner.clone(),
-                    _ => smallvec![x.clone()],
+                    $ctor(inner) => FlattenIter::Multiple(inner.iter().cloned()),
+                    _ => FlattenIter::Single(Some(x.clone())),
                 })
                 .collect()
         }
