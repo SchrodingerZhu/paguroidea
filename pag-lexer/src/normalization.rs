@@ -19,7 +19,7 @@ macro_rules! recursive_flatten {
             nodes
                 .iter()
                 .flat_map(|x| match x.as_ref() {
-                    $ctor(inner) => $name(&inner),
+                    $ctor(inner) => inner.clone(),
                     _ => smallvec![x.clone()],
                 })
                 .collect()
