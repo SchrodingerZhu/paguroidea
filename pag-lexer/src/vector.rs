@@ -11,6 +11,7 @@ use crate::derivative::derivative;
 use crate::intervals::Intervals;
 use crate::normalization::normalize;
 use crate::regex_tree::RegexTree;
+use crate::utilities::dbg_sort;
 
 use crate::lookahead::LoopOptimizer;
 use proc_macro2::{Literal, TokenStream};
@@ -133,7 +134,7 @@ impl Vector {
         let mut dfa = build_dfa(initial_state.state_vec.clone());
         let leaf_states = extract_leaf_states(&mut dfa);
         let initial_label = format_ident!("S{}", dfa[&initial_state].state_id);
-        let actions = dfa.iter().map(|(state, info)| {
+        let actions = dbg_sort(&dfa, |(_, info)| info.state_id).map(|(state, info)| {
             let label = format_ident!("S{}", info.state_id);
             if let Some((rule_idx, seq)) = state.state_vec.as_byte_sequence() {
                 let literal = Literal::byte_string(&seq);
@@ -181,7 +182,8 @@ impl Vector {
             }
         });
 
-        let labels = dfa.values().map(|info| format_ident!("S{}", info.state_id));
+        let labels = dbg_sort(dfa.values(), |info| info.state_id)
+            .map(|info| format_ident!("S{}", info.state_id));
 
         quote! {
             enum State {

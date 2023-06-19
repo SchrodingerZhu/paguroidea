@@ -15,6 +15,7 @@ pub mod intervals;
 pub mod lookahead;
 pub mod normalization;
 pub mod regex_tree;
+pub mod utilities;
 pub mod vector;
 
 #[cfg(test)]

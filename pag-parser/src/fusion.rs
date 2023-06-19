@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 
 use pag_lexer::lookahead::LoopOptimizer;
+use pag_lexer::utilities::dbg_sort;
 use pag_lexer::vector::Vector;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -20,9 +21,7 @@ use crate::{
 };
 
 fn generate_tag_enum(parser: &Parser<'_, '_>) -> TokenStream {
-    let active_rules = parser
-        .bindings
-        .iter()
+    let active_rules = dbg_sort(&parser.bindings, |(sym, _)| *sym)
         .filter(|(_, rule)| rule.active)
         .map(|(sym, _)| format_ident!("{}", sym.name()));
     quote! {
@@ -424,17 +423,7 @@ pub fn fusion_parser<'src>(
     let tree = generate_parse_tree();
     let error = generate_error();
     let mut loop_optimizer = LoopOptimizer::new();
-    let entries = rules.entries.iter();
-
-    // TODO: also sort lexer rules
-    #[cfg(pag_sort_output)]
-    let entries = {
-        let mut vec = Vec::from_iter(entries);
-        vec.sort_unstable_by_key(|(tag, _)| *tag);
-        vec.into_iter()
-    };
-
-    let parsers = entries
+    let parsers = dbg_sort(&rules.entries, |(tag, _)| *tag)
         .map(|(tag, rules)| {
             if parser.is_active(tag) {
                 generate_active_parser(
