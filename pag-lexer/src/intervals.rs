@@ -20,12 +20,10 @@ macro_rules! interval {
 
 #[macro_export]
 macro_rules! intervals {
-    ($(($start:expr, $end:expr)),+ $(,)?) => {
-        unsafe {
-            $crate::intervals::Intervals::new(
-                [$($crate::interval!($start, $end)),+]
-            ).unwrap_unchecked()
-        }
+    ($(($start:expr, $end:expr)),* $(,)?) => {
+        $crate::intervals::Intervals::new(
+            [$($crate::interval!($start, $end)),+]
+        )
     };
 }
 
@@ -51,9 +49,12 @@ impl Interval {
         self.0 <= other.1 && other.0 <= self.1
     }
 
-    pub fn intersection(&self, other: &Self) -> Self {
-        debug_assert!(self.overlaps(other));
-        Self(self.0.max(other.0), self.1.min(other.1))
+    pub fn intersection(&self, other: &Self) -> Option<Self> {
+        if self.overlaps(other) {
+            Some(Self(self.0.max(other.0), self.1.min(other.1)))
+        } else {
+            None
+        }
     }
 
     pub fn contains(&self, other: &Self) -> bool {
@@ -63,19 +64,23 @@ impl Interval {
 
 // Invariants:
 // - Ordered
-// - Non-empty
 // - Non-consecutive
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Intervals(SmallVec<[Interval; 8]>);
 
 impl Intervals {
-    pub fn new<I>(data: I) -> Option<Self>
+    pub fn new<I>(data: I) -> Self
     where
         I: IntoIterator<Item = Interval>,
     {
         data.into_iter()
             .map(|x| Self(smallvec![x]))
             .reduce(|acc, x| acc.union(&x))
+            .unwrap_or_default()
+    }
+
+    pub fn empty_set() -> Self {
+        Self(smallvec![])
     }
 
     pub fn full_set() -> Self {
@@ -94,30 +99,29 @@ impl Intervals {
         self.0[0].0
     }
 
+    pub fn is_empty_set(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn is_full_set(&self) -> bool {
-        self.0.len() == 1 && self.0[0] == Interval(u8::MIN, u8::MAX)
+        self.0.first() == Some(&Interval(u8::MIN, u8::MAX))
     }
 
     // it is okay it contains non-unicode code points; they will never be read anyway.
-    pub fn complement(&self) -> Option<Self> {
-        let mut current = Some(0);
+    pub fn complement(&self) -> Self {
+        let mut current = 0;
         let mut result = SmallVec::new();
-        for i in self.0.iter() {
-            if let Some(c) = current {
-                if c < i.0 {
-                    result.push(Interval(c, i.0 - 1));
-                }
+        for &Interval(l, r) in self.0.iter() {
+            if current < l {
+                result.push(Interval(current, l - 1));
             }
-            current = i.1.checked_add(1);
+            if r == u8::MAX {
+                return Self(result);
+            }
+            current = r + 1;
         }
-        if let Some(current) = current {
-            result.push(Interval(current, u8::MAX));
-        }
-        if result.is_empty() {
-            None
-        } else {
-            Some(Self(result))
-        }
+        result.push(Interval(current, u8::MAX));
+        Self(result)
     }
 
     pub fn contains(&self, target: u8) -> bool {
@@ -128,22 +132,19 @@ impl Intervals {
         }
     }
 
-    pub fn intersection(&self, other: &Self) -> Option<Self> {
-        let mut result: Option<Self> = None;
-        for i in self.0.iter().copied() {
-            for j in other.0.iter().copied() {
-                if i.overlaps(&j) {
-                    let temp = Self(smallvec![i.intersection(&j)]);
-                    result = match result {
-                        None => Some(temp),
-                        Some(x) => Some(x.union(&temp)),
-                    };
-                } else if j.0 > i.1 {
+    pub fn intersection(&self, other: &Self) -> Self {
+        let mut result = SmallVec::new();
+        for x in self.0.iter() {
+            for y in other.0.iter() {
+                if let Some(interval) = x.intersection(y) {
+                    result.push(interval);
+                } else if y.0 > x.1 {
                     break;
                 }
             }
         }
-        result
+        result.sort_unstable_by_key(|&Interval(l, _)| l);
+        Self(result)
     }
 
     pub fn union(&self, other: &Self) -> Self {
@@ -177,7 +178,7 @@ impl Intervals {
 impl Display for Intervals {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.0.as_slice() {
-            [] => Ok(()),
+            [] => write!(f, "⊥"),
             [single] => write!(f, "{single}"),
             multiple => {
                 let iter = multiple.iter().map(|i| i.to_string());
@@ -242,21 +243,21 @@ mod test {
     fn complement() {
         let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9'));
         let y = intervals!((0, 47), (58, 64), (91, 96), (123, u8::MAX));
-        assert_eq!(x.complement(), Some(y));
+        assert_eq!(x.complement(), y);
         let z = intervals!(('\0', '7'));
-        assert_eq!(z.complement().unwrap(), intervals!(('8', u8::MAX)));
-        assert_eq!(x.complement().unwrap().complement().unwrap(), x);
-        assert_eq!(x.union(&x.complement().unwrap()), intervals!((0, u8::MAX)));
+        assert_eq!(z.complement(), intervals!(('8', u8::MAX)));
+        assert_eq!(x.complement().complement(), x);
+        assert_eq!(x.union(&x.complement()), intervals!((0, u8::MAX)));
     }
 
     #[test]
     fn intersection() {
         let x = intervals!(('a', 'z'), ('A', 'Z'), ('0', '9'));
         let z = intervals!(('\0', '7'));
-        assert_eq!(x.intersection(&z), Some(intervals!(('0', '7'))));
-        assert!(x.intersection(&x.complement().unwrap()).is_none());
-        assert_eq!(x.intersection(&intervals!((0, u8::MAX))).unwrap(), x);
+        assert_eq!(x.intersection(&z), intervals!(('0', '7')));
+        assert!(x.intersection(&x.complement()).is_empty_set());
+        assert_eq!(x.intersection(&intervals!((0, u8::MAX))), x);
         let a = intervals!(('E', 'c'));
-        assert_eq!(x.intersection(&a), Some(intervals!(('E', 'Z'), ('a', 'c'))));
+        assert_eq!(x.intersection(&a), intervals!(('E', 'Z'), ('a', 'c')));
     }
 }

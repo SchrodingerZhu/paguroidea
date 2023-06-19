@@ -21,65 +21,55 @@ fn sequence_unchanged(x: &[Rc<RegexTree>], y: &[Rc<RegexTree>]) -> bool {
 
 pub fn normalize(node: Rc<RegexTree>) -> Rc<RegexTree> {
     match node.as_ref() {
-        Bottom | Epsilon | Set(..) => node,
+        Epsilon | Set(_) => node,
         Concat(old) => {
             let mut new = RcVec::new();
             for x in old {
                 let x = normalize(x.clone());
                 match x.as_ref() {
-                    Bottom => return RegexTree::bottom(), // x ~ bot == bot
-                    Epsilon => continue,                  // x ~ eps == x
+                    _ if x.is_bottom() => return RegexTree::bottom(), // x ~ bot == bot
+                    Epsilon => continue,                              // x ~ eps == x
                     Concat(subvec) => new.extend(subvec.iter().cloned()), // flatten
                     _ => new.push(x.clone()),
                 }
             }
-            if new.is_empty() {
-                RegexTree::epsilon()
-            } else if new.len() == 1 {
-                new.pop().unwrap()
-            } else if sequence_unchanged(&new, old) {
-                node
-            } else {
-                Rc::new(Concat(new))
+            match new.as_slice() {
+                [] => RegexTree::epsilon(),
+                [_] => new.pop().unwrap(),
+                _ if sequence_unchanged(&new, old) => node,
+                _ => Rc::new(Concat(new)),
             }
         }
         Union(old) => {
             let mut new = RcVec::new();
-            let mut set = None;
+            let mut set = Intervals::empty_set();
             for x in old {
                 let x = normalize(x.clone());
                 match x.as_ref() {
-                    _ if x == RegexTree::top() => return RegexTree::top(), // x | top == top
-                    Bottom => continue,                                    // x | bot == x
                     Union(subvec) => {
                         for y in subvec {
                             match y.as_ref() {
-                                Set(subset) => {
-                                    set = match set {
-                                        None => Some(subset.clone()),
-                                        Some(set) => Some(set.union(subset)),
-                                    }
-                                }
+                                Set(subset) => set = set.union(subset),
                                 _ => new.push(y.clone()),
                             }
                         }
                     }
-                    Set(subset) => {
-                        set = match set {
-                            None => Some(subset.clone()),
-                            Some(set) => Some(set.union(subset)),
-                        }
-                    }
+                    Set(subset) => set = set.union(subset),
                     _ => new.push(x.clone()),
                 }
             }
-            if let Some(set) = set {
+            // consider early return and skip?
+            if set.is_full_set() {
+                return RegexTree::top();
+            }
+            if !set.is_empty_set() {
                 new.push(Rc::new(Set(set)));
             }
 
             new.sort_unstable();
             new.dedup_by(|x, y| Rc::ptr_eq(x, y) || x == y);
 
+            // temporary workaround for (x* | eps)
             if new
                 .iter()
                 .any(|x| !matches!(x.as_ref(), Epsilon) && x.is_nullable())
@@ -87,14 +77,11 @@ pub fn normalize(node: Rc<RegexTree>) -> Rc<RegexTree> {
                 new.retain(|x| !matches!(x.as_ref(), Epsilon));
             }
 
-            if new.is_empty() {
-                RegexTree::bottom()
-            } else if new.len() == 1 {
-                new.pop().unwrap()
-            } else if sequence_unchanged(&new, old) {
-                node
-            } else {
-                Rc::new(Union(new))
+            match new.as_slice() {
+                [] => RegexTree::bottom(),
+                [_] => new.pop().unwrap(),
+                _ if sequence_unchanged(&new, old) => node,
+                _ => Rc::new(Union(new)),
             }
         }
         Intersection(old) => {
@@ -103,62 +90,50 @@ pub fn normalize(node: Rc<RegexTree>) -> Rc<RegexTree> {
             for x in old {
                 let x = normalize(x.clone());
                 match x.as_ref() {
-                    Bottom => return RegexTree::bottom(),   // x & bot == bot
-                    _ if x == RegexTree::top() => continue, // x & top == x
                     Intersection(subvec) => {
                         for y in subvec {
                             match y.as_ref() {
-                                Set(subset) => match set.intersection(subset) {
-                                    Some(new_set) => set = new_set,
-                                    None => return RegexTree::bottom(),
-                                },
+                                Set(subset) => set = set.intersection(subset),
                                 _ => new.push(y.clone()),
                             }
                         }
                     }
-                    Set(subset) => match set.intersection(subset) {
-                        Some(new_set) => set = new_set,
-                        None => return RegexTree::bottom(),
-                    },
+                    Set(subset) => set = set.intersection(subset),
                     _ => new.push(x.clone()),
                 }
             }
-            new.push(Rc::new(Set(set)));
+            // consider early return and skip?
+            if set.is_empty_set() {
+                return RegexTree::bottom();
+            }
+            if !set.is_full_set() {
+                new.push(Rc::new(Set(set)));
+            }
 
             new.sort_unstable();
             new.dedup_by(|x, y| Rc::ptr_eq(x, y) || x == y);
 
-            if new.is_empty() {
-                RegexTree::top()
-            } else if new.len() == 1 {
-                new.pop().unwrap()
-            } else if sequence_unchanged(&new, old) {
-                node
-            } else {
-                Rc::new(Intersection(new))
+            match new.as_slice() {
+                [] => RegexTree::top(),
+                [_] => new.pop().unwrap(),
+                _ if sequence_unchanged(&new, old) => node,
+                _ => Rc::new(Intersection(new)),
             }
         }
         KleeneClosure(old) => {
             let new = normalize(old.clone());
             match new.as_ref() {
                 KleeneClosure(_) => new,
-                Bottom | Epsilon => RegexTree::epsilon(),
-                _ => {
-                    if Rc::ptr_eq(old, &new) {
-                        node
-                    } else {
-                        Rc::new(KleeneClosure(new))
-                    }
-                }
+                Epsilon => RegexTree::epsilon(),
+                _ if new.is_bottom() => RegexTree::epsilon(),
+                _ if Rc::ptr_eq(old, &new) => node,
+                _ => Rc::new(KleeneClosure(new)),
             }
         }
         Complement(old) => {
             let new = normalize(old.clone());
             match new.as_ref() {
-                Set(x) => match x.complement() {
-                    Some(y) => Rc::new(Set(y)),
-                    None => RegexTree::bottom(),
-                },
+                Set(x) => Rc::new(Set(x.complement())),
                 Complement(r) => r.clone(),
                 // capture renormalization cases (no need to do allocations)
                 _ if Rc::ptr_eq(old, &new) => node,

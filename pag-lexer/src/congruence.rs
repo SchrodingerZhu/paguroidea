@@ -6,8 +6,6 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use std::ops::ControlFlow;
-
 use crate::intervals;
 use crate::intervals::Intervals;
 use crate::regex_tree::RegexTree;
@@ -16,7 +14,8 @@ pub fn meet(a: &[Intervals], b: &[Intervals]) -> Vec<Intervals> {
     let mut result = Vec::new();
     for x in a {
         for y in b {
-            if let Some(z) = x.intersection(y) {
+            let z = x.intersection(y);
+            if !z.is_empty_set() {
                 result.push(z);
             }
         }
@@ -30,42 +29,32 @@ pub fn meet(a: &[Intervals], b: &[Intervals]) -> Vec<Intervals> {
 pub fn approximate_congruence_class(tree: &RegexTree) -> Vec<Intervals> {
     use RegexTree::*;
     match tree {
-        Epsilon | Bottom => vec![intervals!((0, u8::MAX))],
+        Epsilon => vec![intervals!((u8::MIN, u8::MAX))],
         Set(x) => {
             let x = x.clone();
-            match x.complement() {
-                Some(y) => {
-                    if x < y {
-                        vec![x, y]
-                    } else {
-                        vec![y, x]
-                    }
-                }
-                None => vec![x],
+            let y = x.complement();
+            if x.is_full_set() {
+                vec![x]
+            } else {
+                vec![x, y]
             }
         }
         Concat(children) => {
-            match children[1..]
-                .iter()
-                .zip(children.iter().map(|x| x.is_nullable()))
-                .try_fold(
-                    approximate_congruence_class(&children[0]),
-                    |acc, (tree, prev_nullable)| {
-                        if !prev_nullable {
-                            ControlFlow::Break(acc)
-                        } else {
-                            ControlFlow::Continue(meet(&acc, &approximate_congruence_class(tree)))
-                        }
-                    },
-                ) {
-                ControlFlow::Break(v) | ControlFlow::Continue(v) => v,
+            let mut result = approximate_congruence_class(children[0].as_ref());
+            for pair in children.windows(2) {
+                let [x, y] = pair else { unreachable!() };
+                if !x.is_nullable() {
+                    return result;
+                }
+                result = meet(&result, &approximate_congruence_class(y.as_ref()))
             }
+            result
         }
-        KleeneClosure(r) | Complement(r) => approximate_congruence_class(r),
-        Union(children) | Intersection(children) => children[1..]
+        Union(children) | Intersection(children) => children
             .iter()
-            .fold(approximate_congruence_class(&children[0]), |acc, x| {
-                meet(&acc, &approximate_congruence_class(x))
-            }),
+            .map(|x| approximate_congruence_class(x.as_ref()))
+            .reduce(|acc, x| meet(&acc, &x))
+            .unwrap(),
+        KleeneClosure(r) | Complement(r) => approximate_congruence_class(r),
     }
 }

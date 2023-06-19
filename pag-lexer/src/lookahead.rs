@@ -146,7 +146,7 @@ impl LoopOptimizer {
             return Some(generate_lookahead_routine(&positives, Kind::Positive));
         }
 
-        let negatives = positives.complement()?;
+        let negatives = positives.complement();
         if estimated_cost(&negatives) <= limit {
             return Some(generate_lookahead_routine(&negatives, Kind::Negative));
         }

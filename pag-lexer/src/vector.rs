@@ -50,17 +50,13 @@ impl Vector {
         let mut iter = self
             .regex_trees
             .iter()
-            .filter(|x| !matches!(x.as_ref(), RegexTree::Bottom))
+            .filter(|x| x.is_bottom())
             .map(|x| x.is_byte_sequence());
         matches!(iter.next(), Some(true)) && iter.next().is_none()
     }
 
     pub fn as_byte_sequence(&self) -> Option<(usize, Vec<u8>)> {
-        let failing = self
-            .regex_trees
-            .iter()
-            .filter(|x| matches!(x.as_ref(), RegexTree::Bottom))
-            .count();
+        let failing = self.regex_trees.iter().filter(|x| x.is_bottom()).count();
         if failing == self.regex_trees.len() - 1 {
             self.regex_trees
                 .iter()
@@ -92,9 +88,7 @@ impl Vector {
     }
 
     pub fn is_rejecting_state(&self) -> bool {
-        self.regex_trees
-            .iter()
-            .all(|t| matches!(t.as_ref(), RegexTree::Bottom))
+        self.regex_trees.iter().all(|x| x.is_bottom())
     }
 
     pub fn approximate_congruence_class(&self) -> Vec<Intervals> {

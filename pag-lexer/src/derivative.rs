@@ -20,9 +20,10 @@ pub fn derivative(tree: Rc<RegexTree>, x: u8) -> Rc<RegexTree> {
                 RegexTree::bottom()
             }
         }
+        Epsilon => RegexTree::bottom(),
         Concat(children) => {
             let head = children[0].clone();
-            let tail = normalize(Rc::new(Concat(children[1..].iter().cloned().collect())));
+            let tail = normalize(Rc::new(Concat(children[1..].into())));
             let lhs = Rc::new(Concat(smallvec![derivative(head.clone(), x), tail.clone()]));
             if head.is_nullable() {
                 Rc::new(Union(smallvec![lhs, derivative(tail, x)]))
@@ -30,7 +31,6 @@ pub fn derivative(tree: Rc<RegexTree>, x: u8) -> Rc<RegexTree> {
                 lhs
             }
         }
-        KleeneClosure(r) => Rc::new(Concat(smallvec![derivative(r.clone(), x), tree.clone()])),
         Union(children) => Rc::new(Union(
             children
                 .iter()
@@ -43,7 +43,7 @@ pub fn derivative(tree: Rc<RegexTree>, x: u8) -> Rc<RegexTree> {
                 .map(|tree| derivative(tree.clone(), x))
                 .collect(),
         )),
+        KleeneClosure(r) => Rc::new(Concat(smallvec![derivative(r.clone(), x), tree.clone()])),
         Complement(r) => Rc::new(Complement(derivative(r.clone(), x))),
-        Bottom | Epsilon => RegexTree::bottom(),
     }
 }

@@ -15,13 +15,12 @@ use std::rc::Rc;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Clone, Hash)]
 pub enum RegexTree {
-    Bottom, // no character
     Set(Intervals),
     Epsilon,
     Concat(SmallVec<[Rc<Self>; 2]>),
-    KleeneClosure(Rc<Self>),
     Union(SmallVec<[Rc<Self>; 2]>),
     Intersection(SmallVec<[Rc<Self>; 2]>),
+    KleeneClosure(Rc<Self>),
     Complement(Rc<Self>),
 }
 
@@ -30,8 +29,6 @@ use RegexTree::*;
 impl Display for RegexTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Bottom => write!(f, "⊥"),
-            Concat(x) | Intersection(x) | Union(x) if x.is_empty() => write!(f, "⊥"),
             Set(x) => write!(f, "{x}"),
             Epsilon => write!(f, "ε"),
             Concat(children) => {
@@ -41,7 +38,6 @@ impl Display for RegexTree {
                 }
                 write!(f, ")")
             }
-            KleeneClosure(x) => write!(f, "{x}*"),
             Union(children) => {
                 write!(f, "({}", children[0])?;
                 for i in &children[1..] {
@@ -56,27 +52,41 @@ impl Display for RegexTree {
                 }
                 write!(f, ")")
             }
+            KleeneClosure(x) => write!(f, "{x}*"),
             Complement(x) => write!(f, "¬{x}"),
         }
     }
 }
 
 thread_local! {
-    static EPSILON: Rc<RegexTree> = Rc::new(RegexTree::Epsilon);
-    static BOTTOM: Rc<RegexTree> = Rc::new(RegexTree::Bottom);
-    static TOP: Rc<RegexTree> = BOTTOM.with(|x| Rc::new(RegexTree::Complement(x.clone())));
+    static EPSILON: Rc<RegexTree> = Rc::new(Epsilon);
+    static BOTTOM: Rc<RegexTree> = Rc::new(Set(Intervals::empty_set()));
+    static TOP: Rc<RegexTree> = Rc::new(Set(Intervals::full_set()));
 }
 
 impl RegexTree {
     pub fn epsilon() -> Rc<Self> {
         EPSILON.with(Rc::clone)
     }
+
     pub fn bottom() -> Rc<Self> {
         BOTTOM.with(Rc::clone)
     }
+
     pub fn top() -> Rc<Self> {
         TOP.with(Rc::clone)
     }
+
+    pub fn is_bottom(&self) -> bool {
+        let Set(set) = self else { return false };
+        set.is_empty_set()
+    }
+
+    pub fn is_top(&self) -> bool {
+        let Set(set) = self else { return false };
+        set.is_full_set()
+    }
+
     pub fn is_byte_sequence(&self) -> bool {
         match self {
             Set(intervals) => intervals.is_single_byte(),
@@ -85,6 +95,7 @@ impl RegexTree {
             _ => false,
         }
     }
+
     pub fn as_byte_sequence(&self) -> Option<Vec<u8>> {
         match self {
             Set(intervals) if intervals.is_single_byte() => Some(vec![intervals.representative()]),
@@ -108,23 +119,25 @@ impl RegexTree {
             _ => None,
         }
     }
+
     pub fn single(x: u8) -> Self {
         Set(intervals!((x, x)))
     }
+
     pub fn range(x: RangeInclusive<u8>) -> Self {
         if x.is_empty() {
-            return Bottom;
+            return RegexTree::Set(Intervals::empty_set());
         }
         Set(intervals!((*x.start(), *x.end())))
     }
+
     pub fn is_nullable(&self) -> bool {
         match self {
-            Bottom => false,
             Set(_) => false,
             Epsilon => true,
             Concat(children) | Intersection(children) => children.iter().all(|x| x.is_nullable()),
-            KleeneClosure(_) => true,
             Union(children) => children.iter().any(|x| x.is_nullable()),
+            KleeneClosure(_) => true,
             Complement(r) => !r.is_nullable(),
         }
     }
