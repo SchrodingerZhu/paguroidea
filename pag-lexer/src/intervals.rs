@@ -46,14 +46,6 @@ impl Display for Interval {
 }
 
 impl Interval {
-    pub fn mangle(&self) -> String {
-        if self.0 == self.1 {
-            format!("C{:X}X", self.0)
-        } else {
-            format!("R{:X}X{:X}X", self.0, self.1)
-        }
-    }
-
     // Check if two intervals overlap.
     pub fn overlaps(&self, other: &Self) -> bool {
         self.0 <= other.1 && other.0 <= self.1
@@ -102,16 +94,8 @@ impl Intervals {
         self.0[0].0
     }
 
-    pub fn mangle(&self) -> String {
-        let mut result = String::new();
-        for i in self.0.iter() {
-            result.push_str(&i.mangle());
-        }
-        format!("S{}{}", result.len(), result)
-    }
-
     pub fn is_full_set(&self) -> bool {
-        self.0.len() == 1 && self.0[0] == Interval(0, u8::MAX)
+        self.0.len() == 1 && self.0[0] == Interval(u8::MIN, u8::MAX)
     }
 
     // it is okay it contains non-unicode code points; they will never be read anyway.
