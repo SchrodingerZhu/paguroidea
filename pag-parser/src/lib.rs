@@ -271,16 +271,12 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
     let entrypoint = format_ident!("parse_{}", parser.entrypoint.name());
     Ok(quote::quote! {
         #![allow(
-            non_snake_case,
             dead_code,
             non_camel_case_types,
             unused_variables,
             unused_mut,
-            unreachable_patterns,
             unreachable_code,
             unused_assignments,
-            unused_parens,
-            clippy::identity_op,
             clippy::single_match,
             clippy::never_loop,
             clippy::match_single_binding,
