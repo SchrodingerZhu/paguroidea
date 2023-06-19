@@ -423,7 +423,7 @@ pub fn fusion_parser<'src>(
     let tree = generate_parse_tree();
     let error = generate_error();
     let mut loop_optimizer = LoopOptimizer::new();
-    let parsers = dbg_sort(&rules.entries, |(tag, _)| *tag)
+    let parsers = dbg_sort(&rules.entries, |(_, rules)| *rules)
         .map(|(tag, rules)| {
             if parser.is_active(tag) {
                 generate_active_parser(
