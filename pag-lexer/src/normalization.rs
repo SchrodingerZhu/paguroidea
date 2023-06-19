@@ -85,7 +85,9 @@ pub fn normalize(node: Rc<RegexTree>) -> Rc<RegexTree> {
         Union(old) => {
             let new: RcVec = old.iter().map(|x| normalize(x.clone())).collect();
             let new: RcVec = flatten_union(&new);
-
+            if new.iter().any(|x| x == &RegexTree::top()) {
+                return RegexTree::top();
+            }
             let mut sets = None;
             let mut nonsets = Vec::new();
 
@@ -143,6 +145,7 @@ pub fn normalize(node: Rc<RegexTree>) -> Rc<RegexTree> {
             if new.iter().any(|x| matches!(x.as_ref(), Bottom)) {
                 return RegexTree::bottom();
             }
+            let new: RcVec = new.into_iter().filter(|x| x != &RegexTree::top()).collect();
             let mut sets = Some(Intervals::full_set());
             let mut nonsets = Vec::new();
 
@@ -173,7 +176,7 @@ pub fn normalize(node: Rc<RegexTree>) -> Rc<RegexTree> {
             }
 
             if new.is_empty() {
-                return RegexTree::bottom();
+                return RegexTree::top();
             }
 
             if sequence_unchanged(&new, old) {

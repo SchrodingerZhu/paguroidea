@@ -64,6 +64,7 @@ impl Display for RegexTree {
 thread_local! {
     static EPSILON: Rc<RegexTree> = Rc::new(RegexTree::Epsilon);
     static BOTTOM: Rc<RegexTree> = Rc::new(RegexTree::Bottom);
+    static TOP: Rc<RegexTree> = BOTTOM.with(|x| Rc::new(RegexTree::Complement(x.clone())));
 }
 
 impl RegexTree {
@@ -72,6 +73,9 @@ impl RegexTree {
     }
     pub fn bottom() -> Rc<Self> {
         BOTTOM.with(Rc::clone)
+    }
+    pub fn top() -> Rc<Self> {
+        TOP.with(Rc::clone)
     }
     pub fn is_byte_sequence(&self) -> bool {
         match self {
