@@ -424,9 +424,17 @@ pub fn fusion_parser<'src>(
     let tree = generate_parse_tree();
     let error = generate_error();
     let mut loop_optimizer = LoopOptimizer::new();
-    let parsers = rules
-        .entries
-        .iter()
+    let entries = rules.entries.iter();
+
+    // TODO: also sort lexer rules
+    #[cfg(pag_sort_output)]
+    let entries = {
+        let mut vec = Vec::from_iter(entries);
+        vec.sort_unstable_by_key(|(tag, _)| *tag);
+        vec.into_iter()
+    };
+
+    let parsers = entries
         .map(|(tag, rules)| {
             if parser.is_active(tag) {
                 generate_active_parser(
