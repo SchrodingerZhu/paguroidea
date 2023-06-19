@@ -52,7 +52,7 @@ impl<'a> std::fmt::Display for Symbol<'a> {
         if is_ascii_ident(self.0) {
             write!(f, "{}", self.0)
         } else {
-            write!(f, "S{:X}_{}", self.0.as_ptr() as usize, self.0.len())
+            write!(f, "s{:x}_{}", self.0.as_ptr() as usize, self.0.len())
         }
     }
 }
