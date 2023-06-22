@@ -303,8 +303,7 @@ fn generate_inactive_parser<'src>(
     rules: &[&NormalForm<'src>],
     loop_optimizer: &mut LoopOptimizer,
 ) -> TokenStream {
-    let tag_name = format!("{tag}");
-    let parser_name = format_ident!("parse_{tag_name}");
+    let parser_name = format_ident!("parse_{tag}");
     let expect = generate_expect(rules);
 
     let success_actions = generate_children(&tag, false, parser, rules)
@@ -362,9 +361,8 @@ fn generate_active_parser<'src>(
     rules: &[&NormalForm<'src>],
     loop_optimizer: &mut LoopOptimizer,
 ) -> TokenStream {
-    let tag_name = format!("{tag}");
-    let tag_ident = format_ident!("{tag_name}");
-    let parser_name = format_ident!("parse_{tag_name}");
+    let tag_ident = format_ident!("{}", tag.symbol().name());
+    let parser_name = format_ident!("parse_{tag}");
     let expect = generate_expect(rules);
 
     let success_actions = generate_children(&tag, true, parser, rules)

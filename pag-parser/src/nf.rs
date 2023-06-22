@@ -38,11 +38,7 @@ impl<'src> Tag<'src> {
 
 impl<'src> Display for Tag<'src> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.symbol.fmt(f)?;
-        if self.version > 0 {
-            write!(f, "_{}", self.version)?;
-        }
-        Ok(())
+        write!(f, "{}_{}", self.symbol, self.version)
     }
 }
 
