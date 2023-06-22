@@ -268,7 +268,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
     merge_inactive_rules(&mut nfs, &parser, &nf_arena);
     remove_unreachable_rules(&mut nfs, &parser);
     let parser_routines = fusion_parser(&nfs, &parser);
-    let entrypoint = format_ident!("parse_{}", parser.entrypoint.name());
+    let entrypoint = format_ident!("parse_{}_0", parser.entrypoint.name());
     Ok(quote::quote! {
         #![allow(
             dead_code,
