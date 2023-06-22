@@ -282,7 +282,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
             clippy::match_single_binding,
         )]
         #parser_routines
-        pub fn parse(input: &str) -> Result<ParserTree, Error> {
+        pub fn parse(input: &str) -> Result<ParseTree, Error> {
             #entrypoint(input, 0)
         }
     })
