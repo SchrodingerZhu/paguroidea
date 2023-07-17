@@ -80,7 +80,7 @@ impl<'src> Error<'src> {
                         Report::build(ReportKind::Error, input_name, span.start)
                             .with_message("Syntax error in grammar definition")
                             .with_label(Label::new((input_name, span))
-                                .with_message(format!("{}", x.variant.message()))
+                                .with_message(x.variant.message())
                                 .with_color(Color::Red))
                             .finish()
                     },
@@ -88,7 +88,7 @@ impl<'src> Error<'src> {
                         Report::build(ReportKind::Error, input_name, span.start())
                             .with_message("Format error in grammar definition")
                             .with_label(Label::new((input_name, span.start()..span.end()))
-                                .with_message(format!("{}", message))
+                                .with_message(message)
                                 .with_color(Color::Red))
                             .finish()
                     },

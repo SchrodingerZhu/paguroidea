@@ -10,7 +10,7 @@ where
     }
     #[cfg(debug_assertions)]
     {
-        let mut vec = Vec::from_iter(data.into_iter());
+        let mut vec = Vec::from_iter(data);
         vec.sort_unstable_by_key(_f);
         vec.into_iter()
     }
