@@ -122,27 +122,29 @@ impl Parse for ParserRule {
 }
 
 impl Parse for VarBinding {
-    // ("$" syn::Ident ("<" syn::Type ">")? ":")? ParserExpr
+    // ParserExpr ("[" syn::Ident (":" syn::Type)? "]")?
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        let expr = input.parse::<ParserExpr>()?;
+
         let mut name = None;
         let mut ty = None;
 
-        if input.peek(Token![$]) {
-            input.parse::<Token![$]>()?;
-            name = Some(input.parse::<syn::Ident>()?.unraw());
+        if input.peek(syn::token::Bracket) {
+            let content;
+            bracketed!(content in input);
+            name = Some(content.parse::<syn::Ident>()?.unraw());
 
-            if input.peek(syn::token::Bracket) {
-                let content;
-                bracketed!(content in input);
+            if content.peek(Token![:]) {
+                content.parse::<Token![:]>()?;
                 ty = Some(content.parse::<syn::Type>()?);
             }
 
-            input.parse::<Token![:]>()?;
+            if !content.is_empty() {
+                return Err(content.error("expected `]`"));
+            }
         }
 
-        let expr = input.parse::<ParserExpr>()?;
-
-        Ok(Self { name, ty, expr })
+        Ok(Self { expr, name, ty })
     }
 }
 
@@ -183,7 +185,7 @@ fn parse_lexer_expr(input: ParseStream, min_bp: u32) -> syn::Result<LexerExpr> {
             let rhs = parse_lexer_expr(input, r_bp)?;
             break 'lhs LexerExpr::Not(Box::new(rhs));
         }
-        return Err(input.error("expect lexer expression"));
+        return Err(input.error("expected lexer expression"));
     };
 
     loop {
@@ -272,7 +274,7 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> syn::Result<ParserExpr>
                 _ => return Err(syn::Error::new(ident.span(), "invalid ident")),
             }
         }
-        return Err(input.error("expect lexer expression"));
+        return Err(input.error("expected parser expression"));
     };
 
     loop {
@@ -336,18 +338,17 @@ mod test {
     fn test_full() {
         syn::parse_str::<Ast>(
             r#"
-            %entry = sexpr;
+            %entry = sexp;
 
-            BLANK  = " ";
             DIGIT  = '0'..'9';
             ALPHA  = 'a'..'z' | 'A'..'Z';
             LPAREN = "(";
             RPAREN = ")";
             ATOM   = ALPHA (ALPHA | DIGIT)*;
-            %skip  = (BLANK | "\t" | "\n" | "\r")+;
+            %skip  = (" " | "\t" | "\n" | "\r")+;
 
-            compound: SExp = LPAREN $sexp[Vec<_>]:sexp+ RPAREN { SExp::Compound(sexp) };
-            atom    : SExp = $atom:ATOM { SExp::Atom(atom) };
+            compound: SExp = LPAREN sexp+[sexp:Vec<_>] RPAREN { SExp::Compound(sexp) };
+            atom    : SExp = ATOM[atom] { SExp::Atom(atom) };
             sexp    : SExp = compound
                            | atom;
             "#,

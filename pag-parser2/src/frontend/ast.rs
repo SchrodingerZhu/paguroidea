@@ -26,9 +26,9 @@ pub struct ParserRule {
 }
 
 pub struct VarBinding {
+    pub expr: ParserExpr,
     pub name: Option<syn::Ident>,
     pub ty: Option<syn::Type>,
-    pub expr: ParserExpr,
 }
 
 // TODO: how to express "bottom" & "any"?
