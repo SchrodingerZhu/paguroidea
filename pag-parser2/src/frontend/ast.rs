@@ -33,9 +33,9 @@ pub struct VarBinding {
 
 // TODO: how to express "bottom" & "any"?
 pub enum LexerExpr {
-    Alt(Vec<Self>),
-    Seq(Vec<Self>),
-    And(Vec<Self>),
+    Alt(Box<Self>, Box<Self>),
+    Seq(Box<Self>, Box<Self>),
+    And(Box<Self>, Box<Self>),
     Star(Box<Self>),
     Plus(Box<Self>),
     Opt(Box<Self>),
@@ -47,7 +47,7 @@ pub enum LexerExpr {
 
 // TODO: how to express "select" & "ignore"?
 pub enum ParserExpr {
-    Seq(Vec<Self>),
+    Seq(Box<Self>, Box<Self>),
     Star(Box<Self>),
     Plus(Box<Self>),
     Opt(Box<Self>),

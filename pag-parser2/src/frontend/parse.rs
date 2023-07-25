@@ -8,11 +8,13 @@
 
 use super::ast::*;
 
+use syn::ext::IdentExt;
 use syn::parse::{Parse, ParseStream};
-use syn::{parse_quote, Token};
+use syn::{parenthesized, parse_quote, Token};
 
 use std::collections::HashMap;
 
+#[derive(PartialEq, Eq)]
 enum IdentKind {
     LexerName,
     ParserName,
@@ -20,7 +22,7 @@ enum IdentKind {
 }
 
 fn ident_kind(ident: &syn::Ident) -> IdentKind {
-    let s = ident.to_string(); // TODO: should we add a `.unraw()` ?
+    let s = ident.unraw().to_string();
     if s.chars().all(|c| matches!(c, 'A'..='Z' | '0'..='9' | '_')) {
         return IdentKind::LexerName;
     }
@@ -145,10 +147,112 @@ impl Parse for VarBinding {
 }
 
 impl Parse for LexerExpr {
-    // pratt parsing
-    fn parse(_input: ParseStream) -> syn::Result<Self> {
-        todo!()
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        parse_lexer_expr(input, 0)
     }
+}
+
+// pratt parsing
+fn parse_lexer_expr(input: ParseStream, min_bp: u32) -> syn::Result<LexerExpr> {
+    let mut lhs = 'lhs: {
+        if input.peek(syn::Ident) {
+            let ident = input.parse::<syn::Ident>()?;
+            if ident_kind(&ident) != IdentKind::LexerName {
+                return Err(syn::Error::new(ident.span(), "invalid ident"));
+            }
+            break 'lhs LexerExpr::Ref(ident);
+        }
+        if input.peek(syn::LitStr) {
+            let str = input.parse::<syn::LitStr>()?;
+            break 'lhs LexerExpr::Str(str);
+        }
+        if input.peek(syn::LitChar) {
+            let l = input.parse::<syn::LitChar>()?;
+            input.parse::<Token![..]>()?;
+            let r = input.parse::<syn::LitChar>()?;
+            break 'lhs LexerExpr::Range(l, r);
+        }
+        if input.peek(syn::token::Paren) {
+            let content;
+            parenthesized!(content in input);
+            break 'lhs content.parse::<LexerExpr>()?;
+        }
+        if input.peek(Token![!]) {
+            input.parse::<Token![!]>()?;
+            let r_bp = 60;
+            let rhs = parse_lexer_expr(input, r_bp)?;
+            break 'lhs LexerExpr::Not(Box::new(rhs));
+        }
+        return Err(input.error("expect lexer expression"));
+    };
+
+    loop {
+        if input.peek(Token![|]) {
+            let (l_bp, r_bp) = (30, 31);
+            if l_bp < min_bp {
+                break;
+            }
+            input.parse::<Token![|]>()?;
+            let rhs = parse_lexer_expr(input, r_bp)?;
+            lhs = LexerExpr::Alt(Box::new(lhs), Box::new(rhs));
+            continue;
+        }
+        if input.peek(syn::Ident)
+            || input.peek(syn::LitStr)
+            || input.peek(syn::LitChar)
+            || input.peek(syn::token::Paren)
+            || input.peek(syn::token::Paren)
+            || input.peek(Token![!])
+        {
+            let (l_bp, r_bp) = (40, 41);
+            if l_bp < min_bp {
+                break;
+            }
+            let rhs = parse_lexer_expr(input, r_bp)?;
+            lhs = LexerExpr::Seq(Box::new(lhs), Box::new(rhs));
+            continue;
+        }
+        if input.peek(Token![&]) {
+            let (l_bp, r_bp) = (50, 51);
+            if l_bp < min_bp {
+                break;
+            }
+            input.parse::<Token![&]>()?;
+            let rhs = parse_lexer_expr(input, r_bp)?;
+            lhs = LexerExpr::And(Box::new(lhs), Box::new(rhs));
+            continue;
+        }
+        if input.peek(Token![*]) {
+            let l_bp = 70;
+            if l_bp < min_bp {
+                break;
+            }
+            input.parse::<Token![*]>()?;
+            lhs = LexerExpr::Star(Box::new(lhs));
+            continue;
+        }
+        if input.peek(Token![+]) {
+            let l_bp = 80;
+            if l_bp < min_bp {
+                break;
+            }
+            input.parse::<Token![+]>()?;
+            lhs = LexerExpr::Plus(Box::new(lhs));
+            continue;
+        }
+        if input.peek(Token![?]) {
+            let l_bp = 90;
+            if l_bp < min_bp {
+                break;
+            }
+            input.parse::<Token![?]>()?;
+            lhs = LexerExpr::Opt(Box::new(lhs));
+            continue;
+        }
+        break;
+    }
+
+    Ok(lhs)
 }
 
 impl Parse for ParserExpr {
@@ -156,4 +260,17 @@ impl Parse for ParserExpr {
     fn parse(_input: ParseStream) -> syn::Result<Self> {
         todo!()
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_lexer_expr() {
+        syn::parse_str::<LexerExpr>(r#"("abc" 'a'..'z') r#A | B & C | D* E+ F? !G"#).unwrap();
+    }
+
+    #[test]
+    fn test_parser_expr() {}
 }
