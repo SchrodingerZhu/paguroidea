@@ -152,14 +152,14 @@ impl Parse for ParserBinding {
 
 impl Parse for LexerTree {
     // pratt parsing
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+    fn parse(_input: ParseStream) -> syn::Result<Self> {
         todo!()
     }
 }
 
 impl Parse for ParserTree {
     // pratt parsing
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+    fn parse(_input: ParseStream) -> syn::Result<Self> {
         todo!()
     }
 }
