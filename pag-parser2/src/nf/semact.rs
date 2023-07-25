@@ -15,9 +15,7 @@ pub type SemActTable = HashMap<Tag, SemAct>;
 
 ///
 /// ```
-/// trait Collector<T> {
-///     pub type Output;
-///     fn finalize(self) -> Self::Output;
+/// trait Collector<T> : Default {
 ///     fn collect(&mut self, data: T);
 /// }
 ///
@@ -104,7 +102,7 @@ impl SemAct {
 
     /// This function is useful in the following cases:
     /// - If a shift routine is nested one or more, we does not emit the call to it immediately. Instead, we wait until
-    /// [`Self::generate_inlin_expr`] is called.
+    /// [`Self::generate_inline_expr`] is called.
     /// - If a parser routine has a semact [`Self::OneOrMoreNested`], it should be parametized by `C : Collector` in type
     /// and its has `&mut C` as its first input param.
     pub fn is_nested_one_or_more(&self) -> bool {
