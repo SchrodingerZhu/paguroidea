@@ -24,3 +24,4 @@ readme.workspace = true
 
 [dependencies]
 syn = "2.0.27"
+quote = "1.0.9"

@@ -33,9 +33,9 @@ pub struct ParserBinding {
 
 // TODO: how to express "bottom" & "empty"?
 pub enum LexerTree {
-    Alt(Vec<Box<Self>>),
-    Seq(Vec<Box<Self>>),
-    And(Vec<Box<Self>>),
+    Alt(Vec<Self>),
+    Seq(Vec<Self>),
+    And(Vec<Self>),
     Star(Box<Self>),
     Plus(Box<Self>),
     Opt(Box<Self>),
@@ -47,7 +47,7 @@ pub enum LexerTree {
 
 // TODO: how to express "select" & "ignore"?
 pub enum ParserTree {
-    Seq(Vec<Box<Self>>),
+    Seq(Vec<Self>),
     Star(Box<Self>),
     Plus(Box<Self>),
     Opt(Box<Self>),
