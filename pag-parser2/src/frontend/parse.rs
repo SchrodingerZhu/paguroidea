@@ -22,7 +22,7 @@ enum IdentKind {
 }
 
 fn ident_kind(ident: &syn::Ident) -> IdentKind {
-    let s = ident.unraw().to_string();
+    let s = ident.to_string();
     if s.chars().all(|c| matches!(c, 'A'..='Z' | '0'..='9' | '_')) {
         return IdentKind::LexerName;
     }
@@ -43,7 +43,7 @@ impl Parse for Ast {
             if input.peek(Token![%]) {
                 // parse keyword
                 input.parse::<Token![%]>()?;
-                let ident = input.parse::<syn::Ident>()?;
+                let ident = input.parse::<syn::Ident>()?.unraw();
                 match ident.to_string().as_str() {
                     "entry" => {
                         input.parse::<Token![=]>()?;
@@ -57,7 +57,7 @@ impl Parse for Ast {
                 }
             } else {
                 // parse lexer / parser definitions
-                let ident = input.parse::<syn::Ident>()?;
+                let ident = input.parse::<syn::Ident>()?.unraw();
                 match ident_kind(&ident) {
                     IdentKind::LexerName => {
                         input.parse::<Token![=]>()?;
@@ -129,7 +129,7 @@ impl Parse for VarBinding {
 
         if input.peek(Token![$]) {
             input.parse::<Token![%]>()?;
-            name = Some(input.parse::<syn::Ident>()?);
+            name = Some(input.parse::<syn::Ident>()?.unraw());
 
             if input.peek(Token![<]) {
                 input.parse::<Token![<]>()?;
@@ -156,7 +156,7 @@ impl Parse for LexerExpr {
 fn parse_lexer_expr(input: ParseStream, min_bp: u32) -> syn::Result<LexerExpr> {
     let mut lhs = 'lhs: {
         if input.peek(syn::Ident) {
-            let ident = input.parse::<syn::Ident>()?;
+            let ident = input.parse::<syn::Ident>()?.unraw();
             if ident_kind(&ident) != IdentKind::LexerName {
                 return Err(syn::Error::new(ident.span(), "invalid ident"));
             }
@@ -256,10 +256,66 @@ fn parse_lexer_expr(input: ParseStream, min_bp: u32) -> syn::Result<LexerExpr> {
 }
 
 impl Parse for ParserExpr {
-    // pratt parsing
-    fn parse(_input: ParseStream) -> syn::Result<Self> {
-        todo!()
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        parse_parser_expr(input, 0)
     }
+}
+
+// pratt parsing
+fn parse_parser_expr(input: ParseStream, min_bp: u32) -> syn::Result<ParserExpr> {
+    let mut lhs = 'lhs: {
+        if input.peek(syn::Ident) {
+            let ident = input.parse::<syn::Ident>()?.unraw();
+            match ident_kind(&ident) {
+                IdentKind::LexerName => break 'lhs ParserExpr::LexerRef(ident),
+                IdentKind::ParserName => break 'lhs ParserExpr::ParserRef(ident),
+                _ => return Err(syn::Error::new(ident.span(), "invalid ident")),
+            }
+        }
+        return Err(input.error("expect lexer expression"));
+    };
+
+    loop {
+        if input.peek(syn::Ident) {
+            let (l_bp, r_bp) = (40, 41);
+            if l_bp < min_bp {
+                break;
+            }
+            let rhs = parse_parser_expr(input, r_bp)?;
+            lhs = ParserExpr::Seq(Box::new(lhs), Box::new(rhs));
+            continue;
+        }
+        if input.peek(Token![*]) {
+            let l_bp = 70;
+            if l_bp < min_bp {
+                break;
+            }
+            input.parse::<Token![*]>()?;
+            lhs = ParserExpr::Star(Box::new(lhs));
+            continue;
+        }
+        if input.peek(Token![+]) {
+            let l_bp = 80;
+            if l_bp < min_bp {
+                break;
+            }
+            input.parse::<Token![+]>()?;
+            lhs = ParserExpr::Plus(Box::new(lhs));
+            continue;
+        }
+        if input.peek(Token![?]) {
+            let l_bp = 90;
+            if l_bp < min_bp {
+                break;
+            }
+            input.parse::<Token![?]>()?;
+            lhs = ParserExpr::Opt(Box::new(lhs));
+            continue;
+        }
+        break;
+    }
+
+    Ok(lhs)
 }
 
 #[cfg(test)]
@@ -272,5 +328,7 @@ mod test {
     }
 
     #[test]
-    fn test_parser_expr() {}
+    fn test_parser_expr() {
+        syn::parse_str::<ParserExpr>(r#"A? b c* D+ F?"#).unwrap();
+    }
 }
