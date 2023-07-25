@@ -493,7 +493,9 @@ mod test {
         dbg!(size_of::<NormalForm>());
         let pairs = GrammarParser::parse(Rule::grammar, TEST).unwrap();
         let tree = parse_surface_syntax(pairs, &PRATT_PARSER, TEST).unwrap();
-        let Grammar { lexer, parser } = &tree.node else { unreachable!() };
+        let Grammar { lexer, parser } = &tree.node else {
+            unreachable!()
+        };
 
         println!("\n---------< construct lexer database >----------");
         let database = construct_lexer_database(lexer).unwrap();

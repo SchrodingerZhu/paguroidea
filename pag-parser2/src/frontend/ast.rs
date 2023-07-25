@@ -10,8 +10,8 @@ use std::collections::HashMap;
 
 pub struct Ast {
     pub entry: syn::Ident,
-    pub skip: Option<LexerTree>,
-    pub lexer_map: HashMap<syn::Ident, LexerTree>,
+    pub skip: Option<LexerExpr>,
+    pub lexer_map: HashMap<syn::Ident, LexerExpr>,
     pub parser_map: HashMap<syn::Ident, ParserDef>,
 }
 
@@ -21,18 +21,18 @@ pub struct ParserDef {
 }
 
 pub struct ParserRule {
-    pub bindings: Vec<ParserBinding>,
+    pub vars: Vec<VarBinding>,
     pub action: Option<syn::Block>,
 }
 
-pub struct ParserBinding {
+pub struct VarBinding {
     pub name: Option<syn::Ident>,
     pub ty: Option<syn::Type>,
-    pub tree: ParserTree,
+    pub expr: ParserExpr,
 }
 
-// TODO: how to express "bottom" & "empty"?
-pub enum LexerTree {
+// TODO: how to express "bottom" & "any"?
+pub enum LexerExpr {
     Alt(Vec<Self>),
     Seq(Vec<Self>),
     And(Vec<Self>),
@@ -46,7 +46,7 @@ pub enum LexerTree {
 }
 
 // TODO: how to express "select" & "ignore"?
-pub enum ParserTree {
+pub enum ParserExpr {
     Seq(Vec<Self>),
     Star(Box<Self>),
     Plus(Box<Self>),

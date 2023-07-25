@@ -297,7 +297,10 @@ pub fn merge_inactive_rules<'src, 'nf>(
                 let NormalForm::Sequence {
                     terminal,
                     nonterminals,
-                } = j else { continue };
+                } = j
+                else {
+                    continue;
+                };
                 if nonterminals.contains(&Action::Subroutine(tag)) {
                     *j = &*arena.alloc(NormalForm::Sequence {
                         terminal: *terminal,
@@ -328,9 +331,13 @@ pub fn remove_unreachable_rules<'src>(nfs: &mut NormalForms<'src, '_>, parser: &
             return;
         }
         visited.insert(current);
-        let Some(tag) = nfs.entries.get(&current) else { return };
+        let Some(tag) = nfs.entries.get(&current) else {
+            return;
+        };
         for i in tag {
-            let NormalForm::Sequence { nonterminals, .. } = i else { continue };
+            let NormalForm::Sequence { nonterminals, .. } = i else {
+                continue;
+            };
             for i in nonterminals {
                 let Action::Subroutine(x) = i else { continue };
                 dfs(nfs, *x, visited);

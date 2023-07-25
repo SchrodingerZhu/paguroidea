@@ -199,7 +199,9 @@ fn generate_children<'src>(
         .iter()
         .filter(|x| !matches!(x, NormalForm::Empty(..)))
         .map(|nf| {
-            let NormalForm::Sequence { nonterminals, .. } = nf else { unreachable!() };
+            let NormalForm::Sequence { nonterminals, .. } = nf else {
+                unreachable!()
+            };
 
             let mut add_continue = false;
             let mut actions = Vec::new();

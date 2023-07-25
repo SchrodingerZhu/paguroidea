@@ -43,7 +43,9 @@ fn is_ascii_ident_head(x: &u8) -> bool {
 }
 
 fn is_ascii_ident(s: &str) -> bool {
-    let [x, xs@..] = s.as_bytes() else { return false };
+    let [x, xs @ ..] = s.as_bytes() else {
+        return false;
+    };
     is_ascii_ident_head(x) && xs.iter().all(is_ascii_ident_body)
 }
 

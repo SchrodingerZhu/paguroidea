@@ -9,7 +9,6 @@
 use super::ast::*;
 
 use syn::parse::{Parse, ParseStream};
-use syn::punctuated::Punctuated;
 use syn::{parse_quote, Token};
 
 use std::collections::HashMap;
@@ -50,7 +49,7 @@ impl Parse for Ast {
                     }
                     "skip" => {
                         input.parse::<Token![=]>()?;
-                        skip = Some(input.parse::<LexerTree>()?);
+                        skip = Some(input.parse::<LexerExpr>()?);
                     }
                     _ => return Err(syn::Error::new(ident.span(), "invalid keyword")),
                 }
@@ -60,7 +59,7 @@ impl Parse for Ast {
                 match ident_kind(&ident) {
                     IdentKind::LexerName => {
                         input.parse::<Token![=]>()?;
-                        lexer_map.insert(ident, input.parse::<LexerTree>()?);
+                        lexer_map.insert(ident, input.parse::<LexerExpr>()?);
                     }
                     IdentKind::ParserName => {
                         parser_map.insert(ident, input.parse::<ParserDef>()?);
@@ -90,19 +89,14 @@ impl Parse for ParserDef {
 
         input.parse::<Token![=]>()?;
 
-        // let mut rules = Vec::new();
-        // loop {
-        //     rules.push(input.parse::<ParserRule>()?);
-        //     if !input.peek(Token![|]) {
-        //         break;
-        //     }
-        //     input.parse::<Token![|]>();
-        // }
-
-        // TODO: check whether this is in-place
-        let rules = Punctuated::<ParserRule, Token![|]>::parse_separated_nonempty(input)?
-            .into_iter()
-            .collect();
+        let mut rules = Vec::new();
+        loop {
+            rules.push(input.parse::<ParserRule>()?);
+            if !input.peek(Token![|]) {
+                break;
+            }
+            input.parse::<Token![|]>()?;
+        }
 
         Ok(Self { ty, rules })
     }
@@ -111,9 +105,9 @@ impl Parse for ParserDef {
 impl Parse for ParserRule {
     // (ParserBinding)+ syn::Block?
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut bindings = Vec::new();
+        let mut vars = Vec::new();
         while !input.peek(syn::token::Brace) && !input.peek(Token![|]) && !input.peek(Token![;]) {
-            bindings.push(input.parse::<ParserBinding>()?);
+            vars.push(input.parse::<VarBinding>()?);
         }
 
         let mut action = None;
@@ -121,11 +115,11 @@ impl Parse for ParserRule {
             action = Some(input.parse::<syn::Block>()?);
         }
 
-        Ok(Self { bindings, action })
+        Ok(Self { vars, action })
     }
 }
 
-impl Parse for ParserBinding {
+impl Parse for VarBinding {
     // ("$" syn::Ident ("<" syn::Type ">")? ":")? ParserTree
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut name = None;
@@ -144,20 +138,20 @@ impl Parse for ParserBinding {
             input.parse::<Token![:]>()?;
         }
 
-        let tree = input.parse::<ParserTree>()?;
+        let expr = input.parse::<ParserExpr>()?;
 
-        Ok(Self { name, ty, tree })
+        Ok(Self { name, ty, expr })
     }
 }
 
-impl Parse for LexerTree {
+impl Parse for LexerExpr {
     // pratt parsing
     fn parse(_input: ParseStream) -> syn::Result<Self> {
         todo!()
     }
 }
 
-impl Parse for ParserTree {
+impl Parse for ParserExpr {
     // pratt parsing
     fn parse(_input: ParseStream) -> syn::Result<Self> {
         todo!()
