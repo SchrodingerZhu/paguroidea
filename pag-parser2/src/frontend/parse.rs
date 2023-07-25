@@ -10,7 +10,7 @@ use super::ast::*;
 
 use syn::ext::IdentExt;
 use syn::parse::{Parse, ParseStream};
-use syn::{parenthesized, parse_quote, Token};
+use syn::{bracketed, parenthesized, parse_quote, Token};
 
 use std::collections::HashMap;
 
@@ -105,7 +105,7 @@ impl Parse for ParserDef {
 }
 
 impl Parse for ParserRule {
-    // (ParserBinding)+ syn::Block?
+    // (VarBinding)+ syn::Block?
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut vars = Vec::new();
         while !input.peek(syn::token::Brace) && !input.peek(Token![|]) && !input.peek(Token![;]) {
@@ -122,19 +122,19 @@ impl Parse for ParserRule {
 }
 
 impl Parse for VarBinding {
-    // ("$" syn::Ident ("<" syn::Type ">")? ":")? ParserTree
+    // ("$" syn::Ident ("<" syn::Type ">")? ":")? ParserExpr
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut name = None;
         let mut ty = None;
 
         if input.peek(Token![$]) {
-            input.parse::<Token![%]>()?;
+            input.parse::<Token![$]>()?;
             name = Some(input.parse::<syn::Ident>()?.unraw());
 
-            if input.peek(Token![<]) {
-                input.parse::<Token![<]>()?;
-                ty = Some(input.parse::<syn::Type>()?);
-                input.parse::<Token![>]>()?;
+            if input.peek(syn::token::Bracket) {
+                let content;
+                bracketed!(content in input);
+                ty = Some(content.parse::<syn::Type>()?);
             }
 
             input.parse::<Token![:]>()?;
@@ -330,5 +330,28 @@ mod test {
     #[test]
     fn test_parser_expr() {
         syn::parse_str::<ParserExpr>(r#"A? b c* D+ F?"#).unwrap();
+    }
+
+    #[test]
+    fn test_full() {
+        syn::parse_str::<Ast>(
+            r#"
+            %entry = sexpr;
+
+            BLANK  = " ";
+            DIGIT  = '0'..'9';
+            ALPHA  = 'a'..'z' | 'A'..'Z';
+            LPAREN = "(";
+            RPAREN = ")";
+            ATOM   = ALPHA (ALPHA | DIGIT)*;
+            %skip  = (BLANK | "\t" | "\n" | "\r")+;
+
+            compound: SExp = LPAREN $sexp[Vec<_>]:sexp+ RPAREN { SExp::Compound(sexp) };
+            atom    : SExp = $atom:ATOM { SExp::Atom(atom) };
+            sexp    : SExp = compound
+                           | atom;
+            "#,
+        )
+        .unwrap();
     }
 }
