@@ -8,42 +8,111 @@
 
 use std::collections::HashMap;
 
-use quote::format_ident;
-use syn::{parse_quote, Expr, ExprCall, Stmt, Type};
-
 use super::Tag;
+use syn::{parse_quote, Expr, Type};
 
 pub type SemActTable = HashMap<Tag, SemAct>;
-pub struct SemAct {
-    /// Identifier of the semantic action routine.
-    function: Expr,
-    /// Type annotation
-    ty: Option<Type>,
-    /// Number of arguments
-    arity: usize,
+
+///
+/// ```
+/// trait Collector<T> {
+///     pub type Output;
+///     fn finalize(self) -> Self::Output;
+///     fn collect(&mut self, data: T);
+/// }
+///
+/// ```
+pub enum SemAct {
+    CustomizedRoutine {
+        /// Identifier of the semantic action routine.
+        function: Expr,
+        /// Type annotation
+        ret_type: Type,
+        /// Number of arguments
+        arity: usize,
+    },
+    /// Specialized for the inner of @(@a, @b, @c). Return an Tuple of the inner routine.
+    Tuple,
+    /// Specialized for `inner?`. Return an Option of the inner routine
+    Option { inner_type: Type },
+    /// Specialized for `i*`
+    /// Initialize a `Collector`  (requires `Default + Collector<T>`) and return the result from `Collector::finalize`.
+    ZeroOrMore { collector: Type },
+    /// Specialized for `i+` = `i ~ i*`.
+    /// Initialize a `Collector`  (requires `From<T> + Collector<T>`), pass it to the recursive routine
+    /// and return the result from `Collector::finalize`.
+    OneOrMoreToplevel { collector: Type },
+    /// Specialized for `i+` = `i ~ i*`.
+    /// Accepts a `&mut Collector`
+    OneOrMoreNested { collector: Type },
 }
 
 impl SemAct {
-    fn generate_call(&self) -> ExprCall {
-        let exprs = (0..self.arity).map(|i| format_ident!("__{}", i));
-        let function = &self.function;
-        parse_quote!(
-            #function(#(#exprs),*)
-        )
-    }
-    pub fn generate_statement(&self, output: Option<usize>) -> Stmt {
-        let expr = self.generate_call();
-        match output {
-            None => parse_quote!(
-                #expr;
-            ),
-            Some(index) => {
-                let ty = self.ty.iter();
-                let output = format_ident!("__{}", index);
+    /// Generate inlined expr for reduce action `terminal shift [reduce] shift shift`
+    pub fn generate_inline_expr<'a, I: IntoIterator<Item = &'a Expr>>(
+        &self,
+        exprs: I,
+        delayed_func: Option<Expr>,
+    ) -> Expr {
+        debug_assert_eq!(
+            delayed_func.is_some(),
+            matches!(self, Self::OneOrMoreToplevel { .. })
+        );
+        match self {
+            Self::CustomizedRoutine {
+                function,
+                ret_type: _,
+                arity: _,
+            } => {
+                let exprs = exprs.into_iter();
                 parse_quote!(
-                    let #output #(: #ty)* = #expr;
+                    #function(#(#exprs,)*)
                 )
             }
+            Self::Tuple => {
+                let exprs = exprs.into_iter();
+                parse_quote!(
+                    (#(#exprs,)*)
+                )
+            }
+            Self::Option { .. } => {
+                unreachable!("Option can never be inlined, otherwise there is sequential ambiguity")
+            }
+
+            Self::ZeroOrMore { .. } => unreachable!(
+                "ZeroOrMore can never be inlined, otherwise there is sequential ambiguity"
+            ),
+
+            Self::OneOrMoreNested { .. } => unreachable!(
+                "OneOrMoreNested can never be inlined because it never appears in the first place"
+            ),
+
+            Self::OneOrMoreToplevel { collector } => {
+                let exprs = exprs.into_iter();
+                let delayed_func = delayed_func.unwrap();
+                // TODO: src, offset
+                parse_quote! {
+                    {
+                        let mut collector = #collector::from(#(#exprs)*);
+                        #delayed_func(&mut collector, src, offset);
+                        collector.finalize()
+                    }
+                }
+            }
         }
+    }
+
+    /// This function is useful in the following cases:
+    /// - If a shift routine is nested one or more, we does not emit the call to it immediately. Instead, we wait until
+    /// [`Self::generate_inlin_expr`] is called.
+    /// - If a parser routine has a semact [`Self::OneOrMoreNested`], it should be parametized by `C : Collector` in type
+    /// and its has `&mut C` as its first input param.
+    pub fn is_nested_one_or_more(&self) -> bool {
+        matches!(self, Self::OneOrMoreNested { .. })
+    }
+
+    /// Check if we should generate loops for TCO.
+    pub fn should_tco(&self) -> bool {
+        matches!(self, Self::ZeroOrMore { .. } | Self::OneOrMoreNested { .. })
     }
 }
