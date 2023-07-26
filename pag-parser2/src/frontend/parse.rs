@@ -217,7 +217,6 @@ fn parse_lexer_expr(input: ParseStream, min_bp: u32) -> Result<LexerExpr> {
             || input.peek(syn::LitStr)
             || input.peek(syn::LitChar)
             || input.peek(syn::token::Paren)
-            || input.peek(syn::token::Paren)
             || input.peek(Token![!])
         {
             let (l_bp, r_bp) = (40, 41);
@@ -303,7 +302,7 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<ParserExpr> {
     };
 
     loop {
-        if input.peek(syn::Ident) || input.peek(Token![#]) {
+        if input.peek(syn::Ident) || input.peek(syn::token::Paren) || input.peek(Token![#]) {
             let (l_bp, r_bp) = (40, 41);
             if l_bp < min_bp {
                 break;
@@ -351,7 +350,7 @@ mod test {
 
     #[test]
     fn test_var_binding() {
-        syn::parse_str::<VarBinding>(r#"(#LPAREN expr #RPAREN)?[e]"#).unwrap();
+        syn::parse_str::<VarBinding>(r#"(ident (#COLON expr)?)*[e]"#).unwrap();
     }
 
     #[test]
