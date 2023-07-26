@@ -8,6 +8,9 @@
 
 use quote::format_ident;
 use syn::Ident;
+
+#[cfg(feature = "debug")]
+use crate::debug::styled_write;
 mod semact;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -32,6 +35,16 @@ impl Tag {
     }
 }
 
+#[cfg(feature = "debug")]
+impl std::fmt::Display for Tag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Tag::Toplevel(ident) => write!(f, "{}", ident),
+            Tag::Anonymous(index) => write!(f, "{{{}}}", index),
+        }
+    }
+}
+
 /// Action in the normal form.
 /// If this subroutine's return value is taken, it should mark [`Action::output`] as `true`.
 /// There is no need to assign an ident to a subroutine. As we are always
@@ -50,4 +63,92 @@ pub enum Action {
         tag: Tag,
         output: bool,
     },
+}
+
+#[cfg(feature = "debug")]
+impl std::fmt::Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Reduce { tag, output } => {
+                if *output {
+                    styled_write!(f, Color::Red, "[{tag}]")
+                } else {
+                    styled_write!(f, Color::Blue, "[{tag}]")
+                }
+            }
+            Self::Shift { tag, output } => {
+                if *output {
+                    styled_write!(f, Color::Red, "{tag}")
+                } else {
+                    styled_write!(f, Color::Blue, "{tag}")
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum NormalForm {
+    Empty(Vec<(Tag, bool)>),
+    Unexpanded(Vec<Action>),
+    Sequence(Ident, Vec<Action>),
+}
+
+#[cfg(feature = "debug")]
+impl std::fmt::Display for NormalForm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Empty(actions) => {
+                write!(f, "ε")?;
+                for (tag, output) in actions.iter() {
+                    if *output {
+                        styled_write!(f, Color::Red, "[{tag}]")?;
+                    } else {
+                        styled_write!(f, Color::Blue, "[{tag}]")?;
+                    }
+                }
+            }
+            Self::Unexpanded(actions) => {
+                write!(f, "{}", actions[0])?;
+                for action in &actions[1..] {
+                    write!(f, " {}", action)?;
+                }
+            }
+            Self::Sequence(terminal, actions) => {
+                styled_write!(f, Color::Yellow.bold(), "{terminal}")?;
+                for action in actions.iter() {
+                    write!(f, " {}", action)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(all(feature = "debug", test))]
+#[test]
+fn debug_print_test() {
+    use quote::format_ident;
+    let sequence = NormalForm::Sequence(
+        format_ident!("TEST"),
+        vec![
+            Action::Shift {
+                tag: Tag::Toplevel(format_ident!("a")),
+                output: false,
+            },
+            Action::Reduce {
+                tag: Tag::Toplevel(format_ident!("b")),
+                output: true,
+            },
+            Action::Shift {
+                tag: Tag::Toplevel(format_ident!("c")),
+                output: true,
+            },
+            Action::Reduce {
+                tag: Tag::Anonymous(1),
+                output: false,
+            },
+        ],
+    );
+    println!("{}", sequence);
 }
