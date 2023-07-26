@@ -121,8 +121,6 @@ For some reasons (mostly performance issues), only nightly rust (1.71+) is suppo
 should be annotated with
 ```rust
 #![feature(portable_simd)]
-#![feature(core_intrinsics)]
-#![feature(array_chunks)]
 ```
 </details>
 
