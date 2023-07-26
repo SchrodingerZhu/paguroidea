@@ -58,4 +58,5 @@ pub enum ParserExpr {
     Opt(Box<Self>),
     LexerRef(syn::Ident),
     ParserRef(syn::Ident),
+    Ignore(Box<Self>),
 }

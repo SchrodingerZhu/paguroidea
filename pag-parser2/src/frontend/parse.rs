@@ -288,11 +288,22 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<ParserExpr> {
                 _ => return Err(Error::new(ident.span(), "invalid ident")),
             }
         }
+        if input.peek(syn::token::Paren) {
+            let content;
+            parenthesized!(content in input);
+            break 'lhs content.parse::<ParserExpr>()?;
+        }
+        if input.peek(Token![#]) {
+            input.parse::<Token![#]>()?;
+            let r_bp = 60;
+            let rhs = parse_parser_expr(input, r_bp)?;
+            break 'lhs ParserExpr::Ignore(Box::new(rhs));
+        }
         return Err(input.error("expected parser expression"));
     };
 
     loop {
-        if input.peek(syn::Ident) {
+        if input.peek(syn::Ident) || input.peek(Token![#]) {
             let (l_bp, r_bp) = (40, 41);
             if l_bp < min_bp {
                 break;
@@ -337,6 +348,11 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<ParserExpr> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_var_binding() {
+        syn::parse_str::<VarBinding>(r#"(#LPAREN expr #RPAREN)?[e]"#).unwrap();
+    }
 
     #[test]
     fn test_lexer_expr() {
