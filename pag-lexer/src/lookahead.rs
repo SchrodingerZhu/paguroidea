@@ -61,26 +61,24 @@ fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream 
                 quote! { (#x).to_bitmask().#count_act() }
             }
         });
-        let tail_act = match kind {
-            Kind::Positive => quote! {
-                while matches!(input.get(idx), Some(#intervals)) { idx += 1; }
-            },
-            Kind::Negative => quote! {
-                while !matches!(input.get(idx), Some(#intervals) | None) { idx += 1; }
-            },
-        };
+    let tail_match = match kind {
+        Kind::Positive => quote! { matches!(input.get(idx), Some(#intervals)) },
+        Kind::Negative => quote! { !matches!(input.get(idx), Some(#intervals) | None) },
+    };
     quote! {
         'lookahead: {
-            for i in input[idx..].array_chunks::<16>() {
+            for chunk in input[idx..].chunks_exact(16) {
                 use core::simd::*;
-                let data = u8x16::from_slice(i);
+                let data = u8x16::from_slice(chunk);
                 let idx_offset = #idx_offset;
                 idx += idx_offset as usize;
-                if core::intrinsics::unlikely(idx_offset != 16) {
+                if idx_offset != 16 {
                     break 'lookahead;
                 }
             }
-            #tail_act
+            while #tail_match {
+                idx += 1;
+            }
         }
     }
 }
@@ -141,20 +139,22 @@ impl LoopOptimizer {
     }
 
     pub fn generate_lookahead(&mut self, dfa: &DfaTable, state: &DfaState) -> Option<TokenStream> {
-        let limit = 4;
+        let limit = 8;
 
         let positives = direct_self_loops(dfa, state)?;
-        if estimated_cost(&positives) <= limit {
-            return Some(generate_lookahead_routine(&positives, Kind::Positive));
-        }
-
         let negatives = positives.complement()?;
-        if estimated_cost(&negatives) <= limit {
-            return Some(generate_lookahead_routine(&negatives, Kind::Negative));
-        }
+        let pos_cost = estimated_cost(&positives);
+        let neg_cost = estimated_cost(&negatives);
 
-        let index = self.assign_table(&negatives);
-        Some(generate_lut_routine(index))
+        if pos_cost.min(neg_cost) > limit {
+            let index = self.assign_table(&negatives);
+            return Some(generate_lut_routine(index));
+        }
+        if pos_cost < neg_cost {
+            Some(generate_lookahead_routine(&positives, Kind::Positive))
+        } else {
+            Some(generate_lookahead_routine(&negatives, Kind::Negative))
+        }
     }
 }
 

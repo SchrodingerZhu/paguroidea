@@ -96,7 +96,7 @@ fn generate_error() -> TokenStream {
                 let expect = match self.expecting {
                     [head] => head.to_string(),
                     [init @ .., last] => format!("{} or {last}", init.join(", ")),
-                    _ => unsafe { std::intrinsics::unreachable() },
+                    _ => unsafe { std::hint::unreachable_unchecked() },
                 };
                 write!(
                     f,
