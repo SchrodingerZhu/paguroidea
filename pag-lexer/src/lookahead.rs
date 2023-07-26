@@ -33,17 +33,13 @@ fn generate_lut_routine(index: usize) -> TokenStream {
 
 fn byte_simd(byte: u8) -> TokenStream {
     let byte = byte_char(byte);
-    quote! {
-        data.simd_eq(u8x16::splat(#byte))
-    }
+    quote! { data.simd_eq(u8x16::splat(#byte)) }
 }
 
 fn range_simd(min: u8, max: u8) -> TokenStream {
     let min = byte_char(min);
     let max = byte_char(max);
-    quote! {
-        data.simd_ge(u8x16::splat(#min)) & data.simd_le(u8x16::splat(#max))
-    }
+    quote! { data.simd_ge(u8x16::splat(#min)) & data.simd_le(u8x16::splat(#max)) }
 }
 
 fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream {
@@ -60,25 +56,31 @@ fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream 
         .reduce(|acc, x| quote! { #acc | #x })
         .map(|x| {
             if cfg!(target_arch = "aarch64") {
-                quote! {{
-                    let mask : u128 = unsafe { core::mem::transmute(#x) };
-                    mask.#count_act() / 8
-                }}
+                quote! { unsafe { core::mem::transmute::<_, u128>(#x).#count_act() / 8 } }
             } else {
-                quote! {
-                    (#x).to_bitmask().#count_act()
-                }
+                quote! { (#x).to_bitmask().#count_act() }
             }
         });
+        let tail_act = match kind {
+            Kind::Positive => quote! {
+                while matches!(input.get(idx), Some(#intervals)) { idx += 1; }
+            },
+            Kind::Negative => quote! {
+                while !matches!(input.get(idx), Some(#intervals) | None) { idx += 1; }
+            },
+        };
     quote! {
-        for i in input[idx..].array_chunks::<16>() {
-            use core::simd::*;
-            let data = u8x16::from_slice(i);
-            let idx_offset = #idx_offset;
-            idx += idx_offset as usize;
-            if core::intrinsics::unlikely(idx_offset != 16) {
-                break;
+        'lookahead: {
+            for i in input[idx..].array_chunks::<16>() {
+                use core::simd::*;
+                let data = u8x16::from_slice(i);
+                let idx_offset = #idx_offset;
+                idx += idx_offset as usize;
+                if core::intrinsics::unlikely(idx_offset != 16) {
+                    break 'lookahead;
+                }
             }
+            #tail_act
         }
     }
 }

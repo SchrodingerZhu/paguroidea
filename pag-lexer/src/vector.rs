@@ -151,16 +151,20 @@ impl Vector {
                     },
                 };
             }
+            let lookahead = optimizer.generate_lookahead(&dfa, state);
             let transitions = info.transitions.iter().map(|(interval, target)| {
                 if leaf_states.contains(target) {
                     let rule_idx = target.last_success.unwrap();
                     let on_success = &success_actions[rule_idx];
                     return quote! { Some(#interval) => { cursor = idx + 1; #on_success }, };
                 }
-                let target_label = format_ident!("S{}", dfa[target].state_id);
+                let target_id = dfa[target].state_id;
+                if lookahead.is_some() && info.state_id == target_id {
+                    return quote! {};
+                }
+                let target_label = format_ident!("S{}", target_id);
                 quote! { Some(#interval) => state = State::#target_label, }
             });
-            let lookahead = optimizer.generate_lookahead(&dfa, state);
             let otherwise = state
                 .last_success
                 .and_then(|x| success_actions.get(x))
