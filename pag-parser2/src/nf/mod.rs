@@ -6,15 +6,15 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
+mod semact;
+
 use std::{collections::HashMap, ops::Deref};
 
 use quote::format_ident;
 use syn::Ident;
 
-use crate::debug::styled;
 #[cfg(feature = "debug")]
-use crate::debug::styled_write;
-mod semact;
+use crate::debug::{styled, styled_write};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Tag {
