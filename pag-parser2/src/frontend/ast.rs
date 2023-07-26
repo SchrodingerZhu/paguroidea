@@ -21,7 +21,7 @@ pub struct LexerDef {
 }
 
 pub struct ParserDef {
-    pub ty: syn::Type,
+    pub ty: TypeAnnotation,
     pub rules: Vec<ParserRule>,
 }
 
@@ -29,11 +29,16 @@ pub struct ParserRule {
     pub vars: Vec<VarBinding>,
     pub action: Option<syn::Block>,
 }
+#[derive(Clone)]
+pub enum TypeAnnotation {
+    Concrete(syn::Type),
+    HigherKind(syn::Path),
+}
 
 pub struct VarBinding {
     pub expr: ParserExpr,
     pub name: Option<syn::Ident>,
-    pub ty: Option<syn::Type>,
+    pub ty: Option<TypeAnnotation>,
 }
 
 // TODO: how to express "bottom" & "any"?
