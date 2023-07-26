@@ -10,7 +10,7 @@ use super::ast::*;
 
 use syn::ext::IdentExt;
 use syn::parse::{Parse, ParseStream};
-use syn::{bracketed, parenthesized, parse_quote, Token};
+use syn::{bracketed, parenthesized, parse_quote, Error, Result, Token};
 
 use std::collections::HashMap;
 
@@ -33,7 +33,7 @@ fn ident_kind(ident: &syn::Ident) -> IdentKind {
 }
 
 impl Parse for Ast {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self> {
         let mut entry = None;
         let mut skip = None;
         let mut lexer_map = HashMap::new();
@@ -41,32 +41,46 @@ impl Parse for Ast {
 
         while !input.is_empty() {
             if input.peek(Token![%]) {
-                // parse keyword
+                // parse keywords
                 input.parse::<Token![%]>()?;
                 let ident = input.parse::<syn::Ident>()?.unraw();
                 match ident.to_string().as_str() {
                     "entry" => {
+                        if entry.is_some() {
+                            return Err(Error::new(ident.span(), "duplicate %entry definition"));
+                        }
                         input.parse::<Token![=]>()?;
                         entry = Some(input.parse::<syn::Ident>()?);
                     }
                     "skip" => {
+                        if skip.is_some() {
+                            return Err(Error::new(ident.span(), "duplicate %skip definition"));
+                        }
                         input.parse::<Token![=]>()?;
                         skip = Some(input.parse::<LexerExpr>()?);
                     }
-                    _ => return Err(syn::Error::new(ident.span(), "invalid keyword")),
+                    _ => return Err(Error::new(ident.span(), "invalid keyword")),
                 }
             } else {
                 // parse lexer / parser definitions
                 let ident = input.parse::<syn::Ident>()?.unraw();
                 match ident_kind(&ident) {
                     IdentKind::LexerName => {
+                        if lexer_map.contains_key(&ident) {
+                            return Err(Error::new(ident.span(), "duplicate lexer definition"));
+                        }
                         input.parse::<Token![=]>()?;
-                        lexer_map.insert(ident, input.parse::<LexerExpr>()?);
+                        let idx = lexer_map.len() as _;
+                        let expr = input.parse::<LexerExpr>()?;
+                        lexer_map.insert(ident, LexerDef { idx, expr });
                     }
                     IdentKind::ParserName => {
+                        if parser_map.contains_key(&ident) {
+                            return Err(Error::new(ident.span(), "duplicate parser definition"));
+                        }
                         parser_map.insert(ident, input.parse::<ParserDef>()?);
                     }
-                    _ => return Err(syn::Error::new(ident.span(), "invalid ident")),
+                    _ => return Err(Error::new(ident.span(), "invalid ident")),
                 }
             }
             input.parse::<Token![;]>()?;
@@ -83,7 +97,7 @@ impl Parse for Ast {
 
 impl Parse for ParserDef {
     // (":" syn::Type)? = (ParserRule)|+
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self> {
         let ty = match input.parse::<Token![:]>() {
             Ok(_) => input.parse::<syn::Type>()?,
             Err(_) => parse_quote!(&'src str),
@@ -106,7 +120,7 @@ impl Parse for ParserDef {
 
 impl Parse for ParserRule {
     // (VarBinding)+ syn::Block?
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self> {
         let mut vars = Vec::new();
         while !input.peek(syn::token::Brace) && !input.peek(Token![|]) && !input.peek(Token![;]) {
             vars.push(input.parse::<VarBinding>()?);
@@ -123,7 +137,7 @@ impl Parse for ParserRule {
 
 impl Parse for VarBinding {
     // ParserExpr ("[" syn::Ident (":" syn::Type)? "]")?
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self> {
         let expr = input.parse::<ParserExpr>()?;
 
         let mut name = None;
@@ -149,18 +163,18 @@ impl Parse for VarBinding {
 }
 
 impl Parse for LexerExpr {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self> {
         parse_lexer_expr(input, 0)
     }
 }
 
 // pratt parsing
-fn parse_lexer_expr(input: ParseStream, min_bp: u32) -> syn::Result<LexerExpr> {
+fn parse_lexer_expr(input: ParseStream, min_bp: u32) -> Result<LexerExpr> {
     let mut lhs = 'lhs: {
         if input.peek(syn::Ident) {
             let ident = input.parse::<syn::Ident>()?.unraw();
             if ident_kind(&ident) != IdentKind::LexerName {
-                return Err(syn::Error::new(ident.span(), "invalid ident"));
+                return Err(Error::new(ident.span(), "invalid ident"));
             }
             break 'lhs LexerExpr::Ref(ident);
         }
@@ -258,20 +272,20 @@ fn parse_lexer_expr(input: ParseStream, min_bp: u32) -> syn::Result<LexerExpr> {
 }
 
 impl Parse for ParserExpr {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self> {
         parse_parser_expr(input, 0)
     }
 }
 
 // pratt parsing
-fn parse_parser_expr(input: ParseStream, min_bp: u32) -> syn::Result<ParserExpr> {
+fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<ParserExpr> {
     let mut lhs = 'lhs: {
         if input.peek(syn::Ident) {
             let ident = input.parse::<syn::Ident>()?.unraw();
             match ident_kind(&ident) {
                 IdentKind::LexerName => break 'lhs ParserExpr::LexerRef(ident),
                 IdentKind::ParserName => break 'lhs ParserExpr::ParserRef(ident),
-                _ => return Err(syn::Error::new(ident.span(), "invalid ident")),
+                _ => return Err(Error::new(ident.span(), "invalid ident")),
             }
         }
         return Err(input.error("expected parser expression"));

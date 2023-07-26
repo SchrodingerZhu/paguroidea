@@ -11,8 +11,13 @@ use std::collections::HashMap;
 pub struct Ast {
     pub entry: syn::Ident,
     pub skip: Option<LexerExpr>,
-    pub lexer_map: HashMap<syn::Ident, LexerExpr>,
+    pub lexer_map: HashMap<syn::Ident, LexerDef>,
     pub parser_map: HashMap<syn::Ident, ParserDef>,
+}
+
+pub struct LexerDef {
+    pub idx: u32,
+    pub expr: LexerExpr,
 }
 
 pub struct ParserDef {
