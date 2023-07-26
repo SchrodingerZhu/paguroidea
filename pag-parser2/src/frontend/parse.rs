@@ -99,7 +99,7 @@ impl Parse for ParserDef {
     // (":" syn::Type)? = (ParserRule)|+
     fn parse(input: ParseStream) -> Result<Self> {
         let ty = match input.parse::<Token![:]>() {
-            Ok(_) => input.parse::<syn::Type>()?,
+            Ok(_) => input.parse::<TypeAnnotation>()?,
             Err(_) => parse_quote!(&'src str),
         };
 
@@ -135,6 +135,18 @@ impl Parse for ParserRule {
     }
 }
 
+impl Parse for TypeAnnotation {
+    fn parse(input: ParseStream) -> Result<Self> {
+        if input.peek(Token![@]) {
+            input.parse::<Token![@]>()?;
+            let path = input.parse::<syn::Path>()?;
+            Ok(Self::HigherKind(path))
+        } else {
+            Ok(Self::Concrete(input.parse::<syn::Type>()?))
+        }
+    }
+}
+
 impl Parse for VarBinding {
     // ParserExpr ("[" syn::Ident (":" syn::Type)? "]")?
     fn parse(input: ParseStream) -> Result<Self> {
@@ -150,7 +162,7 @@ impl Parse for VarBinding {
 
             if content.peek(Token![:]) {
                 content.parse::<Token![:]>()?;
-                ty = Some(content.parse::<syn::Type>()?);
+                ty = Some(content.parse::<TypeAnnotation>()?);
             }
 
             if !content.is_empty() {
@@ -364,6 +376,12 @@ mod test {
     }
 
     #[test]
+    fn test_parser_type_annotatopn() {
+        syn::parse_str::<TypeAnnotation>(r#"@Vec"#).unwrap();
+        syn::parse_str::<TypeAnnotation>(r#"Vec<u128>"#).unwrap();
+    }
+
+    #[test]
     fn test_full() {
         syn::parse_str::<Ast>(
             r#"
@@ -376,7 +394,7 @@ mod test {
             ATOM   = ALPHA (ALPHA | DIGIT)*;
             %skip  = (" " | "\t" | "\n" | "\r")+;
 
-            compound: SExp = LPAREN sexp+[sexp:Vec<_>] RPAREN { SExp::Compound(sexp) };
+            compound: SExp = LPAREN sexp+[sexp:@Vec] RPAREN { SExp::Compound(sexp) };
             atom    : SExp = ATOM[atom] { SExp::Atom(atom) };
             sexp    : SExp = compound
                            | atom;

@@ -6,9 +6,13 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
+mod inference;
 mod semact;
 
-use std::{collections::HashMap, ops::Deref};
+use std::{
+    collections::{HashMap, VecDeque},
+    ops::{Deref},
+};
 
 use quote::format_ident;
 use syn::Ident;
@@ -59,12 +63,12 @@ pub enum Action {
     Shift {
         /// Parser routine to call.
         tag: Tag,
-        output: bool,
+        output: Option<Ident>,
     },
     Reduce {
         /// Reduction routine to call.
         tag: Tag,
-        output: bool,
+        output: Option<Ident>,
     },
 }
 
@@ -73,15 +77,15 @@ impl std::fmt::Display for Action {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Reduce { tag, output } => {
-                if *output {
-                    styled_write!(f, Color::Blue.underline(), "{tag}")
+                if let Some(name) = output {
+                    styled_write!(f, Color::Blue, "{tag}[{name}]")
                 } else {
                     styled_write!(f, Color::Blue, "{tag}")
                 }
             }
             Self::Shift { tag, output } => {
-                if *output {
-                    styled_write!(f, Color::Red.underline(), "{tag}")
+                if let Some(name) = output {
+                    styled_write!(f, Color::Red, "{tag}[{name}]")
                 } else {
                     styled_write!(f, Color::Red, "{tag}")
                 }
@@ -92,9 +96,40 @@ impl std::fmt::Display for Action {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NormalForm {
-    Empty(Vec<(Tag, bool)>),
+    Empty(Vec<(Tag, Option<Ident>)>),
     Unexpanded(Vec<Action>),
     Sequence(Ident, Vec<Action>),
+}
+
+impl NormalForm {
+    pub fn visible_bindings(&self, skip: usize) -> Vec<(&Ident, &Tag)> {
+        match self {
+            Self::Empty(actions) => actions
+                .last()
+                .and_then(|(tag, ident)| Some((ident.as_ref()?, tag)))
+                .into_iter()
+                .collect(),
+            Self::Unexpanded(actions) | Self::Sequence(_, actions) => {
+                let mut acc = VecDeque::new();
+                for act in actions.iter().rev().skip(skip) {
+                    match act {
+                        Action::Shift { tag, output } => {
+                            if let Some(ident) = output {
+                                acc.push_front((ident, tag));
+                            }
+                        }
+                        Action::Reduce { tag, output } => {
+                            if let Some(ident) = output {
+                                acc.push_front((ident, tag));
+                            }
+                            break;
+                        }
+                    }
+                }
+                acc.into_iter().collect()
+            }
+        }
+    }
 }
 
 #[cfg(feature = "debug")]
@@ -104,8 +139,8 @@ impl std::fmt::Display for NormalForm {
             Self::Empty(actions) => {
                 write!(f, "ε")?;
                 for (tag, output) in actions.iter() {
-                    if *output {
-                        styled_write!(f, Color::Blue.underline(), "\t{tag}")?;
+                    if let Some(name) = output {
+                        styled_write!(f, Color::Blue, "\t{tag}[{name}]")?;
                     } else {
                         styled_write!(f, Color::Blue, "\t{tag}")?;
                     }
@@ -137,19 +172,19 @@ fn debug_print_test() {
         vec![
             Action::Shift {
                 tag: Tag::Toplevel(format_ident!("a")),
-                output: false,
+                output: None,
             },
             Action::Reduce {
                 tag: Tag::Toplevel(format_ident!("b")),
-                output: true,
+                output: Some(format_ident!("x")),
             },
             Action::Shift {
                 tag: Tag::Toplevel(format_ident!("c")),
-                output: true,
+                output: Some(format_ident!("y")),
             },
             Action::Reduce {
                 tag: Tag::Anonymous(1),
-                output: false,
+                output: None,
             },
         ],
     );
@@ -177,7 +212,7 @@ impl std::fmt::Display for NFTable {
             "\t{}\t{}\t{}\t{}\n",
             styled!(Color::Red.bold(), "Shift"),
             styled!(Color::Blue.bold(), "Reduce"),
-            styled!(Style::new().underline().bold(), "Output"),
+            styled!(Style::new().bold(), "[Output]"),
             styled!(Style::new().italic().bold(), "Anonymous"),
         )?;
         for (tag, forms) in self.iter() {
@@ -205,25 +240,25 @@ fn debug_print_nf_table() {
         vec![
             Action::Shift {
                 tag: Tag::Toplevel(format_ident!("a")),
-                output: false,
+                output: None,
             },
             Action::Reduce {
                 tag: Tag::Toplevel(format_ident!("b")),
-                output: true,
+                output: Some(format_ident!("x")),
             },
             Action::Shift {
                 tag: Tag::Toplevel(format_ident!("c")),
-                output: true,
+                output: Some(format_ident!("y")),
             },
             Action::Reduce {
                 tag: Tag::Anonymous(1),
-                output: false,
+                output: None,
             },
         ],
     );
     let empty = NormalForm::Empty(vec![
-        (Tag::Toplevel(format_ident!("a")), false),
-        (Tag::Toplevel(format_ident!("b")), true),
+        (Tag::Toplevel(format_ident!("a")), None),
+        (Tag::Toplevel(format_ident!("b")), Some(format_ident!("x"))),
     ]);
     let table = NFTable(
         vec![
