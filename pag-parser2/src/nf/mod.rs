@@ -11,7 +11,7 @@ mod semact;
 
 use std::{
     collections::{HashMap, VecDeque},
-    ops::{ControlFlow, Deref},
+    ops::Deref,
 };
 
 use quote::format_ident;
