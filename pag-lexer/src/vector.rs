@@ -159,6 +159,7 @@ impl Vector {
                     return quote! { Some(#interval) => { cursor = idx + 1; #on_success }, };
                 }
                 let target_id = dfa[target].state_id;
+                #[cfg(not(target_arch = "aarch64"))]
                 if lookahead.is_some() && info.state_id == target_id {
                     return quote! {};
                 }
