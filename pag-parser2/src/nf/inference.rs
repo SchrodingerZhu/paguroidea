@@ -78,18 +78,24 @@ use std::{
 
 use syn::{parse_quote, Type};
 
-use crate::frontend::TypeAnnotation;
-
 use super::{
     semact::{SemAct, SemActTable},
     NormalForm, Tag,
 };
 
+#[derive(Clone)]
+pub enum InferredType {
+    Concrete(Type),
+    Collector(Box<Self>),
+    Option(Box<Self>),
+    Tuple(Vec<Self>),
+}
+
 pub struct InferenceContext<'a> {
     /// Typed tags
-    gamma: UnsafeCell<HashMap<Tag, Type>>,
-    /// Type annotations from user
-    annotations: &'a HashMap<Tag, TypeAnnotation>,
+    gamma: UnsafeCell<HashMap<Tag, InferredType>>,
+    /// Type annotations from user (for toplevel)
+    annotations: &'a HashMap<Tag, Type>,
     /// Semantic action table
     semact: &'a SemActTable,
     /// Fully normalized terms
@@ -98,7 +104,7 @@ pub struct InferenceContext<'a> {
 impl<'a> InferenceContext<'a> {
     /// Create a new inference context
     pub fn new(
-        annotations: &'a HashMap<Tag, TypeAnnotation>,
+        annotations: &'a HashMap<Tag, Type>,
         semact: &'a SemActTable,
         nforms: &'a HashMap<Tag, Vec<NormalForm>>,
     ) -> Self {
@@ -109,7 +115,7 @@ impl<'a> InferenceContext<'a> {
             nforms,
         }
     }
-    fn infer_gather<'i, I: Iterator<Item = &'i Tag>>(&self, mut tags: I) -> Option<Type> {
+    fn infer_gather<'i, I: Iterator<Item = &'i Tag>>(&self, mut tags: I) -> Option<InferredType> {
         if let Some(tag) = tags.next() {
             let mut types = vec![self.infer(tag)?];
             for t in tags {
@@ -122,15 +128,15 @@ impl<'a> InferenceContext<'a> {
                 Some(types.pop().unwrap())
             } else {
                 // Otherwise, wrap in a tuple
-                Some(parse_quote!((#(#types),*)))
+                Some(InferredType::Tuple(types))
             }
         } else {
             // no field, unit type
-            Some(parse_quote!(()))
+            Some(InferredType::Concrete(parse_quote! {()}))
         }
     }
     /// try infer all types, but may fail with incomplete type information.
-    pub fn infer_all_types(mut self) -> HashMap<Tag, Type> {
+    pub fn infer_all_types(mut self) -> HashMap<Tag, InferredType> {
         let mut typed = 0;
         while typed < self.nforms.len() {
             typed = 0;
@@ -142,29 +148,30 @@ impl<'a> InferenceContext<'a> {
         }
         std::mem::take(self.gamma.get_mut())
     }
-    fn infer(&self, tag: &Tag) -> Option<Type> {
+    fn infer(&self, tag: &Tag) -> Option<InferredType> {
         match unsafe { (*self.gamma.get()).entry(tag.clone()) } {
             // If a tag has been inferred, return its type directly
             Entry::Occupied(entry) => Some(entry.get().clone()),
             Entry::Vacant(slot) => Some(
                 slot.insert({
                     // If a concrete type annotation is provided, use it directly
-                    if let Some(x) = self.annotations.get(tag).and_then(|anno| match anno {
-                        TypeAnnotation::Concrete(ty) => Some(ty.clone()),
-                        _ => None,
-                    }) {
-                        x
+                    if let Some(x) = self.annotations.get(tag) {
+                        InferredType::Concrete(x.clone())
                     } else {
                         let semact = self.semact.get(tag);
                         match semact {
                             // No semantic action, the type is unit
-                            None => parse_quote!(()),
+                            None => InferredType::Concrete(parse_quote!(())),
                             // Token semantic action, the type is Span
-                            Some(SemAct::Token) => parse_quote!(::pag_runtime::Span<'src>),
+                            Some(SemAct::Token) => {
+                                InferredType::Concrete(parse_quote!(::pag_runtime::Span<'src>))
+                            }
                             // Customized routine without type annotation -- inference failed
                             Some(SemAct::CustomizedRoutine(..)) => return None,
                             // Nested routine for one or more, the type is unit.
-                            Some(SemAct::OneOrMoreNested) => parse_quote!(()),
+                            Some(SemAct::OneOrMoreNested) => {
+                                InferredType::Concrete(parse_quote!(()))
+                            }
                             Some(SemAct::Gather) => {
                                 let nfs = self.nforms.get(tag)?;
                                 let mut inferred = None;
@@ -180,15 +187,17 @@ impl<'a> InferenceContext<'a> {
                                 }
                                 inferred?
                             }
-                            Some(SemAct::ZeroOrMore) | Some(SemAct::Option) | Some(SemAct::OneOrMoreToplevel) => {
+                            Some(SemAct::ZeroOrMore)
+                            | Some(SemAct::Option)
+                            | Some(SemAct::OneOrMoreToplevel) => {
                                 let nfs = self.nforms.get(tag)?;
-                                let TypeAnnotation::HigherKind(path) = self
-                                    .annotations.get(tag).cloned().unwrap_or_else(||
-                                        if matches!(semact, Some(SemAct::Option)) {
-                                            TypeAnnotation::HigherKind(parse_quote!(::std::option::Option))
-                                        } else {
-                                        TypeAnnotation::HigherKind(parse_quote!(::std::collections::VecDeque)) })
-                                    else { unreachable!("must be higher kind type") };
+                                let mapper = |ty: InferredType| {
+                                    if matches!(semact, Some(SemAct::Option)) {
+                                        InferredType::Option(Box::new(ty.clone()))
+                                    } else {
+                                        InferredType::Collector(Box::new(ty.clone()))
+                                    }
+                                };
                                 let mut inferred = None;
                                 // find first subexpression that fulfills inference
                                 for i in nfs.iter() {
@@ -209,9 +218,7 @@ impl<'a> InferenceContext<'a> {
                                     if let Some(gather_type) =
                                         self.infer_gather(visible.into_iter().map(|x| x.1))
                                     {
-                                        inferred.replace(
-                                            parse_quote!(#path<#gather_type>),
-                                        );
+                                        inferred.replace(mapper(gather_type));
                                         break;
                                     }
                                 }
