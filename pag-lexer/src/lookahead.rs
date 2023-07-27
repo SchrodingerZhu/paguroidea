@@ -31,36 +31,27 @@ fn generate_lut_routine(index: usize) -> TokenStream {
     }
 }
 
-fn byte_simd(byte: u8) -> TokenStream {
-    let byte = byte_char(byte);
-    quote! { data.simd_eq(u8x16::splat(#byte)) }
-}
-
-fn range_simd(min: u8, max: u8) -> TokenStream {
-    let min = byte_char(min);
-    let max = byte_char(max);
-    quote! { data.simd_ge(u8x16::splat(#min)) & data.simd_le(u8x16::splat(#max)) }
-}
-
+#[cfg(not(target_arch = "aarch64"))]
 fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream {
+    let mask = intervals
+        .iter()
+        .map(|&Interval(l, r)| match l == r {
+            true => {
+                let l = byte_char(l);
+                quote! { data.simd_eq(u8x16::splat(#l)) }
+            }
+            false => {
+                let l = byte_char(l);
+                let r = byte_char(r);
+                quote! { data.simd_ge(u8x16::splat(#l)) & data.simd_le(u8x16::splat(#r)) }
+            }
+        })
+        .reduce(|acc, x| quote! { #acc | #x })
+        .unwrap();
     let count_act = match kind {
         Kind::Positive => quote! { trailing_ones },
         Kind::Negative => quote! { trailing_zeros },
     };
-    let idx_offset = intervals
-        .iter()
-        .map(|&Interval(l, r)| match l == r {
-            true => byte_simd(l),
-            false => range_simd(l, r),
-        })
-        .reduce(|acc, x| quote! { #acc | #x })
-        .map(|x| {
-            if cfg!(target_arch = "aarch64") {
-                quote! { unsafe { core::mem::transmute::<_, u128>(#x).#count_act() / 8 } }
-            } else {
-                quote! { (#x).to_bitmask().#count_act() }
-            }
-        });
     let tail_match = match kind {
         Kind::Positive => quote! { matches!(input.get(idx), Some(#intervals)) },
         Kind::Negative => quote! { !matches!(input.get(idx), Some(#intervals) | None) },
@@ -70,7 +61,8 @@ fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream 
             for chunk in input[idx..].chunks_exact(16) {
                 use core::simd::*;
                 let data = u8x16::from_slice(chunk);
-                let idx_offset = #idx_offset;
+                let mask = #mask;
+                let idx_offset = mask.to_bitmask().#count_act();
                 idx += idx_offset as usize;
                 if idx_offset != 16 {
                     break 'lookahead;
@@ -83,10 +75,46 @@ fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream 
     }
 }
 
+#[cfg(target_arch = "aarch64")]
+fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream {
+    let mask = intervals
+        .iter()
+        .map(|&Interval(l, r)| match l == r {
+            true => {
+                let l = byte_char(l);
+                quote! { data.simd_eq(u8x16::splat(#l)) }
+            }
+            false => {
+                let l = byte_char(l);
+                let r = byte_char(r);
+                quote! { data.simd_ge(u8x16::splat(#l)) & data.simd_le(u8x16::splat(#r)) }
+            }
+        })
+        .reduce(|acc, x| quote! { #acc | #x })
+        .unwrap();
+    let count_act = match kind {
+        Kind::Positive => quote! { trailing_ones },
+        Kind::Negative => quote! { trailing_zeros },
+    };
+    quote! {
+        for chunk in input[idx..].chunks_exact(16) {
+            use core::simd::*;
+            let data = u8x16::from_slice(chunk);
+            let mask = #mask;
+            let mask = unsafe { core::mem::transmute::<_, u128>(mask) };
+            let idx_offset = mask.#count_act() / 8;
+            idx += idx_offset as usize;
+            if idx_offset != 16 {
+                break;
+            }
+        }
+    }
+}
+
 fn estimated_cost(intervals: &Intervals) -> u32 {
     intervals
         .iter()
-        .map(|Interval(l, r)| if l == r { 1 } else { 2 })
+        .map(|Interval(l, r)| 1 + (l != r) as u32)
         .sum()
 }
 
@@ -139,7 +167,7 @@ impl LoopOptimizer {
     }
 
     pub fn generate_lookahead(&mut self, dfa: &DfaTable, state: &DfaState) -> Option<TokenStream> {
-        let limit = 8;
+        let limit = 4;
 
         let positives = direct_self_loops(dfa, state)?;
         let negatives = positives.complement()?;
