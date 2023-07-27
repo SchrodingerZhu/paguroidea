@@ -6,11 +6,11 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use std::collections::HashMap;
 
-use super::Tag;
 
-pub type SemActTable = HashMap<Tag, SemAct>;
+
+
+use crate::frontend::{CustomizedBlock, ParserExpr};
 
 ///
 /// ```
@@ -21,8 +21,9 @@ pub type SemActTable = HashMap<Tag, SemAct>;
 /// ```
 
 // those normal form without SemAct will be treated as plain scanner.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SemAct {
-    CustomizedRoutine(syn::Block),
+    CustomizedRoutine(CustomizedBlock),
     /// Gather inner data. If multiple is selected, return a tuple.
     /// If only one is selected, return target data.
     Gather,
@@ -40,4 +41,31 @@ pub enum SemAct {
     OneOrMoreNested,
     /// Yield a token span,
     Token,
+}
+
+impl SemAct {
+    pub fn infer(expr: &ParserExpr) -> Self {
+        match expr {
+            ParserExpr::LexerRef(_) => SemAct::Token,
+            ParserExpr::Plus(_) => SemAct::OneOrMoreToplevel,
+            ParserExpr::Opt(_) => SemAct::Option,
+            ParserExpr::Star(_) => SemAct::ZeroOrMore,
+            _ => SemAct::Gather,
+        }
+    }
+}
+
+#[cfg(feature = "debug")]
+impl std::fmt::Display for SemAct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SemAct::CustomizedRoutine(x) => write!(f, "{:?}", std::rc::Rc::as_ptr(&x.0)),
+            SemAct::Gather => write!(f, "Gather"),
+            SemAct::Option => write!(f, "Option"),
+            SemAct::ZeroOrMore => write!(f, "ZeroOrMore"),
+            SemAct::OneOrMoreToplevel => write!(f, "OneOrMoreToplevel"),
+            SemAct::OneOrMoreNested => write!(f, "OneOrMoreNested"),
+            SemAct::Token => write!(f, "Token"),
+        }
+    }
 }

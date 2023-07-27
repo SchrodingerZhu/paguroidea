@@ -7,12 +7,43 @@
 // modified, or distributed except according to those terms.
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub struct Ast {
     pub entry: syn::Ident,
     pub skip: Option<LexerExpr>,
     pub lexer_map: HashMap<syn::Ident, LexerDef>,
     pub parser_map: HashMap<syn::Ident, ParserDef>,
+}
+
+#[derive(Clone)]
+#[repr(transparent)]
+pub struct CustomizedBlock(pub Rc<syn::Block>);
+
+impl PartialEq for CustomizedBlock {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for CustomizedBlock {}
+
+impl PartialOrd for CustomizedBlock {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Rc::as_ptr(&self.0).partial_cmp(&Rc::as_ptr(&other.0))
+    }
+}
+
+impl Ord for CustomizedBlock {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        Rc::as_ptr(&self.0).cmp(&Rc::as_ptr(&other.0))
+    }
+}
+
+impl std::hash::Hash for CustomizedBlock {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        Rc::as_ptr(&self.0).hash(state)
+    }
 }
 
 pub struct LexerDef {
@@ -27,7 +58,7 @@ pub struct ParserDef {
 
 pub struct ParserRule {
     pub vars: Vec<VarBinding>,
-    pub action: Option<syn::Block>,
+    pub action: Option<CustomizedBlock>,
 }
 
 pub struct VarBinding {
@@ -59,4 +90,29 @@ pub enum ParserExpr {
     LexerRef(syn::Ident),
     ParserRef(syn::Ident),
     Ignore(Box<Self>),
+}
+
+pub struct RightDeepIterator<'a> {
+    seq: Option<&'a LexerExpr>,
+}
+
+impl<'a> From<&'a LexerExpr> for RightDeepIterator<'a> {
+    fn from(expr: &'a LexerExpr) -> Self {
+        Self { seq: Some(expr) }
+    }
+}
+
+impl<'a> Iterator for RightDeepIterator<'a> {
+    type Item = &'a LexerExpr;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.seq {
+            Some(LexerExpr::Seq(a, b)) => {
+                self.seq = Some(b);
+                Some(a)
+            }
+            Some(_) => self.seq.take(),
+            None => None,
+        }
+    }
 }

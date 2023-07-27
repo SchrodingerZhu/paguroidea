@@ -7,7 +7,9 @@
 // modified, or distributed except according to those terms.
 
 mod inference;
+mod normalization;
 mod semact;
+mod translation;
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -19,6 +21,9 @@ use syn::Ident;
 
 #[cfg(feature = "debug")]
 use crate::debug::{styled, styled_write};
+
+
+use self::semact::SemAct;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Tag {
@@ -94,36 +99,55 @@ impl std::fmt::Display for Action {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NormalForm {
-    Empty(Vec<(Tag, Option<Ident>)>),
-    Unexpanded(Vec<Action>),
-    Sequence(Ident, Vec<Action>),
+    Empty(Vec<(Tag, Option<Ident>)>, SemAct),
+    Unexpanded(Vec<Action>, SemAct),
+    Sequence(Ident, Option<Ident>, Vec<Action>, SemAct),
+}
+
+pub enum BoundTarget<'a> {
+    Tag(&'a Tag),
+    Token,
 }
 
 impl NormalForm {
-    pub fn visible_bindings(&self, skip: usize) -> Vec<(&Ident, &Tag)> {
+    pub fn semact(&self) -> &SemAct {
         match self {
-            Self::Empty(actions) => actions
+            Self::Empty(_, semact)
+            | Self::Unexpanded(_, semact)
+            | Self::Sequence(_, _, _, semact) => semact,
+        }
+    }
+    pub fn visible_bindings(&self, skip: usize) -> Vec<(&Ident, BoundTarget)> {
+        match self {
+            Self::Empty(actions, _) => actions
                 .last()
-                .and_then(|(tag, ident)| Some((ident.as_ref()?, tag)))
+                .and_then(|(tag, ident)| Some((ident.as_ref()?, BoundTarget::Tag(tag))))
                 .into_iter()
                 .collect(),
-            Self::Unexpanded(actions) | Self::Sequence(_, actions) => {
+            Self::Unexpanded(actions, _) | Self::Sequence(_, _, actions, _) => {
                 let mut acc = VecDeque::new();
                 for act in actions.iter().rev().skip(skip) {
                     match act {
                         Action::Shift { tag, output } => {
                             if let Some(ident) = output {
-                                acc.push_front((ident, tag));
+                                acc.push_front((ident, BoundTarget::Tag(tag)));
                             }
                         }
                         Action::Reduce { tag, output } => {
                             if let Some(ident) = output {
-                                acc.push_front((ident, tag));
+                                acc.push_front((ident, BoundTarget::Tag(tag)));
                             }
                             break;
                         }
+                    }
+                }
+                if let Self::Sequence(_, Some(tk), _, _) = self {
+                    if acc.len() == actions.len() - skip
+                        && !matches!(actions.first(), Some(Action::Reduce { .. }))
+                    {
+                        acc.push_front((tk, BoundTarget::Token));
                     }
                 }
                 acc.into_iter().collect()
@@ -136,7 +160,7 @@ impl NormalForm {
 impl std::fmt::Display for NormalForm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Empty(actions) => {
+            Self::Empty(actions, _) => {
                 write!(f, "ε")?;
                 for (tag, output) in actions.iter() {
                     if let Some(name) = output {
@@ -146,14 +170,18 @@ impl std::fmt::Display for NormalForm {
                     }
                 }
             }
-            Self::Unexpanded(actions) => {
+            Self::Unexpanded(actions, _) => {
                 write!(f, "{}", actions[0])?;
                 for action in &actions[1..] {
                     write!(f, "\t{}", action)?;
                 }
             }
-            Self::Sequence(terminal, actions) => {
-                styled_write!(f, Color::Yellow, "{terminal}")?;
+            Self::Sequence(terminal, var, actions, _) => {
+                if let Some(tk) = var {
+                    styled_write!(f, Color::Yellow, "{terminal}[{tk}]")?;
+                } else {
+                    styled_write!(f, Color::Yellow, "{terminal}")?;
+                }
                 for action in actions.iter() {
                     write!(f, "\t{}", action)?;
                 }
@@ -169,6 +197,7 @@ fn debug_print_test() {
     use quote::format_ident;
     let sequence = NormalForm::Sequence(
         format_ident!("TEST"),
+        Some(format_ident!("x")),
         vec![
             Action::Shift {
                 tag: Tag::Toplevel(format_ident!("a")),
@@ -187,6 +216,7 @@ fn debug_print_test() {
                 output: None,
             },
         ],
+        SemAct::Gather,
     );
     println!("{}", sequence);
 }
@@ -237,6 +267,7 @@ fn debug_print_nf_table() {
     use quote::format_ident;
     let sequence = NormalForm::Sequence(
         format_ident!("TEST"),
+        Some(format_ident!("x")),
         vec![
             Action::Shift {
                 tag: Tag::Toplevel(format_ident!("a")),
@@ -255,11 +286,15 @@ fn debug_print_nf_table() {
                 output: None,
             },
         ],
+        SemAct::Gather,
     );
-    let empty = NormalForm::Empty(vec![
-        (Tag::Toplevel(format_ident!("a")), None),
-        (Tag::Toplevel(format_ident!("b")), Some(format_ident!("x"))),
-    ]);
+    let empty = NormalForm::Empty(
+        vec![
+            (Tag::Toplevel(format_ident!("a")), None),
+            (Tag::Toplevel(format_ident!("b")), Some(format_ident!("x"))),
+        ],
+        SemAct::Gather,
+    );
     let table = NFTable(
         vec![
             (
