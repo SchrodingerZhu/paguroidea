@@ -78,7 +78,7 @@ use std::{
 
 use syn::{parse_quote, Type};
 
-use crate::{frontend::TypeAnnotation};
+use crate::frontend::TypeAnnotation;
 
 use super::{
     semact::{SemAct, SemActTable},
@@ -128,6 +128,19 @@ impl<'a> InferenceContext<'a> {
             // no field, unit type
             Some(parse_quote!(()))
         }
+    }
+    /// try infer all types, but may fail with incomplete type information.
+    pub fn infer_all_types(mut self) -> HashMap<Tag, Type> {
+        let mut typed = 0;
+        while typed < self.nforms.len() {
+            typed = 0;
+            for i in self.nforms.keys() {
+                if self.infer(i).is_some() {
+                    typed += 1;
+                }
+            }
+        }
+        std::mem::take(self.gamma.get_mut())
     }
     fn infer(&self, tag: &Tag) -> Option<Type> {
         match unsafe { (*self.gamma.get()).entry(tag.clone()) } {
