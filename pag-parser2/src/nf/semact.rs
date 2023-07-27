@@ -10,7 +10,6 @@ use std::collections::HashMap;
 
 use super::Tag;
 
-
 pub type SemActTable = HashMap<Tag, SemAct>;
 
 ///
