@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use quote::format_ident;
 use syn::{Ident, Type};
 
-use crate::frontend::{ParserDef};
+use crate::frontend::ParserDef;
 
 use super::{semact::SemAct, NormalForm, Tag};
 
@@ -37,7 +37,7 @@ impl Translation {
         self.anonymous_cnt += 1;
         result
     }
-    // Translate a top-level definitioin
+    // Translate a top-level definition
     fn add_toplevel_def(&mut self, name: Ident, def: &ParserDef) {
         let tag = Tag::Toplevel(name);
         self.annotations.insert(tag.clone(), def.ty.clone());
