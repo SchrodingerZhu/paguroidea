@@ -22,7 +22,6 @@ use syn::Ident;
 #[cfg(feature = "debug")]
 use crate::debug::{styled, styled_write};
 
-
 use self::semact::SemAct;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

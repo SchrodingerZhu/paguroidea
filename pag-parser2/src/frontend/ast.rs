@@ -64,7 +64,6 @@ pub struct ParserRule {
 pub struct VarBinding {
     pub expr: ParserExpr,
     pub name: Option<syn::Ident>,
-    pub ty: Option<syn::Type>,
 }
 
 // TODO: how to express "bottom" & "any"?
@@ -90,6 +89,7 @@ pub enum ParserExpr {
     LexerRef(syn::Ident),
     ParserRef(syn::Ident),
     Ignore(Box<Self>),
+    Hinted(Box<Self>, syn::Type),
 }
 
 pub struct RightDeepIterator<'a> {
