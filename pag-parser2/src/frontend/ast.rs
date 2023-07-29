@@ -93,21 +93,21 @@ pub enum ParserExpr {
 }
 
 pub struct RightDeepIterator<'a> {
-    seq: Option<&'a LexerExpr>,
+    seq: Option<&'a ParserExpr>,
 }
 
-impl<'a> From<&'a LexerExpr> for RightDeepIterator<'a> {
-    fn from(expr: &'a LexerExpr) -> Self {
+impl<'a> From<&'a ParserExpr> for RightDeepIterator<'a> {
+    fn from(expr: &'a ParserExpr) -> Self {
         Self { seq: Some(expr) }
     }
 }
 
 impl<'a> Iterator for RightDeepIterator<'a> {
-    type Item = &'a LexerExpr;
+    type Item = &'a ParserExpr;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.seq {
-            Some(LexerExpr::Seq(a, b)) => {
+            Some(ParserExpr::Seq(a, b)) => {
                 self.seq = Some(b);
                 Some(a)
             }

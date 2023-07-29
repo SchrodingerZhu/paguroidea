@@ -7,9 +7,9 @@ use std::collections::HashMap;
 use quote::format_ident;
 use syn::{Ident, Type};
 
+use super::{semact::SemAct, Action, NormalForm, Tag};
+use crate::frontend::RightDeepIterator;
 use crate::frontend::{ParserDef, ParserExpr};
-
-use super::{semact::SemAct, NormalForm, Tag, Action};
 
 struct Translation {
     /// Table of semi-normalized production rules
@@ -22,9 +22,18 @@ struct Translation {
     output_cnt: usize,
     /// Counter of assigned anonymous routines
     anonymous_cnt: usize,
+    /// Whether we are currently ignoring the output
+    ignoring: bool,
 }
 
 impl Translation {
+    fn start_ignoring(&mut self) {
+        self.ignoring = true;
+    }
+    fn end_ignore(&mut self) {
+        self.ignoring = false;
+    }
+
     // Allocate a new symbol for unamed variable bindings.
     fn new_output_sym(&mut self) -> Ident {
         let result = format_ident!("_{}", self.output_cnt);
@@ -37,54 +46,269 @@ impl Translation {
         self.anonymous_cnt += 1;
         result
     }
-    fn construct_actions_from_expr_sequence<'a, I>(&mut self, stream: I) -> Vec<Action> 
-    where
-        I: Iterator<Item = (&'a ParserExpr, Option<Ident>)>,
-    {
-        stream.map(|(expr, output )| {
-            match expr {
-                ParserExpr::ParserRef(rule) => 
-                    Action::Shift { tag: Tag::Toplevel(rule.clone()), output: output.or_else(|| Some(self.new_output_sym())) },
-                ParserExpr::LexerRef(_)  => 
-                    Action::Shift { tag: self.add_anonymous_rule(expr), output }, 
-                ParserExpr::Ignore(inner)  => 
-                    Action::Shift { tag: self.add_anonymous_rule(inner), output: None }, 
-                ParserExpr::Hinted( inner, ty) => {
-                    let tag = self.add_anonymous_rule(inner);
-                    self.hints.insert(tag.clone(), ty.clone());
-                    Action::Shift { tag, output: None }
-                }
-                _ => 
-                    Action::Shift { tag: self.add_anonymous_rule(expr), output: output.or_else(|| Some(self.new_output_sym())) },    
-            }
-        }).collect()
+    fn add_nf(&mut self, tag: Tag, nf: NormalForm) {
+        self.semi_nfs.entry(tag).or_default().push(nf);
     }
-    fn construct_nf_from_expr_sequence<'a, I>(&mut self, mut stream: I, semact: SemAct) -> NormalForm
-    where
-        I: Iterator<Item = (&'a ParserExpr, Option<Ident>)>,
-    {
-        let head = stream.next();
-        match head {
-            None => NormalForm::Empty(vec![], semact),
-            // Token rule is ignored on default, but can be used to specify the label.
-            Some((ParserExpr::LexerRef(token), label)) => {
-                let actions = self.construct_actions_from_expr_sequence(stream);
-                NormalForm::Sequence(token.clone(), label, actions, semact)
+    fn add_nf_from_anonymous_expr(&mut self, expr: &ParserExpr, tag: &Tag) {
+        match expr {
+            ParserExpr::Seq(box ParserExpr::Ignore(box ParserExpr::LexerRef(head)), tail) => {
+                let tail_actions = RightDeepIterator::from(tail.as_ref())
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                self.add_nf(
+                    tag.clone(),
+                    NormalForm::Sequence(
+                        head.clone(),
+                        None,
+                        tail_actions,
+                        if self.ignoring {
+                            SemAct::Recognize
+                        } else {
+                            SemAct::Gather
+                        },
+                    ),
+                );
             }
-            Some(_) => {
-                let recovered = head.into_iter().chain(stream);
-                let actions = self.construct_actions_from_expr_sequence(recovered);
-                NormalForm::Unexpanded(actions, semact)
+            ParserExpr::Seq(box ParserExpr::LexerRef(head), tail) => {
+                let tail_actions = RightDeepIterator::from(tail.as_ref())
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                let nf = NormalForm::Sequence(
+                    head.clone(),
+                    if self.ignoring {
+                        None
+                    } else {
+                        Some(self.new_output_sym())
+                    },
+                    tail_actions,
+                    if self.ignoring {
+                        SemAct::Recognize
+                    } else {
+                        SemAct::Gather
+                    },
+                );
+                self.add_nf(tag.clone(), nf);
             }
+            ParserExpr::Seq(_, _) => {
+                let actions = RightDeepIterator::from(expr)
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                let nf = NormalForm::Unexpanded(
+                    actions,
+                    if self.ignoring {
+                        SemAct::Recognize
+                    } else {
+                        SemAct::Gather
+                    },
+                );
+                self.add_nf(tag.clone(), nf);
+            }
+            ParserExpr::Opt(box ParserExpr::Seq(
+                box ParserExpr::Ignore(box ParserExpr::LexerRef(head)),
+                tail,
+            )) => {
+                let tail_actions = RightDeepIterator::from(tail.as_ref())
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                self.add_nf(
+                    tag.clone(),
+                    NormalForm::Sequence(
+                        head.clone(),
+                        None,
+                        tail_actions,
+                        if self.ignoring {
+                            SemAct::Recognize
+                        } else {
+                            SemAct::Option
+                        },
+                    ),
+                );
+                self.add_nf(tag.clone(), NormalForm::Empty(vec![], SemAct::Option));
+            }
+            ParserExpr::Opt(box ParserExpr::Seq(box ParserExpr::LexerRef(head), tail)) => {
+                let tail_actions = RightDeepIterator::from(tail.as_ref())
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                let nf = NormalForm::Sequence(
+                    head.clone(),
+                    if self.ignoring {
+                        None
+                    } else {
+                        Some(self.new_output_sym())
+                    },
+                    tail_actions,
+                    if self.ignoring {
+                        SemAct::Recognize
+                    } else {
+                        SemAct::Option
+                    },
+                );
+                self.add_nf(tag.clone(), nf);
+                self.add_nf(tag.clone(), NormalForm::Empty(vec![], SemAct::Option));
+            }
+            ParserExpr::Opt(inner) => {
+                let actions = RightDeepIterator::from(inner.as_ref())
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                let nf = NormalForm::Unexpanded(
+                    actions,
+                    if self.ignoring {
+                        SemAct::Recognize
+                    } else {
+                        SemAct::Option
+                    },
+                );
+                self.add_nf(tag.clone(), nf);
+                self.add_nf(tag.clone(), NormalForm::Empty(vec![], SemAct::Option));
+            }
+            ParserExpr::Star(box ParserExpr::Seq(
+                box ParserExpr::Ignore(box ParserExpr::LexerRef(head)),
+                tail,
+            )) => {
+                let tail_actions = RightDeepIterator::from(tail.as_ref())
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                self.add_nf(
+                    tag.clone(),
+                    NormalForm::Sequence(
+                        head.clone(),
+                        None,
+                        tail_actions,
+                        if self.ignoring {
+                            SemAct::Recognize
+                        } else {
+                            SemAct::ZeroOrMore
+                        },
+                    ),
+                );
+                self.add_nf(tag.clone(), NormalForm::Empty(vec![], SemAct::ZeroOrMore));
+            }
+            ParserExpr::Star(box ParserExpr::Seq(box ParserExpr::LexerRef(head), tail)) => {
+                let tail_actions = RightDeepIterator::from(tail.as_ref())
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                let nf = NormalForm::Sequence(
+                    head.clone(),
+                    if self.ignoring {
+                        None
+                    } else {
+                        Some(self.new_output_sym())
+                    },
+                    tail_actions,
+                    if self.ignoring {
+                        SemAct::Recognize
+                    } else {
+                        SemAct::ZeroOrMore
+                    },
+                );
+                self.add_nf(tag.clone(), nf);
+                self.add_nf(tag.clone(), NormalForm::Empty(vec![], SemAct::ZeroOrMore));
+            }
+            ParserExpr::Star(inner) => {
+                let actions = RightDeepIterator::from(inner.as_ref())
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                let nf = NormalForm::Unexpanded(
+                    actions,
+                    if self.ignoring {
+                        SemAct::Recognize
+                    } else {
+                        SemAct::ZeroOrMore
+                    },
+                );
+                self.add_nf(tag.clone(), nf);
+                self.add_nf(tag.clone(), NormalForm::Empty(vec![], SemAct::ZeroOrMore));
+            }
+            ParserExpr::Plus(box ParserExpr::Seq(
+                box ParserExpr::Ignore(box ParserExpr::LexerRef(head)),
+                tail,
+            )) => {
+                let tail_actions = RightDeepIterator::from(tail.as_ref())
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                self.add_nf(
+                    tag.clone(),
+                    NormalForm::Sequence(
+                        head.clone(),
+                        None,
+                        tail_actions,
+                        if self.ignoring {
+                            SemAct::Recognize
+                        } else {
+                            SemAct::OneOrMoreToplevel
+                        },
+                    ),
+                );
+                self.add_nf(tag.clone(), NormalForm::Empty(vec![], SemAct::ZeroOrMore));
+            }
+            ParserExpr::Plus(box ParserExpr::Seq(box ParserExpr::LexerRef(head), tail)) => {
+                let tail_actions = RightDeepIterator::from(tail.as_ref())
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                let nf = NormalForm::Sequence(
+                    head.clone(),
+                    if self.ignoring {
+                        None
+                    } else {
+                        Some(self.new_output_sym())
+                    },
+                    tail_actions,
+                    if self.ignoring {
+                        SemAct::Recognize
+                    } else {
+                        SemAct::ZeroOrMore
+                    },
+                );
+                self.add_nf(tag.clone(), nf);
+                self.add_nf(tag.clone(), NormalForm::Empty(vec![], SemAct::ZeroOrMore));
+            }
+            ParserExpr::Plus(inner) => {
+                let actions = RightDeepIterator::from(inner.as_ref())
+                    .map(|inner| self.add_anonymous_rule(inner))
+                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .collect();
+                let nf = NormalForm::Unexpanded(
+                    actions,
+                    if self.ignoring {
+                        SemAct::Recognize
+                    } else {
+                        SemAct::ZeroOrMore
+                    },
+                );
+                self.add_nf(tag.clone(), nf);
+                self.add_nf(tag.clone(), NormalForm::Empty(vec![], SemAct::ZeroOrMore));
+            }
+            ParserExpr::LexerRef(ident) => {
+                let nf = if self.ignoring {
+                    NormalForm::Sequence(ident.clone(), None, vec![], SemAct::Recognize)
+                } else {
+                    NormalForm::Sequence(
+                        ident.clone(),
+                        Some(self.new_output_sym()),
+                        vec![],
+                        SemAct::Token,
+                    )
+                };
+                self.add_nf(tag.clone(), nf);
+            }
+            ParserExpr::ParserRef(_) => unreachable!("cannot create nf from parser ref"),
+            ParserExpr::Ignore(_) => unreachable!("cannot create nf from ignore"),
+            ParserExpr::Hinted(_, _) => unreachable!("cannot create nf from hinted"),
         }
     }
-
-    fn add_anonymous_rule(&mut self, expr: &ParserExpr) -> Tag {
-        // Must be primitive rules
-
-        let tag = self.new_anonymous_tag();
-        let semact = SemAct::infer(expr);
-        
+    fn add_anonymous_rule(&mut self, expr: &ParserExpr) -> (Tag, Option<Ident>) {
+        todo!()
     }
 
     // Translate a top-level definition

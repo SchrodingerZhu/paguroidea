@@ -74,6 +74,8 @@ pub enum Action {
         tag: Tag,
         output: Option<Ident>,
     },
+    /// Specialized action for tail call optimization.
+    TailCall
 }
 
 #[cfg(feature = "debug")]
@@ -94,6 +96,7 @@ impl std::fmt::Display for Action {
                     styled_write!(f, Color::Red, "{tag}")
                 }
             }
+            Self::TailCall => styled_write!(f, Color::Green, "↻"),
         }
     }
 }
@@ -140,6 +143,7 @@ impl NormalForm {
                             }
                             break;
                         }
+                        Action::TailCall => continue,
                     }
                 }
                 if let Self::Sequence(_, Some(tk), _, _) = self {
