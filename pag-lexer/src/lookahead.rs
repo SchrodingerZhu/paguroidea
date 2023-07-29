@@ -19,37 +19,9 @@ enum Kind {
 }
 
 fn generate_lut_routine(index: usize) -> TokenStream {
-    // TODO: put the code to `pag_util::lookahead_lut` to reduce stack size under debug build
     let table = index / 8;
     let shift = index % 8;
-    let bit = 1u8 << shift;
-    quote! {
-        'lookahead: {
-            for chunk in input[idx..].chunks_exact(8) {
-                if GLOBAL_LUT[#table][chunk[0] as usize] & #bit == 0 {
-                if GLOBAL_LUT[#table][chunk[1] as usize] & #bit == 0 {
-                if GLOBAL_LUT[#table][chunk[2] as usize] & #bit == 0 {
-                if GLOBAL_LUT[#table][chunk[3] as usize] & #bit == 0 {
-                if GLOBAL_LUT[#table][chunk[4] as usize] & #bit == 0 {
-                if GLOBAL_LUT[#table][chunk[5] as usize] & #bit == 0 {
-                if GLOBAL_LUT[#table][chunk[6] as usize] & #bit == 0 {
-                if GLOBAL_LUT[#table][chunk[7] as usize] & #bit == 0 {
-                    idx += 8; continue; }
-                    idx += 7; break 'lookahead; }
-                    idx += 6; break 'lookahead; }
-                    idx += 5; break 'lookahead; }
-                    idx += 4; break 'lookahead; }
-                    idx += 3; break 'lookahead; }
-                    idx += 2; break 'lookahead; }
-                    idx += 1; break 'lookahead; }
-                break 'lookahead;
-            }
-            idx += input[idx..]
-                .iter()
-                .position(|x| GLOBAL_LUT[#table][*x as usize] & #bit > 0)
-                .unwrap_or(input[idx..].len());
-        }
-    }
+    quote! { idx = ::pag_util::lookahead_lut(input, idx, &GLOBAL_LUT[#table], #shift); }
 }
 
 #[cfg(not(target_arch = "aarch64"))]
