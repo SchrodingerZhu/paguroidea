@@ -163,6 +163,10 @@ impl<'a> InferenceContext<'a> {
             for i in nfs.iter() {
                 let semact = i.semact();
                 match semact {
+                    SemAct::Recognize => {
+                        inferred.replace(InferredType::Concrete(parse_quote!(())));
+                        break;
+                    }
                     // Token semantic action, the type is Span
                     SemAct::Token => {
                         inferred.replace(InferredType::Concrete(parse_quote!(

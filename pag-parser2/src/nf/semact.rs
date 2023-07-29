@@ -37,6 +37,8 @@ pub enum SemAct {
     OneOrMoreNested,
     /// Yield a token span,
     Token,
+    /// Recognize without generate any data.
+    Recognize,
 }
 
 impl SemAct {
@@ -62,6 +64,7 @@ impl std::fmt::Display for SemAct {
             SemAct::OneOrMoreToplevel => write!(f, "OneOrMoreToplevel"),
             SemAct::OneOrMoreNested => write!(f, "OneOrMoreNested"),
             SemAct::Token => write!(f, "Token"),
+            SemAct::Recognize => write!(f, "Recognize"),
         }
     }
 }
