@@ -8,7 +8,7 @@
 
 mod normalization;
 mod semact;
-//mod translation;
+mod translation;
 
 use crate::utils::Appendix;
 
@@ -115,6 +115,20 @@ pub enum AbstractType {
     Collector(Box<Self>),
 }
 
+thread_local! {
+    static UNIT_TYPE: AbstractType = AbstractType::Concrete(Rc::new(syn::parse_quote!(())));
+    static SPAN_TYPE: AbstractType = AbstractType::Concrete(Rc::new(syn::parse_quote!(::pag_util::Span<'src>)));
+}
+
+impl AbstractType {
+    pub fn unit_type() -> Self {
+        UNIT_TYPE.with(Self::clone)
+    }
+    pub fn span_type() -> Self {
+        SPAN_TYPE.with(Self::clone)
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NormalForm {
     Empty {
@@ -174,6 +188,22 @@ impl NormalForm {
         }
     }
 
+    pub fn ty(&self) -> &Appendix<AbstractType> {
+        match self {
+            Self::Empty { ty, .. } => ty,
+            Self::Unexpanded { ty, .. } => ty,
+            Self::Sequence { ty, .. } => ty,
+        }
+    }
+
+    pub fn ty_mut(&mut self) -> &mut Appendix<AbstractType> {
+        match self {
+            Self::Empty { ty, .. } => ty,
+            Self::Unexpanded { ty, .. } => ty,
+            Self::Sequence { ty, .. } => ty,
+        }
+    }
+
     pub fn visible_bindings(&self, skip: usize) -> Box<[(&Ident, BoundTarget)]> {
         let mut acc = VecDeque::new();
         for act in self.actions().iter().rev().skip(skip) {
@@ -212,22 +242,29 @@ impl NormalForm {
 impl std::fmt::Display for NormalForm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Empty { actions, .. } => {
+            Self::Empty {
+                actions, semact, ..
+            } => {
                 write!(f, "ε")?;
                 for action in actions {
                     write!(f, "\t{}", action)?;
                 }
+                write!(f, "\t{{{}}}", semact)?;
             }
-            Self::Unexpanded { actions, .. } => {
+            Self::Unexpanded {
+                actions, semact, ..
+            } => {
                 write!(f, "{}", actions[0])?;
                 for action in &actions[1..] {
                     write!(f, "\t{}", action)?;
                 }
+                write!(f, "\t{{{}}}", semact)?;
             }
             Self::Sequence {
                 token,
                 token_output,
                 actions,
+                semact,
                 ..
             } => {
                 if let Some(tk) = token_output {
@@ -238,6 +275,7 @@ impl std::fmt::Display for NormalForm {
                 for action in actions.iter() {
                     write!(f, "\t{}", action)?;
                 }
+                write!(f, "\t{{{}}}", semact)?;
             }
         }
         Ok(())

@@ -3,28 +3,52 @@
 //!
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use quote::format_ident;
 use syn::{Ident, Type};
 
-use super::NFTable;
 use super::{semact::SemAct, Action, NormalForm, Tag};
-use crate::frontend::{ParserDef, ParserExpr};
+use super::{AbstractType, NFTable};
+use crate::frontend::{Ast, ParserDef, ParserExpr, SequenceIterator};
 
-#[derive(Default)]
 struct Translation {
     /// Table of semi-normalized production rules
     semi_nfs: NFTable,
     /// Toplevel type annotations
-    annotations: HashMap<Tag, Type>,
+    annotations: HashMap<Tag, Rc<Type>>,
     /// Type hints when calling inner routines (collector)
-    hints: HashMap<Tag, Type>,
+    hints: HashMap<Tag, Rc<Type>>,
     /// Counter of assigned non-explicit variable names
     output_cnt: usize,
     /// Counter of assigned anonymous routines
     anonymous_cnt: usize,
     /// Whether we are currently ignoring the output
     ignoring_cnt: usize,
+}
+
+type NFAttrTuple = (Tag, Option<Ident>, AbstractType);
+
+impl From<&'_ Ast> for Translation {
+    fn from(value: &Ast) -> Self {
+        let annotations = value
+            .parser_map
+            .iter()
+            .map(|(ident, def)| (Tag::Toplevel(ident.clone()), def.ty.clone()))
+            .collect();
+        let mut translation = Self {
+            semi_nfs: Default::default(),
+            annotations,
+            hints: Default::default(),
+            output_cnt: 0,
+            anonymous_cnt: 0,
+            ignoring_cnt: 0,
+        };
+        for (i, def) in &value.parser_map {
+            translation.add_toplevel_def(i.clone(), def);
+        }
+        translation
+    }
 }
 
 impl Translation {
@@ -56,50 +80,130 @@ impl Translation {
         result
     }
 
-    /// Construct a normal form from a sequence of parser expressions. The semact is always `Recognize`.
-    fn partial_nf_from_sequence<
+    fn infer_type<I: ExactSizeIterator<Item = AbstractType>>(
+        &self,
+        mut inner_types: I,
+        semact: &SemAct,
+        tag: &Tag,
+    ) -> AbstractType {
+        match semact {
+            SemAct::Customized(_) => AbstractType::Concrete(self.annotations[tag].clone()),
+            SemAct::Gather => match inner_types.len() {
+                0 => AbstractType::unit_type(),
+                1 => inner_types.next().unwrap(),
+                _ => AbstractType::Tuple(inner_types.collect()),
+            },
+            SemAct::Option => match inner_types.len() {
+                0 => AbstractType::Option(Box::new(AbstractType::unit_type())),
+                1 => AbstractType::Option(Box::new(inner_types.next().unwrap())),
+                _ => AbstractType::Option(Box::new(AbstractType::Tuple(inner_types.collect()))),
+            },
+            SemAct::ZeroOrMore => match inner_types.len() {
+                0 => AbstractType::Collector(Box::new(AbstractType::unit_type())),
+                1 => AbstractType::Collector(Box::new(inner_types.next().unwrap())),
+                _ => AbstractType::Collector(Box::new(AbstractType::Tuple(inner_types.collect()))),
+            },
+            SemAct::OneOrMoreToplevel => match inner_types.len() {
+                0 => AbstractType::Collector(Box::new(AbstractType::unit_type())),
+                1 => AbstractType::Collector(Box::new(inner_types.next().unwrap())),
+                _ => AbstractType::Collector(Box::new(AbstractType::Tuple(inner_types.collect()))),
+            },
+            SemAct::OneOrMoreNested => AbstractType::unit_type(),
+            SemAct::Token => AbstractType::span_type(),
+            SemAct::Recognize => AbstractType::unit_type(),
+        }
+    }
+
+    /// Construct a normal form from a sequence of parser expressions.
+    fn create_nf_from_sequence<
         'a,
         const IGNORE_UNNAMED: bool,
         I: Iterator<Item = (&'a ParserExpr, Option<Ident>)>,
     >(
         &mut self,
         mut iter: I,
+        semact: SemAct,
+        tag: &Tag,
     ) -> NormalForm {
+        debug_assert_eq!(
+            self.ignoring(),
+            matches!(semact, SemAct::Recognize),
+            "semact must be Recognize in ignoring mode"
+        );
         match iter.next() {
-            None => NormalForm::Empty(vec![], SemAct::Recognize),
+            None => NormalForm::Empty {
+                actions: vec![],
+                semact,
+                ty: AbstractType::unit_type().into(),
+            },
             Some((ParserExpr::Ignore(box ParserExpr::LexerRef(token)), _)) => {
-                let tail = iter
+                let mut types = Vec::new();
+                let actions = iter
                     .map(|(inner, named)| self.add_anonymous_rule::<IGNORE_UNNAMED>(inner, named))
-                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .map(|(tag, output, ty)| {
+                        if output.is_some() {
+                            types.push(ty);
+                        }
+                        Action::Shift { tag, output }
+                    })
                     .collect();
-                NormalForm::Sequence(token.clone(), None, tail, SemAct::Recognize)
+                let ty = self.infer_type(types.into_iter(), &semact, tag).into();
+                NormalForm::Sequence {
+                    token: token.clone(),
+                    token_output: None,
+                    actions,
+                    semact,
+                    ty,
+                }
             }
             Some((ParserExpr::LexerRef(token), named)) => {
-                let tail = iter
+                let mut types = Vec::new();
+                if named.is_some() {
+                    types.push(AbstractType::span_type())
+                }
+                let actions = iter
                     .map(|(inner, named)| self.add_anonymous_rule::<IGNORE_UNNAMED>(inner, named))
-                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .map(|(tag, output, ty)| {
+                        if output.is_some() {
+                            types.push(ty);
+                        }
+                        Action::Shift { tag, output }
+                    })
                     .collect();
-                NormalForm::Sequence(
-                    token.clone(),
-                    if self.ignoring() {
+                let ty = self.infer_type(types.into_iter(), &semact, tag).into();
+                NormalForm::Sequence {
+                    token: token.clone(),
+                    token_output: if matches!(semact, SemAct::Recognize) {
                         None
                     } else if IGNORE_UNNAMED {
                         named
                     } else {
                         named.or_else(|| Some(self.new_output_sym()))
                     },
-                    tail,
-                    SemAct::Recognize,
-                )
+                    actions,
+                    semact,
+                    ty,
+                }
             }
             Some((expr, named)) => {
-                let sequence = [(expr, named)]
+                let mut types = Vec::new();
+                let actions = [(expr, named)]
                     .into_iter()
                     .chain(iter)
                     .map(|(inner, named)| self.add_anonymous_rule::<IGNORE_UNNAMED>(inner, named))
-                    .map(|(tag, output)| Action::Shift { tag, output })
+                    .map(|(tag, output, ty)| {
+                        if output.is_some() {
+                            types.push(ty);
+                        }
+                        Action::Shift { tag, output }
+                    })
                     .collect();
-                NormalForm::Unexpanded(sequence, SemAct::Recognize)
+                let ty = self.infer_type(types.into_iter(), &semact, tag).into();
+                NormalForm::Unexpanded {
+                    actions,
+                    semact,
+                    ty,
+                }
             }
         }
     }
@@ -108,50 +212,83 @@ impl Translation {
         self.semi_nfs.entry(tag).or_default().push(nf);
     }
 
-    fn add_nf_from_anonymous_expr(&mut self, expr: &ParserExpr, tag: &Tag) {
+    fn add_nf_from_anonymous_expr(&mut self, expr: &ParserExpr, tag: &Tag) -> AbstractType {
         match expr {
-            ParserExpr::Seq(..) => {
-                let mut partial_nf = self.partial_nf_from_sequence::<false, _>(
-                    RightDeepIterator::from(expr).map(|expr| (expr, None)),
-                );
-                *partial_nf.semact_mut() = if self.ignoring() {
+            ParserExpr::Seq(exprs) => {
+                let semact = if self.ignoring() {
                     SemAct::Recognize
                 } else {
                     SemAct::Gather
                 };
+                let partial_nf = self.create_nf_from_sequence::<false, _>(
+                    exprs.iter().map(|expr| (expr, None)),
+                    semact,
+                    tag,
+                );
+                let ty = partial_nf.ty().0.clone();
                 self.add_nf(tag.clone(), partial_nf);
+                ty
             }
             ParserExpr::Opt(inner) => {
-                let mut partial_nf = self.partial_nf_from_sequence::<false, _>(
-                    RightDeepIterator::from(inner.as_ref()).map(|expr| (expr, None)),
-                );
                 let semact = if self.ignoring() {
                     SemAct::Recognize
                 } else {
                     SemAct::Option
                 };
+                let mut partial_nf = self.create_nf_from_sequence::<false, _>(
+                    SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None)),
+                    semact.clone(),
+                    tag,
+                );
+                let ty = partial_nf.ty().clone();
                 *partial_nf.semact_mut() = semact.clone();
                 self.add_nf(tag.clone(), partial_nf);
                 // add one more rule for empty
-                self.add_nf(tag.clone(), NormalForm::Empty(vec![], semact));
+                self.add_nf(
+                    tag.clone(),
+                    NormalForm::Empty {
+                        actions: vec![],
+                        semact,
+                        ty: ty.clone(),
+                    },
+                );
+                ty.0
             }
             ParserExpr::Star(inner) => {
-                let mut partial_nf = self.partial_nf_from_sequence::<false, _>(
-                    RightDeepIterator::from(inner.as_ref()).map(|expr| (expr, None)),
+                let semact = if self.ignoring() {
+                    SemAct::ZeroOrMore
+                } else {
+                    SemAct::Option
+                };
+                let mut partial_nf = self.create_nf_from_sequence::<false, _>(
+                    SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None)),
+                    semact.clone(),
+                    tag,
                 );
+                let ty = partial_nf.ty().clone();
+                *partial_nf.semact_mut() = semact.clone();
+                self.add_nf(tag.clone(), partial_nf);
+                // add one more rule for empty
+                self.add_nf(
+                    tag.clone(),
+                    NormalForm::Empty {
+                        actions: vec![],
+                        semact,
+                        ty: ty.clone(),
+                    },
+                );
+                ty.0
+            }
+            ParserExpr::Plus(inner) => {
                 let semact = if self.ignoring() {
                     SemAct::Recognize
                 } else {
-                    SemAct::ZeroOrMore
+                    SemAct::OneOrMoreToplevel
                 };
-                *partial_nf.semact_mut() = semact.clone();
-                self.add_nf(tag.clone(), partial_nf);
-                // add one more rule for empty
-                self.add_nf(tag.clone(), NormalForm::Empty(vec![], semact));
-            }
-            ParserExpr::Plus(inner) => {
-                let mut partial_nf = self.partial_nf_from_sequence::<false, _>(
-                    RightDeepIterator::from(inner.as_ref()).map(|expr| (expr, None)),
+                let mut partial_nf = self.create_nf_from_sequence::<false, _>(
+                    SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None)),
+                    semact.clone(),
+                    tag,
                 );
                 let nested_tag = self.new_anonymous_tag();
                 // the nested routine
@@ -164,37 +301,51 @@ impl Translation {
 
                     self.add_nf(nested_tag.clone(), {
                         let mut nf = partial_nf.clone();
-                        nf.append_tailcall();
+                        nf.actions_mut().push(Action::TailCall);
                         *nf.semact_mut() = semact.clone();
                         nf
                     });
 
-                    self.add_nf(nested_tag.clone(), NormalForm::Empty(vec![], semact));
+                    self.add_nf(
+                        nested_tag.clone(),
+                        NormalForm::Empty {
+                            actions: vec![],
+                            semact,
+                            ty: AbstractType::unit_type().into(),
+                        },
+                    );
                 }
                 // the toplevel routine
                 {
-                    let semact = if self.ignoring() {
-                        SemAct::Recognize
-                    } else {
-                        SemAct::OneOrMoreToplevel
-                    };
-                    partial_nf.append_pass_collector(nested_tag);
-                    *partial_nf.semact_mut() = semact;
+                    partial_nf
+                        .actions_mut()
+                        .push(Action::PassCollector(tag.clone()));
+                    let ty = partial_nf.ty().0.clone();
                     self.add_nf(tag.clone(), partial_nf);
+                    ty
                 }
             }
             ParserExpr::LexerRef(ident) => {
                 let nf = if self.ignoring() {
-                    NormalForm::Sequence(ident.clone(), None, vec![], SemAct::Recognize)
+                    NormalForm::Sequence {
+                        token: ident.clone(),
+                        token_output: None,
+                        actions: vec![],
+                        semact: SemAct::Recognize,
+                        ty: AbstractType::unit_type().into(),
+                    }
                 } else {
-                    NormalForm::Sequence(
-                        ident.clone(),
-                        Some(self.new_output_sym()),
-                        vec![],
-                        SemAct::Token,
-                    )
+                    NormalForm::Sequence {
+                        token: ident.clone(),
+                        token_output: Some(self.new_output_sym()),
+                        actions: vec![],
+                        semact: SemAct::Token,
+                        ty: AbstractType::span_type().into(),
+                    }
                 };
+                let ty = nf.ty().0.clone();
                 self.add_nf(tag.clone(), nf);
+                ty
             }
             ParserExpr::ParserRef(_) => unreachable!("cannot create nf from parser ref"),
             ParserExpr::Ignore(_) => unreachable!("cannot create nf from ignore"),
@@ -205,7 +356,7 @@ impl Translation {
         &mut self,
         expr: &ParserExpr,
         named: Option<Ident>,
-    ) -> (Tag, Option<Ident>) {
+    ) -> NFAttrTuple {
         let is_unnamed = named.is_none();
         if IGNORE_UNNAMED && is_unnamed {
             self.start_ignoring();
@@ -214,24 +365,30 @@ impl Translation {
             ParserExpr::ParserRef(x) => {
                 let tag = Tag::Toplevel(x.clone());
                 if self.ignoring() {
-                    (tag, None)
+                    (tag, None, AbstractType::unit_type())
                 } else {
-                    (tag, named.or_else(|| Some(self.new_output_sym())))
+                    let ty = self
+                        .annotations
+                        .get(&tag)
+                        .map(Rc::clone)
+                        .map(AbstractType::Concrete)
+                        .expect("toplevel rule must be typed");
+                    (tag, named.or_else(|| Some(self.new_output_sym())), ty)
                 }
             }
             ParserExpr::Ignore(expr) => {
                 self.start_ignoring();
-                let (tag, output) = self.add_anonymous_rule::<IGNORE_UNNAMED>(expr, named);
+                let result = self.add_anonymous_rule::<IGNORE_UNNAMED>(expr, named);
                 self.end_ignoring();
-                (tag, output)
+                result
             }
             _ => {
                 let tag = self.new_anonymous_tag();
-                self.add_nf_from_anonymous_expr(expr, &tag);
+                let ty = self.add_nf_from_anonymous_expr(expr, &tag);
                 if self.ignoring() {
-                    (tag, None)
+                    (tag, None, AbstractType::unit_type())
                 } else {
-                    (tag, named.or_else(|| Some(self.new_output_sym())))
+                    (tag, named.or_else(|| Some(self.new_output_sym())), ty)
                 }
             }
         };
@@ -244,7 +401,6 @@ impl Translation {
     // Translate a top-level definition
     fn add_toplevel_def(&mut self, name: Ident, def: &ParserDef) {
         let tag = Tag::Toplevel(name);
-        self.annotations.insert(tag.clone(), def.ty.clone());
         let rules = def
             .rules
             .iter()
@@ -256,20 +412,23 @@ impl Translation {
                 } else {
                     SemAct::Gather
                 };
-                let mut partial_nf = if matches!(semact, SemAct::Customized(..)) {
-                    self.partial_nf_from_sequence::<true, _>(
+                let partial_nf = if matches!(semact, SemAct::Customized(..)) {
+                    self.create_nf_from_sequence::<true, _>(
                         rule.vars
                             .iter()
                             .map(|binding| (&binding.expr, binding.name.clone())),
+                        semact,
+                        &tag,
                     )
                 } else {
-                    self.partial_nf_from_sequence::<false, _>(
+                    self.create_nf_from_sequence::<false, _>(
                         rule.vars
                             .iter()
                             .map(|binding| (&binding.expr, binding.name.clone())),
+                        semact,
+                        &tag,
                     )
                 };
-                *partial_nf.semact_mut() = semact;
                 partial_nf
             })
             .collect();
@@ -303,11 +462,12 @@ mod test {
             "#,
         )
         .unwrap();
-        let mut translation = Translation::default();
-        for (name, def) in ast.parser_map.iter() {
-            translation.add_toplevel_def(name.clone(), def);
-        }
         #[cfg(feature = "debug")]
-        println!("{}", translation.semi_nfs);
+        {
+            let translation = Translation::from(&ast);
+            println!("{}", translation.semi_nfs);
+        }
+        #[cfg(not(feature = "debug"))]
+        let _ = Translation::from(&ast);
     }
 }

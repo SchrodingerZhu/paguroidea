@@ -90,3 +90,34 @@ pub enum ParserExpr {
     ParserRef(syn::Ident),
     Ignore(Box<Self>),
 }
+
+pub enum SequenceIterator<'a> {
+    End,
+    Singleton(&'a ParserExpr),
+    Multiple(std::slice::Iter<'a, ParserExpr>),
+}
+
+impl<'a> From<&'a ParserExpr> for SequenceIterator<'a> {
+    fn from(value: &'a ParserExpr) -> Self {
+        match value {
+            ParserExpr::Seq(inner) => Self::Multiple(inner.iter()),
+            _ => Self::Singleton(value),
+        }
+    }
+}
+
+impl<'a> Iterator for SequenceIterator<'a> {
+    type Item = &'a ParserExpr;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            SequenceIterator::End => None,
+            SequenceIterator::Singleton(result) => {
+                let result = *result;
+                *self = Self::End;
+                Some(result)
+            }
+            SequenceIterator::Multiple(ref mut iter) => iter.next(),
+        }
+    }
+}
