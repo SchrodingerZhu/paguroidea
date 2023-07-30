@@ -124,6 +124,7 @@ impl NormalForm {
             | Self::Sequence(_, _, _, semact) => semact,
         }
     }
+
     pub fn semact_mut(&mut self) -> &mut SemAct {
         match self {
             Self::Empty(_, semact)
@@ -131,6 +132,7 @@ impl NormalForm {
             | Self::Sequence(_, _, _, semact) => semact,
         }
     }
+
     pub fn append_tailcall(&mut self) {
         match self {
             Self::Empty(_actions, _) => {
@@ -144,6 +146,7 @@ impl NormalForm {
             }
         }
     }
+
     pub fn append_pass_collector(&mut self, tag: Tag) {
         match self {
             Self::Empty(_actions, _) => {
@@ -157,6 +160,7 @@ impl NormalForm {
             }
         }
     }
+
     pub fn visible_bindings(&self, skip: usize) -> Vec<(&Ident, BoundTarget)> {
         match self {
             Self::Empty(actions, _) => actions
@@ -261,8 +265,8 @@ fn debug_print_test() {
     println!("{}", sequence);
 }
 
-#[derive(Default, Clone)]
 /// Well, it is not the notorius firewall.
+#[derive(Default, Clone)]
 pub struct NFTable(HashMap<Tag, Vec<NormalForm>>);
 
 impl Deref for NFTable {
