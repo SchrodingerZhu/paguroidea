@@ -142,6 +142,7 @@ impl Vector {
                 let on_success = &success_actions[rule_idx];
                 return quote! {
                     State::#label => {
+                        unsafe { ::pag_util::assume(idx <= input.len()) };
                         if input[idx..].starts_with(#literal) {
                             cursor = idx + #length;
                             #on_success
