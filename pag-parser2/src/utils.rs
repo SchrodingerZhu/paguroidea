@@ -31,6 +31,12 @@ pub(crate) use styled_write;
 #[derive(Clone)]
 pub struct Appendix<T>(pub T);
 
+impl<T> From<T> for Appendix<T> {
+    fn from(x: T) -> Self {
+        Self(x)
+    }
+}
+
 impl<T> Deref for Appendix<T> {
     type Target = T;
 
