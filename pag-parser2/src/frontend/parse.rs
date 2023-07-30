@@ -128,9 +128,7 @@ impl Parse for ParserRule {
 
         let mut action = None;
         if input.peek(syn::token::Brace) {
-            action = Some(CustomizedBlock(std::rc::Rc::new(
-                input.parse::<syn::Block>()?,
-            )));
+            action = Some(CodeBlock(std::rc::Rc::new(input.parse::<syn::Block>()?)));
         }
 
         Ok(Self { vars, action })

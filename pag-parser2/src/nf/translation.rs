@@ -251,13 +251,13 @@ impl Translation {
             .iter()
             .map(|rule| {
                 let semact = if let Some(action) = &rule.action {
-                    SemAct::CustomizedRoutine(action.clone())
+                    SemAct::Customized(action.clone())
                 } else if rule.vars.len() == 1 {
                     SemAct::infer(&rule.vars[0].expr)
                 } else {
                     SemAct::Gather
                 };
-                let mut partial_nf = if matches!(semact, SemAct::CustomizedRoutine(..)) {
+                let mut partial_nf = if matches!(semact, SemAct::Customized(..)) {
                     self.partial_nf_from_sequence::<true, _>(
                         rule.vars
                             .iter()
