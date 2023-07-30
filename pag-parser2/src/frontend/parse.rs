@@ -13,6 +13,7 @@ use syn::parse::{Parse, ParseStream};
 use syn::{bracketed, parenthesized, parse_quote, Error, Result, Token};
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(PartialEq, Eq)]
 enum IdentKind {
@@ -98,10 +99,10 @@ impl Parse for Ast {
 impl Parse for ParserDef {
     // (":" syn::Type)? = (ParserRule)|+
     fn parse(input: ParseStream) -> Result<Self> {
-        let ty = match input.parse::<Token![:]>() {
+        let ty = Rc::new(match input.parse::<Token![:]>() {
             Ok(_) => input.parse::<syn::Type>()?,
             Err(_) => parse_quote!(::pag_util::Span<'src>),
-        };
+        });
 
         input.parse::<Token![=]>()?;
 
@@ -150,7 +151,7 @@ impl Parse for VarBinding {
 
             if content.peek(Token![:]) {
                 content.parse::<Token![:]>()?;
-                ty = Some(content.parse::<syn::Type>()?);
+                ty = Some(Rc::new(content.parse::<syn::Type>()?));
             }
 
             if !content.is_empty() {
@@ -305,13 +306,15 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32, is_toplevel: bool) -> Resu
         if !is_toplevel
             && (input.peek(syn::Ident) || input.peek(syn::token::Paren) || input.peek(Token![#]))
         {
-            let (l_bp, r_bp) = (40, 41);
-            if l_bp < min_bp {
-                break;
+            let mut seq = vec![lhs];
+            while input.peek(syn::Ident) || input.peek(syn::token::Paren) || input.peek(Token![#]) {
+                let (l_bp, r_bp) = (40, 41);
+                if l_bp < min_bp {
+                    break;
+                }
+                seq.push(parse_parser_expr(input, r_bp, false)?);
             }
-            let rhs = parse_parser_expr(input, r_bp, false)?;
-            lhs = ParserExpr::Seq(Box::new(lhs), Box::new(rhs));
-            continue;
+            return Ok(ParserExpr::Seq(seq));
         }
         if input.peek(Token![*]) {
             let l_bp = 70;

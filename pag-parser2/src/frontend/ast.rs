@@ -9,13 +9,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub struct Ast {
-    pub entry: syn::Ident,
-    pub skip: Option<LexerExpr>,
-    pub lexer_map: HashMap<syn::Ident, LexerDef>,
-    pub parser_map: HashMap<syn::Ident, ParserDef>,
-}
-
 #[derive(Clone)]
 pub struct CodeBlock(pub Rc<syn::Block>);
 
@@ -45,13 +38,20 @@ impl std::hash::Hash for CodeBlock {
     }
 }
 
+pub struct Ast {
+    pub entry: syn::Ident,
+    pub skip: Option<LexerExpr>,
+    pub lexer_map: HashMap<syn::Ident, LexerDef>,
+    pub parser_map: HashMap<syn::Ident, ParserDef>,
+}
+
 pub struct LexerDef {
     pub idx: u32,
     pub expr: LexerExpr,
 }
 
 pub struct ParserDef {
-    pub ty: syn::Type, // TODO: syn::Type is huge, maybe we should box it or only keep the span
+    pub ty: Rc<syn::Type>,
     pub rules: Vec<ParserRule>,
 }
 
@@ -63,7 +63,7 @@ pub struct ParserRule {
 pub struct VarBinding {
     pub expr: ParserExpr,
     pub name: Option<syn::Ident>,
-    pub ty: Option<syn::Type>, // TODO: syn::Type is huge, maybe we should box it or only keep the span
+    pub ty: Option<Rc<syn::Type>>,
 }
 
 // TODO: how to express "bottom" & "any"?
@@ -82,36 +82,11 @@ pub enum LexerExpr {
 
 // TODO: how to express "select" & "ignore"?
 pub enum ParserExpr {
-    Seq(Box<Self>, Box<Self>),
+    Seq(Vec<Self>),
     Star(Box<Self>),
     Plus(Box<Self>),
     Opt(Box<Self>),
     LexerRef(syn::Ident),
     ParserRef(syn::Ident),
     Ignore(Box<Self>),
-}
-
-pub struct RightDeepIterator<'a> {
-    seq: Option<&'a ParserExpr>,
-}
-
-impl<'a> From<&'a ParserExpr> for RightDeepIterator<'a> {
-    fn from(expr: &'a ParserExpr) -> Self {
-        Self { seq: Some(expr) }
-    }
-}
-
-impl<'a> Iterator for RightDeepIterator<'a> {
-    type Item = &'a ParserExpr;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.seq {
-            Some(ParserExpr::Seq(a, b)) => {
-                self.seq = Some(b);
-                Some(a)
-            }
-            Some(_) => self.seq.take(),
-            None => None,
-        }
-    }
 }
