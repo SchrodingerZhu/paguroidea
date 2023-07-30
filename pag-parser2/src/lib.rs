@@ -6,8 +6,6 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-#![feature(box_patterns)]
-#[cfg(feature = "debug")]
-mod debug;
 mod frontend;
-// mod nf;
+mod nf;
+mod utils;
