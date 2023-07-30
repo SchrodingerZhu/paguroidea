@@ -88,23 +88,23 @@ pub enum InferredType {
 pub struct InferenceContext<'a> {
     /// Typed tags
     gamma: HashMap<Tag, InferredType>,
-    /// Type annotations from user (for toplevel)
-    annotations: &'a HashMap<Tag, Type>,
     /// Fully normalized terms
     nforms: &'a HashMap<Tag, Vec<NormalForm>>,
 }
+
 impl<'a> InferenceContext<'a> {
     /// Create a new inference context
     pub fn new(
         annotations: &'a HashMap<Tag, Type>,
         nforms: &'a HashMap<Tag, Vec<NormalForm>>,
     ) -> Self {
-        Self {
-            gamma: HashMap::new(),
-            annotations,
-            nforms,
-        }
+        let gamma = annotations
+            .iter()
+            .map(|(k, v)| (k.clone(), InferredType::Concrete(v.clone())))
+            .collect();
+        Self { gamma, nforms }
     }
+
     fn infer_gather<'i, I: Iterator<Item = BoundTarget<'i>>>(
         &mut self,
         mut tags: I,
@@ -113,14 +113,14 @@ impl<'a> InferenceContext<'a> {
             let mut types = vec![if let BoundTarget::Tag(tag) = tag {
                 self.infer(tag)?
             } else {
-                InferredType::Concrete(parse_quote! {::pag_runtime::Span<'src>})
+                InferredType::Concrete(parse_quote!(::pag_util::Span<'src>))
             }];
             for t in tags {
                 // If any inference fails, the whole inference fails
                 let ty = if let BoundTarget::Tag(t) = t {
                     self.infer(t)?
                 } else {
-                    InferredType::Concrete(parse_quote! {::pag_runtime::Span<'src>})
+                    InferredType::Concrete(parse_quote!(::pag_util::Span<'src>))
                 };
                 types.push(ty);
             }
@@ -133,9 +133,10 @@ impl<'a> InferenceContext<'a> {
             }
         } else {
             // no field, unit type
-            Some(InferredType::Concrete(parse_quote! {()}))
+            Some(InferredType::Concrete(parse_quote!(())))
         }
     }
+
     /// try infer all types, but may fail with incomplete type information.
     pub fn infer_all_types(mut self) -> HashMap<Tag, InferredType> {
         let mut typed = 0;
@@ -149,79 +150,71 @@ impl<'a> InferenceContext<'a> {
         }
         self.gamma
     }
+
     fn infer(&mut self, tag: &Tag) -> Option<InferredType> {
         if let Some(x) = self.gamma.get(tag) {
             return Some(x.clone());
         }
-        let target = if let Some(x) = self.annotations.get(tag) {
-            // If a concrete type annotation is provided, use it directly
-            InferredType::Concrete(x.clone())
-        } else {
-            // find first subexpression that fulfills inference
-            let nfs = self.nforms.get(tag)?;
-            let mut inferred = None;
-            for i in nfs.iter() {
-                let semact = i.semact();
-                match semact {
-                    SemAct::Recognize => {
-                        inferred.replace(InferredType::Concrete(parse_quote!(())));
+
+        // Find first subexpression that fulfills inference
+        let nfs = self.nforms.get(tag)?;
+        let mut inferred = None;
+        for i in nfs.iter() {
+            let semact = i.semact();
+            match semact {
+                SemAct::Recognize => {
+                    inferred.replace(InferredType::Concrete(parse_quote!(())));
+                    break;
+                }
+                // Token semantic action, the type is Span
+                SemAct::Token => {
+                    inferred.replace(InferredType::Concrete(parse_quote!(::pag_util::Span<'src>)));
+                    break;
+                }
+                // Customized routine without type annotation, cannot infer
+                SemAct::CustomizedRoutine(..) => continue,
+                // Nested routine for one or more, the type is unit.
+                SemAct::OneOrMoreNested => {
+                    inferred.replace(InferredType::Concrete(parse_quote!(())));
+                    break;
+                }
+                SemAct::Gather => {
+                    let visible = i.visible_bindings(0);
+                    if let Some(gather_type) = self.infer_gather(visible.into_iter().map(|x| x.1)) {
+                        inferred.replace(gather_type);
                         break;
                     }
-                    // Token semantic action, the type is Span
-                    SemAct::Token => {
-                        inferred.replace(InferredType::Concrete(parse_quote!(
-                            ::pag_runtime::Span<'src>
-                        )));
+                }
+                SemAct::ZeroOrMore | SemAct::Option | SemAct::OneOrMoreToplevel => {
+                    let mapper = |ty: InferredType| {
+                        if matches!(semact, SemAct::Option) {
+                            InferredType::Option(Box::new(ty))
+                        } else {
+                            InferredType::Collector(Box::new(ty))
+                        }
+                    };
+                    // Skip epsilon production, this is safe since OneOrMoreToplevel will never be empty
+                    if let NormalForm::Empty(x, _) = i {
+                        if x.is_empty() {
+                            continue;
+                        }
+                    }
+                    // skip the trailing part of OneOrMoreToplevel
+                    let visible =
+                        i.visible_bindings(if matches!(semact, SemAct::OneOrMoreToplevel) {
+                            1
+                        } else {
+                            0
+                        });
+                    if let Some(gather_type) = self.infer_gather(visible.into_iter().map(|x| x.1)) {
+                        inferred.replace(mapper(gather_type));
                         break;
-                    }
-                    // Customized routine without type annotation, cannot infer
-                    SemAct::CustomizedRoutine(..) => continue,
-                    // Nested routine for one or more, the type is unit.
-                    SemAct::OneOrMoreNested => {
-                        inferred.replace(InferredType::Concrete(parse_quote!(())));
-                        break;
-                    }
-                    SemAct::Gather => {
-                        let visible = i.visible_bindings(0);
-                        if let Some(gather_type) =
-                            self.infer_gather(visible.into_iter().map(|x| x.1))
-                        {
-                            inferred.replace(gather_type);
-                            break;
-                        }
-                    }
-                    SemAct::ZeroOrMore | SemAct::Option | SemAct::OneOrMoreToplevel => {
-                        let mapper = |ty: InferredType| {
-                            if matches!(semact, SemAct::Option) {
-                                InferredType::Option(Box::new(ty))
-                            } else {
-                                InferredType::Collector(Box::new(ty))
-                            }
-                        };
-                        // Skip epsilon production, this is safe since OneOrMoreToplevel will never be empty
-                        if let NormalForm::Empty(x, _) = i {
-                            if x.is_empty() {
-                                continue;
-                            }
-                        }
-                        // skip the trailing part of OneOrMoreToplevel
-                        let visible =
-                            i.visible_bindings(if matches!(semact, SemAct::OneOrMoreToplevel) {
-                                1
-                            } else {
-                                0
-                            });
-                        if let Some(gather_type) =
-                            self.infer_gather(visible.into_iter().map(|x| x.1))
-                        {
-                            inferred.replace(mapper(gather_type));
-                            break;
-                        }
                     }
                 }
             }
-            inferred?
-        };
+        }
+
+        let target = inferred?;
         self.gamma.insert(tag.clone(), target.clone());
         Some(target)
     }

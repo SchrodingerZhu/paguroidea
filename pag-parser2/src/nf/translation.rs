@@ -33,6 +33,7 @@ impl Translation {
     fn start_ignoring(&mut self) {
         self.ignoring_cnt += 1;
     }
+
     /// Exit ignoring mode
     fn end_ignoring(&mut self) {
         self.ignoring_cnt -= 1;
@@ -48,12 +49,14 @@ impl Translation {
         self.output_cnt += 1;
         result
     }
+
     /// Allocate a new tag for anonymous routines.
     fn new_anonymous_tag(&mut self) -> Tag {
         let result = Tag::Anonymous(self.anonymous_cnt);
         self.anonymous_cnt += 1;
         result
     }
+
     /// Construct a normal form from a sequence of parser expressions. The semact is always `Recognize`.
     fn partial_nf_from_sequence<
         'a,
@@ -101,9 +104,11 @@ impl Translation {
             }
         }
     }
+
     fn add_nf(&mut self, tag: Tag, nf: NormalForm) {
         self.semi_nfs.entry(tag).or_default().push(nf);
     }
+
     fn add_nf_from_anonymous_expr(&mut self, expr: &ParserExpr, tag: &Tag) {
         match expr {
             ParserExpr::Seq(..) => {
@@ -194,9 +199,9 @@ impl Translation {
             }
             ParserExpr::ParserRef(_) => unreachable!("cannot create nf from parser ref"),
             ParserExpr::Ignore(_) => unreachable!("cannot create nf from ignore"),
-            ParserExpr::Hinted(_, _) => unreachable!("cannot create nf from hinted"),
         }
     }
+
     fn add_anonymous_rule<const IGNORE_UNNAMED: bool>(
         &mut self,
         expr: &ParserExpr,
@@ -219,11 +224,6 @@ impl Translation {
                 self.start_ignoring();
                 let (tag, output) = self.add_anonymous_rule::<IGNORE_UNNAMED>(expr, named);
                 self.end_ignoring();
-                (tag, output)
-            }
-            ParserExpr::Hinted(expr, hint) => {
-                let (tag, output) = self.add_anonymous_rule::<IGNORE_UNNAMED>(expr, named);
-                self.hints.insert(tag.clone(), hint.clone());
                 (tag, output)
             }
             _ => {
