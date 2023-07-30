@@ -172,7 +172,7 @@ impl<'a> InferenceContext<'a> {
                     break;
                 }
                 // Customized routine without type annotation, cannot infer
-                SemAct::CustomizedRoutine(..) => continue,
+                SemAct::Customized(..) => continue,
                 // Nested routine for one or more, the type is unit.
                 SemAct::OneOrMoreNested => {
                     inferred.replace(InferredType::Concrete(parse_quote!(())));

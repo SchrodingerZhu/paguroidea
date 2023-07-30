@@ -6,7 +6,7 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use crate::frontend::{CustomizedBlock, ParserExpr};
+use crate::frontend::{CodeBlock, ParserExpr};
 
 ///
 /// ```
@@ -19,7 +19,7 @@ use crate::frontend::{CustomizedBlock, ParserExpr};
 // those normal form without SemAct will be treated as plain scanner.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SemAct {
-    CustomizedRoutine(CustomizedBlock),
+    Customized(CodeBlock),
     /// Gather inner data. If multiple is selected, return a tuple.
     /// If only one is selected, return target data.
     Gather,
@@ -57,7 +57,7 @@ impl SemAct {
 impl std::fmt::Display for SemAct {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SemAct::CustomizedRoutine(x) => write!(f, "{:?}", std::rc::Rc::as_ptr(&x.0)),
+            SemAct::Customized(x) => write!(f, "{:?}", std::rc::Rc::as_ptr(&x.0)),
             SemAct::Gather => write!(f, "Gather"),
             SemAct::Option => write!(f, "Option"),
             SemAct::ZeroOrMore => write!(f, "ZeroOrMore"),
