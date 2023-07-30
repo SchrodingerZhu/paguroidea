@@ -9,7 +9,6 @@ use syn::{Ident, Type};
 
 use super::NFTable;
 use super::{semact::SemAct, Action, NormalForm, Tag};
-use crate::frontend::RightDeepIterator;
 use crate::frontend::{ParserDef, ParserExpr};
 
 #[derive(Default)]

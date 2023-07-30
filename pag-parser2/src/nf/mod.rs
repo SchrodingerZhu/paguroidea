@@ -6,21 +6,23 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-mod inference;
 mod normalization;
 mod semact;
-mod translation;
+//mod translation;
+
+use crate::utils::Appendix;
 
 use std::{
     collections::{HashMap, VecDeque},
     ops::{Deref, DerefMut},
+    rc::Rc,
 };
 
 use quote::format_ident;
 use syn::Ident;
 
 #[cfg(feature = "debug")]
-use crate::debug::{styled, styled_write};
+use crate::utils::{styled, styled_write};
 
 use self::semact::SemAct;
 
@@ -104,11 +106,34 @@ impl std::fmt::Display for Action {
     }
 }
 
+#[derive(Clone)]
+pub enum AbstractType {
+    /// Concrete type without any type parameter.
+    Concrete(Rc<syn::Type>),
+    Option(Box<Self>),
+    Tuple(Vec<Self>),
+    Collector(Box<Self>),
+}
+
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NormalForm {
-    Empty(Vec<(Tag, Option<Ident>)>, SemAct),
-    Unexpanded(Vec<Action>, SemAct),
-    Sequence(Ident, Option<Ident>, Vec<Action>, SemAct),
+    Empty {
+        actions: Vec<Action>,
+        semact: SemAct,
+        ty: Appendix<AbstractType>,
+    },
+    Unexpanded {
+        actions: Vec<Action>,
+        semact: SemAct,
+        ty: Appendix<AbstractType>,
+    },
+    Sequence {
+        token: Ident,
+        token_output: Option<Ident>,
+        actions: Vec<Action>,
+        semact: SemAct,
+        ty: Appendix<AbstractType>,
+    },
 }
 
 pub enum BoundTarget<'a> {
@@ -119,84 +144,67 @@ pub enum BoundTarget<'a> {
 impl NormalForm {
     pub fn semact(&self) -> &SemAct {
         match self {
-            Self::Empty(_, semact)
-            | Self::Unexpanded(_, semact)
-            | Self::Sequence(_, _, _, semact) => semact,
+            Self::Empty { semact, .. } => semact,
+            Self::Unexpanded { semact, .. } => semact,
+            Self::Sequence { semact, .. } => semact,
         }
     }
 
     pub fn semact_mut(&mut self) -> &mut SemAct {
         match self {
-            Self::Empty(_, semact)
-            | Self::Unexpanded(_, semact)
-            | Self::Sequence(_, _, _, semact) => semact,
+            Self::Empty { semact, .. } => semact,
+            Self::Unexpanded { semact, .. } => semact,
+            Self::Sequence { semact, .. } => semact,
         }
     }
 
-    pub fn append_tailcall(&mut self) {
+    pub fn actions(&self) -> &[Action] {
         match self {
-            Self::Empty(_actions, _) => {
-                unreachable!("empty cannot be tail called, otherwise there will be ambiguity")
-            }
-            Self::Unexpanded(actions, _) => {
-                actions.push(Action::TailCall);
-            }
-            Self::Sequence(_, _, actions, _) => {
-                actions.push(Action::TailCall);
-            }
+            Self::Empty { actions, .. } => actions,
+            Self::Unexpanded { actions, .. } => actions,
+            Self::Sequence { actions, .. } => actions,
         }
     }
 
-    pub fn append_pass_collector(&mut self, tag: Tag) {
+    pub fn actions_mut(&mut self) -> &mut Vec<Action> {
         match self {
-            Self::Empty(_actions, _) => {
-                unreachable!("empty cannot be followed by another subroutine, otherwise there will be ambiguity")
-            }
-            Self::Unexpanded(actions, _) => {
-                actions.push(Action::PassCollector(tag));
-            }
-            Self::Sequence(_, _, actions, _) => {
-                actions.push(Action::PassCollector(tag));
-            }
+            Self::Empty { actions, .. } => actions,
+            Self::Unexpanded { actions, .. } => actions,
+            Self::Sequence { actions, .. } => actions,
         }
     }
 
-    pub fn visible_bindings(&self, skip: usize) -> Vec<(&Ident, BoundTarget)> {
-        match self {
-            Self::Empty(actions, _) => actions
-                .last()
-                .and_then(|(tag, ident)| Some((ident.as_ref()?, BoundTarget::Tag(tag))))
-                .into_iter()
-                .collect(),
-            Self::Unexpanded(actions, _) | Self::Sequence(_, _, actions, _) => {
-                let mut acc = VecDeque::new();
-                for act in actions.iter().rev().skip(skip) {
-                    match act {
-                        Action::Shift { tag, output } => {
-                            if let Some(ident) = output {
-                                acc.push_front((ident, BoundTarget::Tag(tag)));
-                            }
-                        }
-                        Action::Reduce { tag, output } => {
-                            if let Some(ident) = output {
-                                acc.push_front((ident, BoundTarget::Tag(tag)));
-                            }
-                            break;
-                        }
-                        Action::PassCollector(..) => continue,
-                        Action::TailCall => continue,
+    pub fn visible_bindings(&self, skip: usize) -> Box<[(&Ident, BoundTarget)]> {
+        let mut acc = VecDeque::new();
+        for act in self.actions().iter().rev().skip(skip) {
+            match act {
+                Action::Shift { tag, output } => {
+                    if let Some(ident) = output {
+                        acc.push_front((ident, BoundTarget::Tag(tag)));
                     }
                 }
-                if let Self::Sequence(_, Some(tk), _, _) = self {
-                    if acc.len() == actions.len() - skip
-                        && !matches!(actions.first(), Some(Action::Reduce { .. }))
-                    {
-                        acc.push_front((tk, BoundTarget::Token));
+                Action::Reduce { tag, output } => {
+                    if let Some(ident) = output {
+                        acc.push_front((ident, BoundTarget::Tag(tag)));
                     }
+                    break;
                 }
-                acc.into_iter().collect()
+                Action::PassCollector(..) => continue,
+                Action::TailCall => continue,
             }
         }
+        if let Self::Sequence {
+            token_output: Some(tk),
+            ..
+        } = self
+        {
+            if acc.len() == self.actions().len() - skip
+                && !matches!(self.actions().first(), Some(Action::Reduce { .. }))
+            {
+                acc.push_front((tk, BoundTarget::Token));
+            }
+        }
+        acc.into_iter().collect()
     }
 }
 
@@ -204,27 +212,28 @@ impl NormalForm {
 impl std::fmt::Display for NormalForm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Empty(actions, _) => {
+            Self::Empty { actions, .. } => {
                 write!(f, "ε")?;
-                for (tag, output) in actions.iter() {
-                    if let Some(name) = output {
-                        styled_write!(f, Color::Blue, "\t{tag}[{name}]")?;
-                    } else {
-                        styled_write!(f, Color::Blue, "\t{tag}")?;
-                    }
+                for action in actions {
+                    write!(f, "\t{}", action)?;
                 }
             }
-            Self::Unexpanded(actions, _) => {
+            Self::Unexpanded { actions, .. } => {
                 write!(f, "{}", actions[0])?;
                 for action in &actions[1..] {
                     write!(f, "\t{}", action)?;
                 }
             }
-            Self::Sequence(terminal, var, actions, _) => {
-                if let Some(tk) = var {
-                    styled_write!(f, Color::Yellow, "{terminal}[{tk}]")?;
+            Self::Sequence {
+                token,
+                token_output,
+                actions,
+                ..
+            } => {
+                if let Some(tk) = token_output {
+                    styled_write!(f, Color::Yellow, "{token}[{tk}]")?;
                 } else {
-                    styled_write!(f, Color::Yellow, "{terminal}")?;
+                    styled_write!(f, Color::Yellow, "{token}")?;
                 }
                 for action in actions.iter() {
                     write!(f, "\t{}", action)?;
@@ -239,10 +248,10 @@ impl std::fmt::Display for NormalForm {
 #[test]
 fn debug_print_test() {
     use quote::format_ident;
-    let sequence = NormalForm::Sequence(
-        format_ident!("TEST"),
-        Some(format_ident!("x")),
-        vec![
+    let sequence = NormalForm::Sequence {
+        token: format_ident!("TEST"),
+        token_output: Some(format_ident!("x")),
+        actions: vec![
             Action::Shift {
                 tag: Tag::Toplevel(format_ident!("a")),
                 output: None,
@@ -260,8 +269,9 @@ fn debug_print_test() {
                 output: None,
             },
         ],
-        SemAct::Gather,
-    );
+        semact: SemAct::Gather,
+        ty: Appendix(AbstractType::Concrete(Rc::new(syn::parse_quote!(u32)))),
+    };
     println!("{}", sequence);
 }
 
@@ -316,10 +326,10 @@ impl std::fmt::Display for NFTable {
 #[test]
 fn debug_print_nf_table() {
     use quote::format_ident;
-    let sequence = NormalForm::Sequence(
-        format_ident!("TEST"),
-        Some(format_ident!("x")),
-        vec![
+    let sequence = NormalForm::Sequence {
+        token: format_ident!("TEST"),
+        token_output: Some(format_ident!("x")),
+        actions: vec![
             Action::Shift {
                 tag: Tag::Toplevel(format_ident!("a")),
                 output: None,
@@ -337,15 +347,23 @@ fn debug_print_nf_table() {
                 output: None,
             },
         ],
-        SemAct::Gather,
-    );
-    let empty = NormalForm::Empty(
-        vec![
-            (Tag::Toplevel(format_ident!("a")), None),
-            (Tag::Toplevel(format_ident!("b")), Some(format_ident!("x"))),
+        semact: SemAct::Gather,
+        ty: Appendix(AbstractType::Concrete(Rc::new(syn::parse_quote!(u32)))),
+    };
+    let empty = NormalForm::Empty {
+        actions: vec![
+            Action::Reduce {
+                tag: Tag::Toplevel(format_ident!("b")),
+                output: Some(format_ident!("x")),
+            },
+            Action::Reduce {
+                tag: Tag::Toplevel(format_ident!("c")),
+                output: Some(format_ident!("y")),
+            },
         ],
-        SemAct::Gather,
-    );
+        semact: SemAct::Gather,
+        ty: Appendix(AbstractType::Concrete(Rc::new(syn::parse_quote!(u32)))),
+    };
     let table = NFTable(
         vec![
             (
