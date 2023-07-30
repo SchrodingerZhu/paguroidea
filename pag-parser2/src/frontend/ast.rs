@@ -17,30 +17,29 @@ pub struct Ast {
 }
 
 #[derive(Clone)]
-#[repr(transparent)]
-pub struct CustomizedBlock(pub Rc<syn::Block>);
+pub struct CodeBlock(pub Rc<syn::Block>);
 
-impl PartialEq for CustomizedBlock {
+impl PartialEq for CodeBlock {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
     }
 }
 
-impl Eq for CustomizedBlock {}
+impl Eq for CodeBlock {}
 
-impl PartialOrd for CustomizedBlock {
+impl PartialOrd for CodeBlock {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Rc::as_ptr(&self.0).partial_cmp(&Rc::as_ptr(&other.0))
     }
 }
 
-impl Ord for CustomizedBlock {
+impl Ord for CodeBlock {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         Rc::as_ptr(&self.0).cmp(&Rc::as_ptr(&other.0))
     }
 }
 
-impl std::hash::Hash for CustomizedBlock {
+impl std::hash::Hash for CodeBlock {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         Rc::as_ptr(&self.0).hash(state)
     }
@@ -52,19 +51,19 @@ pub struct LexerDef {
 }
 
 pub struct ParserDef {
-    pub ty: syn::Type,
+    pub ty: syn::Type, // TODO: syn::Type is huge, maybe we should box it or only keep the span
     pub rules: Vec<ParserRule>,
 }
 
 pub struct ParserRule {
     pub vars: Vec<VarBinding>,
-    pub action: Option<CustomizedBlock>,
+    pub action: Option<CodeBlock>,
 }
 
 pub struct VarBinding {
     pub expr: ParserExpr,
     pub name: Option<syn::Ident>,
-    pub ty: Option<syn::Type>
+    pub ty: Option<syn::Type>, // TODO: syn::Type is huge, maybe we should box it or only keep the span
 }
 
 // TODO: how to express "bottom" & "any"?
