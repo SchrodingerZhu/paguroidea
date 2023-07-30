@@ -100,7 +100,7 @@ impl Parse for ParserDef {
     fn parse(input: ParseStream) -> Result<Self> {
         let ty = match input.parse::<Token![:]>() {
             Ok(_) => input.parse::<syn::Type>()?,
-            Err(_) => parse_quote!(&'src str),
+            Err(_) => parse_quote!(::pag_util::Span<'src>),
         };
 
         input.parse::<Token![=]>()?;
@@ -140,7 +140,7 @@ impl Parse for ParserRule {
 impl Parse for VarBinding {
     // ParserExpr ("[" syn::Ident (":" syn::Type)? "]")?
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut expr = input.parse::<ParserExpr>()?;
+        let expr = input.parse::<ParserExpr>()?;
 
         let mut name = None;
         let mut ty = None;
@@ -159,10 +159,8 @@ impl Parse for VarBinding {
                 return Err(content.error("expected `]`"));
             }
         }
-        if let Some(ty) = ty {
-            expr = ParserExpr::Hinted(Box::new(expr), ty);
-        }
-        Ok(Self { expr, name })
+
+        Ok(Self { expr, name, ty })
     }
 }
 
@@ -317,15 +315,6 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32, is_toplevel: bool) -> Resu
             lhs = ParserExpr::Seq(Box::new(lhs), Box::new(rhs));
             continue;
         }
-        fn peek_and_parse_type(input: ParseStream, expr: ParserExpr) -> Result<ParserExpr> {
-            Ok(if input.peek(Token!(:)) {
-                input.parse::<Token!(:)>()?;
-                let ty = input.parse::<syn::Type>()?;
-                ParserExpr::Hinted(Box::new(expr), ty)
-            } else {
-                expr
-            })
-        }
         if input.peek(Token![*]) {
             let l_bp = 70;
             if l_bp < min_bp {
@@ -333,7 +322,6 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32, is_toplevel: bool) -> Resu
             }
             input.parse::<Token![*]>()?;
             lhs = ParserExpr::Star(Box::new(lhs));
-            lhs = peek_and_parse_type(input, lhs)?;
             continue;
         }
         if input.peek(Token![+]) {
@@ -343,7 +331,6 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32, is_toplevel: bool) -> Resu
             }
             input.parse::<Token![+]>()?;
             lhs = ParserExpr::Plus(Box::new(lhs));
-            lhs = peek_and_parse_type(input, lhs)?;
             continue;
         }
         if input.peek(Token![?]) {
@@ -378,7 +365,6 @@ mod test {
     #[test]
     fn test_parser_expr() {
         syn::parse_str::<ParserExpr>(r#"(A? b c* D+ F?)"#).unwrap();
-        syn::parse_str::<ParserExpr>(r#"(A? b c* (key value*:Vec<_>)+:HashMap<_, _> F?)"#).unwrap();
     }
 
     #[test]
