@@ -13,7 +13,7 @@ mod translation;
 
 use std::{
     collections::{HashMap, VecDeque},
-    ops::Deref,
+    ops::{Deref, DerefMut},
 };
 
 use quote::format_ident;
@@ -51,7 +51,7 @@ impl std::fmt::Display for Tag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Tag::Toplevel(ident) => write!(f, "{ident}"),
-            Tag::Anonymous(index) => styled_write!(f, Style::new().italic(), "_{index}"),
+            Tag::Anonymous(index) => styled_write!(f, Style::new().italic(), "_A{index}"),
         }
     }
 }
@@ -75,7 +75,9 @@ pub enum Action {
         output: Option<Ident>,
     },
     /// Specialized action for tail call optimization.
-    TailCall
+    TailCall,
+    /// Specialized action for passing collector to subroutines.
+    PassCollector(Tag),
 }
 
 #[cfg(feature = "debug")]
@@ -97,6 +99,7 @@ impl std::fmt::Display for Action {
                 }
             }
             Self::TailCall => styled_write!(f, Color::Green, "↻"),
+            Self::PassCollector(tag) => styled_write!(f, Color::Green, "⇒{tag}"),
         }
     }
 }
@@ -121,6 +124,39 @@ impl NormalForm {
             | Self::Sequence(_, _, _, semact) => semact,
         }
     }
+    pub fn semact_mut(&mut self) -> &mut SemAct {
+        match self {
+            Self::Empty(_, semact)
+            | Self::Unexpanded(_, semact)
+            | Self::Sequence(_, _, _, semact) => semact,
+        }
+    }
+    pub fn append_tailcall(&mut self) {
+        match self {
+            Self::Empty(_actions, _) => {
+                unreachable!("empty cannot be tail called, otherwise there will be ambiguity")
+            }
+            Self::Unexpanded(actions, _) => {
+                actions.push(Action::TailCall);
+            }
+            Self::Sequence(_, _, actions, _) => {
+                actions.push(Action::TailCall);
+            }
+        }
+    }
+    pub fn append_pass_collector(&mut self, tag: Tag) {
+        match self {
+            Self::Empty(_actions, _) => {
+                unreachable!("empty cannot be followed by another subroutine, otherwise there will be ambiguity")
+            }
+            Self::Unexpanded(actions, _) => {
+                actions.push(Action::PassCollector(tag));
+            }
+            Self::Sequence(_, _, actions, _) => {
+                actions.push(Action::PassCollector(tag));
+            }
+        }
+    }
     pub fn visible_bindings(&self, skip: usize) -> Vec<(&Ident, BoundTarget)> {
         match self {
             Self::Empty(actions, _) => actions
@@ -143,6 +179,7 @@ impl NormalForm {
                             }
                             break;
                         }
+                        Action::PassCollector(..) => continue,
                         Action::TailCall => continue,
                     }
                 }
@@ -224,6 +261,7 @@ fn debug_print_test() {
     println!("{}", sequence);
 }
 
+#[derive(Default, Clone)]
 /// Well, it is not the notorius firewall.
 pub struct NFTable(HashMap<Tag, Vec<NormalForm>>);
 
@@ -232,6 +270,12 @@ impl Deref for NFTable {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl DerefMut for NFTable {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

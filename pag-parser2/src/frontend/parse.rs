@@ -140,7 +140,7 @@ impl Parse for ParserRule {
 impl Parse for VarBinding {
     // ParserExpr ("[" syn::Ident (":" syn::Type)? "]")?
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut expr = input.parse::<ParserExpr>()?;
+        let mut expr = parse_parser_expr(input, 0, true)?;
 
         let mut name = None;
         let mut ty = None;
@@ -276,12 +276,12 @@ fn parse_lexer_expr(input: ParseStream, min_bp: u32) -> Result<LexerExpr> {
 
 impl Parse for ParserExpr {
     fn parse(input: ParseStream) -> Result<Self> {
-        parse_parser_expr(input, 0)
+        parse_parser_expr(input, 0, false)
     }
 }
 
 // pratt parsing
-fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<ParserExpr> {
+fn parse_parser_expr(input: ParseStream, min_bp: u32, is_toplevel: bool) -> Result<ParserExpr> {
     let mut lhs = 'lhs: {
         if input.peek(syn::Ident) {
             let ident = input.parse::<syn::Ident>()?.unraw();
@@ -299,19 +299,19 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<ParserExpr> {
         if input.peek(Token![#]) {
             input.parse::<Token![#]>()?;
             let r_bp = 60;
-            let rhs = parse_parser_expr(input, r_bp)?;
+            let rhs = parse_parser_expr(input, r_bp, is_toplevel)?;
             break 'lhs ParserExpr::Ignore(Box::new(rhs));
         }
         return Err(input.error("expected parser expression"));
     };
 
     loop {
-        if input.peek(syn::Ident) || input.peek(syn::token::Paren) || input.peek(Token![#]) {
+        if !is_toplevel && (input.peek(syn::Ident) || input.peek(syn::token::Paren) || input.peek(Token![#])) {
             let (l_bp, r_bp) = (40, 41);
             if l_bp < min_bp {
                 break;
             }
-            let rhs = parse_parser_expr(input, r_bp)?;
+            let rhs = parse_parser_expr(input, r_bp, is_toplevel)?;
             lhs = ParserExpr::Seq(Box::new(lhs), Box::new(rhs));
             continue;
         }
