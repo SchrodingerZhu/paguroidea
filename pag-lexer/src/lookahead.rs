@@ -51,6 +51,7 @@ fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream 
     };
     quote! {
         'lookahead: {
+            unsafe { ::pag_util::assume(idx <= input.len()) };
             for chunk in input[idx..].chunks_exact(16) {
                 use core::simd::*;
                 let data = u8x16::from_slice(chunk);
@@ -90,6 +91,7 @@ fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream 
         Kind::Negative => quote! { trailing_zeros },
     };
     quote! {
+        unsafe { ::pag_util::assume(idx <= input.len()) };
         for chunk in input[idx..].chunks_exact(16) {
             use core::simd::*;
             let data = u8x16::from_slice(chunk);

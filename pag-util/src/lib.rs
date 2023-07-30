@@ -13,6 +13,7 @@ pub unsafe fn assume(cond: bool) {
 #[rustfmt::skip]
 pub fn lookahead_lut(input: &[u8], mut idx: usize, table: &[u8; 256], shift: usize) -> usize {
     let mask = 1 << shift;
+    unsafe { assume(idx <= input.len()) };
     for chunk in input[idx..].chunks_exact(8) {
         if table[chunk[0] as usize] & mask == 0 {
         if table[chunk[1] as usize] & mask == 0 {
