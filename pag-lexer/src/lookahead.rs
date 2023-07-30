@@ -157,7 +157,7 @@ impl LoopOptimizer {
         let table_size = self.global_lut.len();
         let table = self.global_lut.iter().map(|x| quote!([#(#x,)*]));
         Some(quote! {
-            const GLOBAL_LUT : [[u8; 256]; #table_size] = [ #(#table,)* ];
+            const GLOBAL_LUT: [[u8; 256]; #table_size] = [ #(#table,)* ];
         })
     }
 

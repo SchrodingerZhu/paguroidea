@@ -140,7 +140,7 @@ impl Parse for ParserRule {
 impl Parse for VarBinding {
     // ParserExpr ("[" syn::Ident (":" syn::Type)? "]")?
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut expr = parse_parser_expr(input, 0, true)?;
+        let mut expr = input.parse::<ParserExpr>()?;
 
         let mut name = None;
         let mut ty = None;
@@ -276,7 +276,7 @@ fn parse_lexer_expr(input: ParseStream, min_bp: u32) -> Result<LexerExpr> {
 
 impl Parse for ParserExpr {
     fn parse(input: ParseStream) -> Result<Self> {
-        parse_parser_expr(input, 0, false)
+        parse_parser_expr(input, 0, true)
     }
 }
 
@@ -294,24 +294,26 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32, is_toplevel: bool) -> Resu
         if input.peek(syn::token::Paren) {
             let content;
             parenthesized!(content in input);
-            break 'lhs content.parse::<ParserExpr>()?;
+            break 'lhs parse_parser_expr(&content, 0, false)?;
         }
-        if input.peek(Token![#]) {
+        if !is_toplevel && input.peek(Token![#]) {
             input.parse::<Token![#]>()?;
             let r_bp = 60;
-            let rhs = parse_parser_expr(input, r_bp, is_toplevel)?;
+            let rhs = parse_parser_expr(input, r_bp, false)?;
             break 'lhs ParserExpr::Ignore(Box::new(rhs));
         }
         return Err(input.error("expected parser expression"));
     };
 
     loop {
-        if !is_toplevel && (input.peek(syn::Ident) || input.peek(syn::token::Paren) || input.peek(Token![#])) {
+        if !is_toplevel
+            && (input.peek(syn::Ident) || input.peek(syn::token::Paren) || input.peek(Token![#]))
+        {
             let (l_bp, r_bp) = (40, 41);
             if l_bp < min_bp {
                 break;
             }
-            let rhs = parse_parser_expr(input, r_bp, is_toplevel)?;
+            let rhs = parse_parser_expr(input, r_bp, false)?;
             lhs = ParserExpr::Seq(Box::new(lhs), Box::new(rhs));
             continue;
         }
@@ -375,8 +377,8 @@ mod test {
 
     #[test]
     fn test_parser_expr() {
-        syn::parse_str::<ParserExpr>(r#"A? b c* D+ F?"#).unwrap();
-        syn::parse_str::<ParserExpr>(r#"A? b c* (key value*:Vec<_>)+:HashMap<_, _> F?"#).unwrap();
+        syn::parse_str::<ParserExpr>(r#"(A? b c* D+ F?)"#).unwrap();
+        syn::parse_str::<ParserExpr>(r#"(A? b c* (key value*:Vec<_>)+:HashMap<_, _> F?)"#).unwrap();
     }
 
     #[test]
