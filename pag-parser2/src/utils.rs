@@ -28,6 +28,7 @@ pub(crate) use styled;
 pub(crate) use styled_write;
 
 /// Appendix that does not count in equality/ordinality/hashing.
+#[repr(transparent)]
 #[derive(Clone)]
 pub struct Appendix<T>(pub T);
 
