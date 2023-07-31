@@ -5,21 +5,20 @@
 // license <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
-
-mod normalization;
 mod semact;
 mod translation;
+mod normalization;
 
 use crate::utils::Appendix;
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     ops::{Deref, DerefMut},
     rc::Rc,
 };
 
 use quote::format_ident;
-use syn::Ident;
+use syn::{Ident, Type};
 
 #[cfg(feature = "debug")]
 use crate::utils::{styled, styled_write};
@@ -64,7 +63,7 @@ impl std::fmt::Display for Tag {
 /// reducing from left to right, we maintain the context of which the current
 /// semantic action to reduce, and always assign "__0", "__1", "__2". When a [`Reduce`] is
 /// encountered, we start over from "__0".
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Action {
     Shift {
         /// Parser routine to call.
@@ -73,7 +72,8 @@ pub enum Action {
     },
     Reduce {
         /// Reduction routine to call.
-        tag: Tag,
+        semact: SemAct,
+        hint: Option<Appendix<Rc<Type>>>,
         output: Option<Ident>,
     },
     /// Specialized action for tail call optimization.
@@ -86,11 +86,11 @@ pub enum Action {
 impl std::fmt::Display for Action {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Reduce { tag, output } => {
+            Self::Reduce { semact, output, .. } => {
                 if let Some(name) = output {
-                    styled_write!(f, Color::Blue, "{tag}[{name}]")
+                    styled_write!(f, Color::Blue, "{semact}[{name}]")
                 } else {
-                    styled_write!(f, Color::Blue, "{tag}")
+                    styled_write!(f, Color::Blue, "{semact}")
                 }
             }
             Self::Shift { tag, output } => {
@@ -143,16 +143,10 @@ pub enum NormalForm {
     },
     Sequence {
         token: Ident,
-        token_output: Option<Ident>,
         actions: Vec<Action>,
         semact: SemAct,
         ty: Appendix<AbstractType>,
     },
-}
-
-pub enum BoundTarget<'a> {
-    Tag(&'a Tag),
-    Token,
 }
 
 impl NormalForm {
@@ -203,39 +197,6 @@ impl NormalForm {
             Self::Sequence { ty, .. } => ty,
         }
     }
-
-    pub fn visible_bindings(&self, skip: usize) -> Box<[(&Ident, BoundTarget)]> {
-        let mut acc = VecDeque::new();
-        for act in self.actions().iter().rev().skip(skip) {
-            match act {
-                Action::Shift { tag, output } => {
-                    if let Some(ident) = output {
-                        acc.push_front((ident, BoundTarget::Tag(tag)));
-                    }
-                }
-                Action::Reduce { tag, output } => {
-                    if let Some(ident) = output {
-                        acc.push_front((ident, BoundTarget::Tag(tag)));
-                    }
-                    break;
-                }
-                Action::PassCollector(..) => continue,
-                Action::TailCall => continue,
-            }
-        }
-        if let Self::Sequence {
-            token_output: Some(tk),
-            ..
-        } = self
-        {
-            if acc.len() == self.actions().len() - skip
-                && !matches!(self.actions().first(), Some(Action::Reduce { .. }))
-            {
-                acc.push_front((tk, BoundTarget::Token));
-            }
-        }
-        acc.into_iter().collect()
-    }
 }
 
 #[cfg(feature = "debug")]
@@ -262,16 +223,11 @@ impl std::fmt::Display for NormalForm {
             }
             Self::Sequence {
                 token,
-                token_output,
                 actions,
                 semact,
                 ..
             } => {
-                if let Some(tk) = token_output {
-                    styled_write!(f, Color::Yellow, "{token}[{tk}]")?;
-                } else {
-                    styled_write!(f, Color::Yellow, "{token}")?;
-                }
+                styled_write!(f, Color::Yellow, "{token}")?;
                 for action in actions.iter() {
                     write!(f, "\t{}", action)?;
                 }
@@ -288,14 +244,14 @@ fn debug_print_test() {
     use quote::format_ident;
     let sequence = NormalForm::Sequence {
         token: format_ident!("TEST"),
-        token_output: Some(format_ident!("x")),
         actions: vec![
             Action::Shift {
                 tag: Tag::Toplevel(format_ident!("a")),
                 output: None,
             },
             Action::Reduce {
-                tag: Tag::Toplevel(format_ident!("b")),
+                semact: SemAct::Gather,
+                hint: None,
                 output: Some(format_ident!("x")),
             },
             Action::Shift {
@@ -303,7 +259,8 @@ fn debug_print_test() {
                 output: Some(format_ident!("y")),
             },
             Action::Reduce {
-                tag: Tag::Anonymous(1),
+                semact: SemAct::Gather,
+                hint: None,
                 output: None,
             },
         ],
@@ -366,14 +323,14 @@ fn debug_print_nf_table() {
     use quote::format_ident;
     let sequence = NormalForm::Sequence {
         token: format_ident!("TEST"),
-        token_output: Some(format_ident!("x")),
         actions: vec![
             Action::Shift {
                 tag: Tag::Toplevel(format_ident!("a")),
                 output: None,
             },
             Action::Reduce {
-                tag: Tag::Toplevel(format_ident!("b")),
+                semact: SemAct::Gather,
+                hint: None,
                 output: Some(format_ident!("x")),
             },
             Action::Shift {
@@ -381,7 +338,8 @@ fn debug_print_nf_table() {
                 output: Some(format_ident!("y")),
             },
             Action::Reduce {
-                tag: Tag::Anonymous(1),
+                semact: SemAct::Gather,
+                hint: None,
                 output: None,
             },
         ],
@@ -391,11 +349,13 @@ fn debug_print_nf_table() {
     let empty = NormalForm::Empty {
         actions: vec![
             Action::Reduce {
-                tag: Tag::Toplevel(format_ident!("b")),
+                semact: SemAct::Gather,
+                hint: None,
                 output: Some(format_ident!("x")),
             },
             Action::Reduce {
-                tag: Tag::Toplevel(format_ident!("c")),
+                semact: SemAct::Gather,
+                hint: None,
                 output: Some(format_ident!("y")),
             },
         ],

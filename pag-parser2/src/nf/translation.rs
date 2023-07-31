@@ -3,6 +3,7 @@
 //!
 
 use std::collections::HashMap;
+use std::io::Read;
 use std::rc::Rc;
 
 use quote::format_ident;
@@ -12,13 +13,13 @@ use super::{semact::SemAct, Action, NormalForm, Tag};
 use super::{AbstractType, NFTable};
 use crate::frontend::{Ast, ParserDef, ParserExpr, SequenceIterator};
 
-struct Translation {
+pub struct Translation {
     /// Table of semi-normalized production rules
-    semi_nfs: NFTable,
+    pub semi_nfs: NFTable,
     /// Toplevel type annotations
     annotations: HashMap<Tag, Rc<Type>>,
     /// Type hints when calling inner routines (collector)
-    hints: HashMap<Tag, Rc<Type>>,
+    pub hints: HashMap<Tag, Rc<Type>>,
     /// Counter of assigned non-explicit variable names
     output_cnt: usize,
     /// Counter of assigned anonymous routines
@@ -154,7 +155,6 @@ impl Translation {
                 let ty = self.infer_type(types.into_iter(), &semact, tag).into();
                 NormalForm::Sequence {
                     token: token.clone(),
-                    token_output: None,
                     actions,
                     semact,
                     ty,
@@ -165,7 +165,14 @@ impl Translation {
                 if named.is_some() {
                     types.push(AbstractType::span_type())
                 }
-                let actions = iter
+                let head_action = if matches!(semact, SemAct::Recognize) {
+                    None
+                } else if IGNORE_UNNAMED && named.is_none() {
+                    None
+                } else {
+                    Some( Action::Reduce { semact: SemAct::Option, hint: None, output: named.or_else(|| Some(self.new_output_sym())) } )
+                };
+                let actions = head_action.into_iter().chain(iter
                     .map(|(inner, named, hint)| {
                         let (tag, output, ty) =
                             self.add_anonymous_rule::<IGNORE_UNNAMED>(inner, named);
@@ -176,18 +183,11 @@ impl Translation {
                             types.push(ty);
                         }
                         Action::Shift { tag, output }
-                    })
+                    }))
                     .collect();
                 let ty = self.infer_type(types.into_iter(), &semact, tag).into();
                 NormalForm::Sequence {
                     token: token.clone(),
-                    token_output: if matches!(semact, SemAct::Recognize) {
-                        None
-                    } else if IGNORE_UNNAMED {
-                        named
-                    } else {
-                        named.or_else(|| Some(self.new_output_sym()))
-                    },
                     actions,
                     semact,
                     ty,
@@ -341,7 +341,6 @@ impl Translation {
                 let nf = if self.ignoring() {
                     NormalForm::Sequence {
                         token: ident.clone(),
-                        token_output: None,
                         actions: vec![],
                         semact: SemAct::Recognize,
                         ty: AbstractType::unit_type().into(),
@@ -349,7 +348,6 @@ impl Translation {
                 } else {
                     NormalForm::Sequence {
                         token: ident.clone(),
-                        token_output: Some(self.new_output_sym()),
                         actions: vec![],
                         semact: SemAct::Token,
                         ty: AbstractType::span_type().into(),
