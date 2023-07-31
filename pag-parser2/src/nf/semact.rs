@@ -24,33 +24,24 @@ pub enum SemAct {
     /// If only one is selected, return target data.
     Gather,
     /// Specialized for `inner?`. Return an Option of the inner routine
-    Option,
+    OptSome,
+    OptNone,
     /// Specialized for `i*`
     /// Initialize a `Collector`  (requires `Collector<T>`) and return the result from `Collector::finalize`.
-    ZeroOrMore,
+    ZeroOrMoreFinish,
+    ZeroOrMoreCollect,
     /// Specialized for `i+` = `i ~ i*`.
     /// Initialize a `Collector`  (requires `Collector<T>`), pass it to the recursive routine
     /// and return the result from `Collector::finalize`.
     OneOrMoreToplevel,
     /// Specialized for `i+` = `i ~ i*`.
     /// Accepts a `&mut Collector`
-    OneOrMoreNested,
+    OneOrMoreNestedCollect,
+    OneOrMoreNestedFinish,
     /// Yield a token span,
     Token,
     /// Recognize without generate any data.
     Recognize,
-}
-
-impl SemAct {
-    pub fn infer(expr: &ParserExpr) -> Self {
-        match expr {
-            ParserExpr::LexerRef(_) => SemAct::Token,
-            ParserExpr::Plus(_) => SemAct::OneOrMoreToplevel,
-            ParserExpr::Opt(_) => SemAct::Option,
-            ParserExpr::Star(_) => SemAct::ZeroOrMore,
-            _ => SemAct::Gather,
-        }
-    }
 }
 
 #[cfg(feature = "debug")]
@@ -59,10 +50,13 @@ impl std::fmt::Display for SemAct {
         match self {
             SemAct::Customized(x) => write!(f, "{:?}", std::rc::Rc::as_ptr(&x.0)),
             SemAct::Gather => write!(f, "Gather"),
-            SemAct::Option => write!(f, "Option"),
-            SemAct::ZeroOrMore => write!(f, "ZeroOrMore"),
+            SemAct::OptSome => write!(f, "OptSome"),
+            SemAct::OptNone => write!(f, "OptNone"),
+            SemAct::ZeroOrMoreCollect => write!(f, "ZeroOrMoreCollect"),
+            SemAct::ZeroOrMoreFinish => write!(f, "ZeroOrMoreFinish"),
             SemAct::OneOrMoreToplevel => write!(f, "OneOrMoreToplevel"),
-            SemAct::OneOrMoreNested => write!(f, "OneOrMoreNested"),
+            SemAct::OneOrMoreNestedCollect => write!(f, "OneOrMoreNestedCollect"),
+            SemAct::OneOrMoreNestedFinish => write!(f, "OneOrMoreNestedFinish"),
             SemAct::Token => write!(f, "Token"),
             SemAct::Recognize => write!(f, "Recognize"),
         }
