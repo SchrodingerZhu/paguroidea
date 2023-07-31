@@ -168,15 +168,19 @@ impl Translation {
                 if named.is_some() {
                     types.push(AbstractType::span_type())
                 }
-                let head_action = if matches!(semact, SemAct::Recognize) {
-                    None
-                } else if IGNORE_UNNAMED && named.is_none() {
-                    None
-                } else {
-                    Some( Action::Reduce { semact: SemAct::Token, hint: None, output: named.or_else(|| Some(self.new_output_sym())) } )
-                };
-                let actions = head_action.into_iter().chain(iter
-                    .map(|(inner, named, hint)| {
+                let head_action =
+                    if matches!(semact, SemAct::Recognize) || (IGNORE_UNNAMED && named.is_none()) {
+                        None
+                    } else {
+                        Some(Action::Reduce {
+                            semact: SemAct::Token,
+                            hint: None,
+                            output: named.or_else(|| Some(self.new_output_sym())),
+                        })
+                    };
+                let actions = head_action
+                    .into_iter()
+                    .chain(iter.map(|(inner, named, hint)| {
                         let (tag, output, ty) =
                             self.add_anonymous_rule::<IGNORE_UNNAMED>(inner, named);
                         if let Some(x) = hint {
@@ -263,7 +267,7 @@ impl Translation {
                     tag.clone(),
                     NormalForm::Empty {
                         actions: vec![],
-                        semact: if matches!(semact, SemAct::Recognize)  {
+                        semact: if matches!(semact, SemAct::Recognize) {
                             SemAct::Recognize
                         } else {
                             SemAct::OptNone
@@ -292,7 +296,7 @@ impl Translation {
                     tag.clone(),
                     NormalForm::Empty {
                         actions: vec![],
-                        semact: if matches!(semact, SemAct::Recognize)  {
+                        semact: if matches!(semact, SemAct::Recognize) {
                             SemAct::Recognize
                         } else {
                             SemAct::ZeroOrMoreFinish

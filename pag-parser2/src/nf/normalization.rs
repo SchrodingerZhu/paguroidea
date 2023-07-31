@@ -4,11 +4,13 @@ use syn::Type;
 
 use crate::utils::Appendix;
 
-use super::{NFTable, Tag, translation::Translation, NormalForm, Action, semact::SemAct, AbstractType};
+use super::{
+    semact::SemAct, translation::Translation, AbstractType, Action, NFTable, NormalForm, Tag,
+};
 
 pub struct Normalized {
     nfs: NFTable,
-    hints: HashMap<Tag, Rc<Type>>
+    hints: HashMap<Tag, Rc<Type>>,
 }
 
 impl Normalized {
@@ -16,12 +18,20 @@ impl Normalized {
         loop {
             let mut updates = Vec::new();
             for (target, nfs) in self.nfs.iter().map(|(k, v)| (k.clone(), v.clone())) {
-                if !nfs.iter().any(|x| matches!(x, NormalForm::Unexpanded {.. })) {
+                if !nfs
+                    .iter()
+                    .any(|x| matches!(x, NormalForm::Unexpanded { .. }))
+                {
                     continue;
                 }
                 let mut stepped = Vec::new();
                 for i in nfs {
-                    let NormalForm::Unexpanded{ actions, semact, ty } = i else {
+                    let NormalForm::Unexpanded {
+                        actions,
+                        semact,
+                        ty,
+                    } = i
+                    else {
                         stepped.push(i);
                         continue;
                     };
@@ -34,29 +44,67 @@ impl Normalized {
                     });
                     match first_subroutine {
                         None => {
-                            stepped.push(NormalForm::Empty{ actions, semact, ty });
+                            stepped.push(NormalForm::Empty {
+                                actions,
+                                semact,
+                                ty,
+                            });
                         }
                         Some((index, tag, output)) => {
-                            let variable_nf = self.nfs.get(tag).cloned().expect("tag must have associated");
+                            let variable_nf = self
+                                .nfs
+                                .get(tag)
+                                .cloned()
+                                .expect("tag must have associated");
                             for k in variable_nf {
                                 let head = actions[..index].iter().cloned();
                                 let tail = actions[index + 1..].iter().cloned();
                                 match k {
-                                    NormalForm::Empty { actions: mut expanded_actions, semact: expanded_semact, ty } => {
-                                        if !matches!(expanded_semact, SemAct::Gather) || matches!(ty.0, AbstractType::Tuple(..)) {
+                                    NormalForm::Empty {
+                                        actions: mut expanded_actions,
+                                        semact: expanded_semact,
+                                        ty,
+                                    } => {
+                                        if !matches!(expanded_semact, SemAct::Gather)
+                                            || matches!(ty.0, AbstractType::Tuple(..))
+                                        {
                                             let hint = self.hints.get(tag).cloned().map(Appendix);
-                                            expanded_actions.push(Action::Reduce { semact: expanded_semact, hint, output: output.clone()});
+                                            expanded_actions.push(Action::Reduce {
+                                                semact: expanded_semact,
+                                                hint,
+                                                output: output.clone(),
+                                            });
                                         }
-                                        let acts = head.chain(expanded_actions).chain(tail).collect();
-                                        stepped.push(NormalForm::Unexpanded { actions: acts, semact: semact.clone(), ty: ty.clone() });
+                                        let acts =
+                                            head.chain(expanded_actions).chain(tail).collect();
+                                        stepped.push(NormalForm::Unexpanded {
+                                            actions: acts,
+                                            semact: semact.clone(),
+                                            ty: ty.clone(),
+                                        });
                                     }
-                                    NormalForm::Unexpanded { actions: mut expanded_actions, semact: expanded_semact, .. } => {
-                                        if !matches!(expanded_semact, SemAct::Gather) || matches!(ty.0, AbstractType::Tuple(..)) {
+                                    NormalForm::Unexpanded {
+                                        actions: mut expanded_actions,
+                                        semact: expanded_semact,
+                                        ..
+                                    } => {
+                                        if !matches!(expanded_semact, SemAct::Gather)
+                                            || matches!(ty.0, AbstractType::Tuple(..))
+                                        {
                                             let hint = self.hints.get(tag).cloned().map(Appendix);
-                                            expanded_actions.push(Action::Reduce { semact: expanded_semact, hint, output: output.clone()});
+                                            expanded_actions.push(Action::Reduce {
+                                                semact: expanded_semact,
+                                                hint,
+                                                output: output.clone(),
+                                            });
                                         }
-                                        let acts = head.chain(expanded_actions).chain(tail).collect();
-                                        stepped.push(NormalForm::Unexpanded { actions: acts, semact: semact.clone(), ty: ty.clone() });
+                                        let acts =
+                                            head.chain(expanded_actions).chain(tail).collect();
+                                        stepped.push(NormalForm::Unexpanded {
+                                            actions: acts,
+                                            semact: semact.clone(),
+                                            ty: ty.clone(),
+                                        });
                                     }
                                     NormalForm::Sequence {
                                         token,
@@ -64,12 +112,24 @@ impl Normalized {
                                         semact: expanded_semact,
                                         ..
                                     } => {
-                                        if !matches!(expanded_semact, SemAct::Gather) || matches!(ty.0, AbstractType::Tuple(..)) {
+                                        if !matches!(expanded_semact, SemAct::Gather)
+                                            || matches!(ty.0, AbstractType::Tuple(..))
+                                        {
                                             let hint = self.hints.get(tag).cloned().map(Appendix);
-                                            expanded_actions.push(Action::Reduce { semact: expanded_semact, hint, output: output.clone()});
+                                            expanded_actions.push(Action::Reduce {
+                                                semact: expanded_semact,
+                                                hint,
+                                                output: output.clone(),
+                                            });
                                         }
-                                        let acts = head.chain(expanded_actions).chain(tail).collect();
-                                        stepped.push(NormalForm::Sequence { token, actions: acts,  semact: semact.clone(), ty: ty.clone() });
+                                        let acts =
+                                            head.chain(expanded_actions).chain(tail).collect();
+                                        stepped.push(NormalForm::Sequence {
+                                            token,
+                                            actions: acts,
+                                            semact: semact.clone(),
+                                            ty: ty.clone(),
+                                        });
                                     }
                                 }
                             }
@@ -93,7 +153,7 @@ impl From<Translation> for Normalized {
     fn from(value: Translation) -> Self {
         let mut normalized = Self {
             nfs: value.semi_nfs,
-            hints: value.hints
+            hints: value.hints,
         };
         normalized.normalize();
         normalized
