@@ -94,22 +94,25 @@ impl Translation {
                 1 => inner_types.next().unwrap(),
                 _ => AbstractType::Tuple(inner_types.collect()),
             },
-            SemAct::Option => match inner_types.len() {
+            SemAct::OptSome => match inner_types.len() {
                 0 => AbstractType::Option(Box::new(AbstractType::unit_type())),
                 1 => AbstractType::Option(Box::new(inner_types.next().unwrap())),
                 _ => AbstractType::Option(Box::new(AbstractType::Tuple(inner_types.collect()))),
             },
-            SemAct::ZeroOrMore => match inner_types.len() {
+            SemAct::OptNone => unreachable!("cannot infer type from empty branch"),
+            SemAct::ZeroOrMoreCollect => match inner_types.len() {
                 0 => AbstractType::Collector(Box::new(AbstractType::unit_type())),
                 1 => AbstractType::Collector(Box::new(inner_types.next().unwrap())),
                 _ => AbstractType::Collector(Box::new(AbstractType::Tuple(inner_types.collect()))),
             },
+            SemAct::ZeroOrMoreFinish => unreachable!("cannot infer type from empty branch"),
             SemAct::OneOrMoreToplevel => match inner_types.len() {
                 0 => AbstractType::Collector(Box::new(AbstractType::unit_type())),
                 1 => AbstractType::Collector(Box::new(inner_types.next().unwrap())),
                 _ => AbstractType::Collector(Box::new(AbstractType::Tuple(inner_types.collect()))),
             },
-            SemAct::OneOrMoreNested => AbstractType::unit_type(),
+            SemAct::OneOrMoreNestedCollect => AbstractType::unit_type(),
+            SemAct::OneOrMoreNestedFinish => AbstractType::unit_type(),
             SemAct::Token => AbstractType::span_type(),
             SemAct::Recognize => AbstractType::unit_type(),
         }
@@ -170,7 +173,7 @@ impl Translation {
                 } else if IGNORE_UNNAMED && named.is_none() {
                     None
                 } else {
-                    Some( Action::Reduce { semact: SemAct::Option, hint: None, output: named.or_else(|| Some(self.new_output_sym())) } )
+                    Some( Action::Reduce { semact: SemAct::Token, hint: None, output: named.or_else(|| Some(self.new_output_sym())) } )
                 };
                 let actions = head_action.into_iter().chain(iter
                     .map(|(inner, named, hint)| {
@@ -245,7 +248,7 @@ impl Translation {
                 let semact = if self.ignoring() {
                     SemAct::Recognize
                 } else {
-                    SemAct::Option
+                    SemAct::OptSome
                 };
                 let mut partial_nf = self.create_nf_from_sequence::<false, _>(
                     SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None, None)),
@@ -260,7 +263,11 @@ impl Translation {
                     tag.clone(),
                     NormalForm::Empty {
                         actions: vec![],
-                        semact,
+                        semact: if matches!(semact, SemAct::Recognize)  {
+                            SemAct::Recognize
+                        } else {
+                            SemAct::OptNone
+                        },
                         ty: ty.clone(),
                     },
                 );
@@ -270,7 +277,7 @@ impl Translation {
                 let semact = if self.ignoring() {
                     SemAct::Recognize
                 } else {
-                    SemAct::ZeroOrMore
+                    SemAct::ZeroOrMoreCollect
                 };
                 let mut partial_nf = self.create_nf_from_sequence::<false, _>(
                     SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None, None)),
@@ -285,7 +292,11 @@ impl Translation {
                     tag.clone(),
                     NormalForm::Empty {
                         actions: vec![],
-                        semact,
+                        semact: if matches!(semact, SemAct::Recognize)  {
+                            SemAct::Recognize
+                        } else {
+                            SemAct::ZeroOrMoreFinish
+                        },
                         ty: ty.clone(),
                     },
                 );
@@ -308,7 +319,7 @@ impl Translation {
                     let semact = if self.ignoring() {
                         SemAct::Recognize
                     } else {
-                        SemAct::OneOrMoreNested
+                        SemAct::OneOrMoreNestedCollect
                     };
 
                     self.add_nf(nested_tag.clone(), {
@@ -319,10 +330,14 @@ impl Translation {
                     });
 
                     self.add_nf(
-                        nested_tag,
+                        nested_tag.clone(),
                         NormalForm::Empty {
                             actions: vec![],
-                            semact,
+                            semact: if matches!(semact, SemAct::Recognize) {
+                                SemAct::Recognize
+                            } else {
+                                SemAct::OneOrMoreNestedFinish
+                            },
                             ty: AbstractType::unit_type().into(),
                         },
                     );
@@ -331,7 +346,7 @@ impl Translation {
                 {
                     partial_nf
                         .actions_mut()
-                        .push(Action::PassCollector(tag.clone()));
+                        .push(Action::PassCollector(nested_tag));
                     let ty = partial_nf.ty().0.clone();
                     self.add_nf(tag.clone(), partial_nf);
                     ty
@@ -418,7 +433,15 @@ impl Translation {
                 let semact = if let Some(action) = &rule.action {
                     SemAct::Customized(action.clone())
                 } else if rule.vars.len() == 1 {
-                    SemAct::infer(&rule.vars[0].expr)
+                    match &rule.vars[0].expr {
+                        ParserExpr::Seq(_) => SemAct::Gather,
+                        ParserExpr::Star(_) => SemAct::ZeroOrMoreCollect,
+                        ParserExpr::Plus(_) => SemAct::OneOrMoreToplevel,
+                        ParserExpr::Opt(_) => SemAct::OptSome,
+                        ParserExpr::LexerRef(_) => SemAct::Token,
+                        ParserExpr::ParserRef(_) => SemAct::Gather,
+                        ParserExpr::Ignore(_) => SemAct::Recognize,
+                    }
                 } else {
                     SemAct::Gather
                 };

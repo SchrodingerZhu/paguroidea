@@ -4,7 +4,7 @@ use syn::Type;
 
 use crate::utils::Appendix;
 
-use super::{NFTable, Tag, translation::Translation, NormalForm, Action};
+use super::{NFTable, Tag, translation::Translation, NormalForm, Action, semact::SemAct, AbstractType};
 
 pub struct Normalized {
     nfs: NFTable,
@@ -42,15 +42,19 @@ impl Normalized {
                                 let head = actions[..index].iter().cloned();
                                 let tail = actions[index + 1..].iter().cloned();
                                 match k {
-                                    NormalForm::Empty { actions: mut expanded_actions, semact: expanded_semact, .. } => {
-                                        let hint = self.hints.get(tag).cloned().map(Appendix);
-                                        expanded_actions.push(Action::Reduce { semact: expanded_semact, hint, output: output.clone()});
+                                    NormalForm::Empty { actions: mut expanded_actions, semact: expanded_semact, ty } => {
+                                        if !matches!(expanded_semact, SemAct::Gather) || matches!(ty.0, AbstractType::Tuple(..)) {
+                                            let hint = self.hints.get(tag).cloned().map(Appendix);
+                                            expanded_actions.push(Action::Reduce { semact: expanded_semact, hint, output: output.clone()});
+                                        }
                                         let acts = head.chain(expanded_actions).chain(tail).collect();
                                         stepped.push(NormalForm::Unexpanded { actions: acts, semact: semact.clone(), ty: ty.clone() });
                                     }
                                     NormalForm::Unexpanded { actions: mut expanded_actions, semact: expanded_semact, .. } => {
-                                        let hint = self.hints.get(tag).cloned().map(Appendix);
-                                        expanded_actions.push(Action::Reduce { semact: expanded_semact, hint,  output: output.clone()});
+                                        if !matches!(expanded_semact, SemAct::Gather) || matches!(ty.0, AbstractType::Tuple(..)) {
+                                            let hint = self.hints.get(tag).cloned().map(Appendix);
+                                            expanded_actions.push(Action::Reduce { semact: expanded_semact, hint, output: output.clone()});
+                                        }
                                         let acts = head.chain(expanded_actions).chain(tail).collect();
                                         stepped.push(NormalForm::Unexpanded { actions: acts, semact: semact.clone(), ty: ty.clone() });
                                     }
@@ -60,8 +64,10 @@ impl Normalized {
                                         semact: expanded_semact,
                                         ..
                                     } => {
-                                        let hint = self.hints.get(tag).cloned().map(Appendix);
-                                        expanded_actions.push(Action::Reduce { semact: expanded_semact, hint,  output: output.clone()});
+                                        if !matches!(expanded_semact, SemAct::Gather) || matches!(ty.0, AbstractType::Tuple(..)) {
+                                            let hint = self.hints.get(tag).cloned().map(Appendix);
+                                            expanded_actions.push(Action::Reduce { semact: expanded_semact, hint, output: output.clone()});
+                                        }
                                         let acts = head.chain(expanded_actions).chain(tail).collect();
                                         stepped.push(NormalForm::Sequence { token, actions: acts,  semact: semact.clone(), ty: ty.clone() });
                                     }
