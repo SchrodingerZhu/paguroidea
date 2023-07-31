@@ -268,9 +268,9 @@ impl Translation {
             }
             ParserExpr::Star(inner) => {
                 let semact = if self.ignoring() {
-                    SemAct::ZeroOrMore
+                    SemAct::Recognize
                 } else {
-                    SemAct::Option
+                    SemAct::ZeroOrMore
                 };
                 let mut partial_nf = self.create_nf_from_sequence::<false, _>(
                     SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None, None)),
