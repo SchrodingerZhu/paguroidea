@@ -118,7 +118,7 @@ impl Translation {
     fn create_nf_from_sequence<
         'a,
         const IGNORE_UNNAMED: bool,
-        I: Iterator<Item = (&'a ParserExpr, Option<Ident>)>,
+        I: Iterator<Item = (&'a ParserExpr, Option<Ident>, Option<Rc<Type>>)>,
     >(
         &mut self,
         mut iter: I,
@@ -136,11 +136,15 @@ impl Translation {
                 semact,
                 ty: AbstractType::unit_type().into(),
             },
-            Some((ParserExpr::Ignore(box ParserExpr::LexerRef(token)), _)) => {
+            Some((ParserExpr::Ignore(box ParserExpr::LexerRef(token)), _, _)) => {
                 let mut types = Vec::new();
                 let actions = iter
-                    .map(|(inner, named)| self.add_anonymous_rule::<IGNORE_UNNAMED>(inner, named))
-                    .map(|(tag, output, ty)| {
+                    .map(|(inner, named, hint)| {
+                        let (tag, output, ty) =
+                            self.add_anonymous_rule::<IGNORE_UNNAMED>(inner, named);
+                        if let Some(x) = hint {
+                            self.hints.insert(tag.clone(), x);
+                        }
                         if output.is_some() {
                             types.push(ty);
                         }
@@ -156,14 +160,18 @@ impl Translation {
                     ty,
                 }
             }
-            Some((ParserExpr::LexerRef(token), named)) => {
+            Some((ParserExpr::LexerRef(token), named, _)) => {
                 let mut types = Vec::new();
                 if named.is_some() {
                     types.push(AbstractType::span_type())
                 }
                 let actions = iter
-                    .map(|(inner, named)| self.add_anonymous_rule::<IGNORE_UNNAMED>(inner, named))
-                    .map(|(tag, output, ty)| {
+                    .map(|(inner, named, hint)| {
+                        let (tag, output, ty) =
+                            self.add_anonymous_rule::<IGNORE_UNNAMED>(inner, named);
+                        if let Some(x) = hint {
+                            self.hints.insert(tag.clone(), x);
+                        }
                         if output.is_some() {
                             types.push(ty);
                         }
@@ -185,13 +193,17 @@ impl Translation {
                     ty,
                 }
             }
-            Some((expr, named)) => {
+            Some((expr, named, hint)) => {
                 let mut types = Vec::new();
-                let actions = [(expr, named)]
+                let actions = [(expr, named, hint)]
                     .into_iter()
                     .chain(iter)
-                    .map(|(inner, named)| self.add_anonymous_rule::<IGNORE_UNNAMED>(inner, named))
-                    .map(|(tag, output, ty)| {
+                    .map(|(inner, named, hint)| {
+                        let (tag, output, ty) =
+                            self.add_anonymous_rule::<IGNORE_UNNAMED>(inner, named);
+                        if let Some(x) = hint {
+                            self.hints.insert(tag.clone(), x);
+                        }
                         if output.is_some() {
                             types.push(ty);
                         }
@@ -221,7 +233,7 @@ impl Translation {
                     SemAct::Gather
                 };
                 let partial_nf = self.create_nf_from_sequence::<false, _>(
-                    exprs.iter().map(|expr| (expr, None)),
+                    exprs.iter().map(|expr| (expr, None, None)),
                     semact,
                     tag,
                 );
@@ -236,7 +248,7 @@ impl Translation {
                     SemAct::Option
                 };
                 let mut partial_nf = self.create_nf_from_sequence::<false, _>(
-                    SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None)),
+                    SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None, None)),
                     semact.clone(),
                     tag,
                 );
@@ -261,7 +273,7 @@ impl Translation {
                     SemAct::Option
                 };
                 let mut partial_nf = self.create_nf_from_sequence::<false, _>(
-                    SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None)),
+                    SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None, None)),
                     semact.clone(),
                     tag,
                 );
@@ -286,8 +298,8 @@ impl Translation {
                     SemAct::OneOrMoreToplevel
                 };
                 let mut partial_nf = self.create_nf_from_sequence::<false, _>(
-                    SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None)),
-                    semact.clone(),
+                    SequenceIterator::from(inner.as_ref()).map(|expr| (expr, None, None)),
+                    semact,
                     tag,
                 );
                 let nested_tag = self.new_anonymous_tag();
@@ -307,7 +319,7 @@ impl Translation {
                     });
 
                     self.add_nf(
-                        nested_tag.clone(),
+                        nested_tag,
                         NormalForm::Empty {
                             actions: vec![],
                             semact,
@@ -414,17 +426,17 @@ impl Translation {
                 };
                 let partial_nf = if matches!(semact, SemAct::Customized(..)) {
                     self.create_nf_from_sequence::<true, _>(
-                        rule.vars
-                            .iter()
-                            .map(|binding| (&binding.expr, binding.name.clone())),
+                        rule.vars.iter().map(|binding| {
+                            (&binding.expr, binding.name.clone(), binding.ty.clone())
+                        }),
                         semact,
                         &tag,
                     )
                 } else {
                     self.create_nf_from_sequence::<false, _>(
-                        rule.vars
-                            .iter()
-                            .map(|binding| (&binding.expr, binding.name.clone())),
+                        rule.vars.iter().map(|binding| {
+                            (&binding.expr, binding.name.clone(), binding.ty.clone())
+                        }),
                         semact,
                         &tag,
                     )

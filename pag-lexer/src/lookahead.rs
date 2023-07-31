@@ -199,7 +199,9 @@ mod test {
     fn test_lookahead_codegen() {
         use crate::intervals;
         let positives = intervals!((b'0', b'9'), (b'0', b'9'), (b'A', b'F'));
-        syn::parse2::<syn::Expr>(generate_lookahead_routine(&positives, Kind::Positive)).unwrap();
-        syn::parse2::<syn::Expr>(generate_lookahead_routine(&positives, Kind::Negative)).unwrap();
+        let positive = generate_lookahead_routine(&positives, Kind::Positive);
+        let _: syn::Expr = syn::parse_quote! { { #positive } };
+        let negative = generate_lookahead_routine(&positives, Kind::Negative);
+        let _: syn::Expr = syn::parse_quote! { { #negative } };
     }
 }
