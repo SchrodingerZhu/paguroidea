@@ -1,4 +1,7 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use syn::Type;
 
@@ -14,6 +17,74 @@ pub struct Normalized {
 }
 
 impl Normalized {
+    fn remove_unreachable_rules(&mut self) {
+        fn dfs<'a>(nfs: &'a NFTable, current: &'a Tag, visited: &mut HashSet<Tag>) {
+            if visited.contains(current) {
+                return;
+            }
+            visited.insert(current.clone());
+            let Some(tag) = nfs.get(current) else {
+                return;
+            };
+            for i in tag {
+                for j in i.actions() {
+                    match j {
+                        Action::Shift { tag, .. } | Action::PassCollector(tag) => {
+                            dfs(nfs, tag, visited);
+                        }
+                        _ => continue,
+                    }
+                }
+            }
+        }
+
+        let mut visited = HashSet::new();
+        for i in self.nfs.keys() {
+            if matches!(i, Tag::Toplevel(..)) {
+                dfs(&self.nfs, i, &mut visited);
+            }
+        }
+        self.nfs.retain(|k, _| visited.contains(k));
+    }
+    fn merge_anonymous_rules(&mut self) {
+        loop {
+            for i in self.nfs.values_mut() {
+                i.sort_unstable();
+            }
+            let mut table: HashMap<&[NormalForm], Tag> = HashMap::new();
+            let mut rename = Vec::new();
+            for (tag, nf) in self.nfs.iter() {
+                if matches!(tag, Tag::Toplevel(..)) {
+                    continue;
+                }
+                table
+                    .entry(nf.as_slice())
+                    .and_modify(|new_tag| rename.push((tag.clone(), new_tag.clone())))
+                    .or_insert(tag.clone());
+            }
+            if rename.is_empty() {
+                break;
+            }
+            for (tag, new_tag) in rename {
+                self.nfs.remove(&tag);
+                for i in self.nfs.values_mut() {
+                    for j in i.iter_mut() {
+                        for k in j.actions_mut() {
+                            match k {
+                                Action::Shift { tag: target, .. }
+                                | Action::PassCollector(target) => {
+                                    if *target == tag {
+                                        *target = new_tag.clone();
+                                    }
+                                }
+                                _ => continue,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     fn normalize(&mut self) {
         loop {
             let mut updates = Vec::new();
@@ -156,6 +227,8 @@ impl From<Translation> for Normalized {
             hints: value.hints,
         };
         normalized.normalize();
+        normalized.merge_anonymous_rules();
+        normalized.remove_unreachable_rules();
         normalized
     }
 }
