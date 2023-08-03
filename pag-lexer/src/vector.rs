@@ -11,13 +11,14 @@ use crate::derivative::derivative;
 use crate::intervals::Intervals;
 use crate::normalization::normalize;
 use crate::regex_tree::RegexTree;
-use crate::utilities::dbg_sort;
+use crate::utilities::{self, dbg_sort};
 
 use crate::lookahead::LoopOptimizer;
 use proc_macro2::{Literal, TokenStream};
 use quote::{format_ident, quote};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
+use std::io;
 use std::rc::Rc;
 
 #[derive(Hash, PartialEq, Eq, Debug, Clone, Ord, PartialOrd)]
@@ -35,6 +36,24 @@ impl Display for Vector {
             write!(f, "{}", regex_tree)?;
         }
         write!(f, ")")
+    }
+}
+
+pub struct DFAOptions {
+    pub static_success: bool,
+    pub unicode: bool,
+    pub lookahead: bool,
+    pub simd_limit: usize,
+}
+
+impl Default for DFAOptions {
+    fn default() -> Self {
+        Self {
+            static_success: true,
+            unicode: false,
+            lookahead: true,
+            simd_limit: 4,
+        }
     }
 }
 
@@ -122,18 +141,25 @@ impl Vector {
         optimizer: &mut LoopOptimizer,
         success_actions: &[TokenStream],
         failure_action: &TokenStream,
+        options: &DFAOptions,
     ) -> TokenStream {
         let initial_state = {
             let initial_state = self.normalize();
-            let last_success = initial_state.accepting_state();
+            let last_success = LastSuccess::relevant(initial_state.accepting_state());
             DfaState {
                 state_vec: initial_state,
                 last_success,
+                unicode: None,
             }
         };
-        let mut dfa = build_dfa(initial_state.state_vec.clone());
+        let mut dfa = build_dfa(initial_state.state_vec.clone(), options);
         let leaf_states = extract_leaf_states(&mut dfa);
         let initial_label = format_ident!("S{}", dfa[&initial_state].state_id);
+        let dispatch_last_success = if options.static_success {
+            todo!()
+        } else {
+            None
+        };
         let actions = dbg_sort(&dfa, |(_, info)| info.state_id).map(|(state, info)| {
             let label = format_ident!("S{}", info.state_id);
             if let Some((rule_idx, seq)) = state.state_vec.as_byte_sequence() {
@@ -207,10 +233,35 @@ impl Vector {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+pub enum LastSuccess {
+    Irrelevant,
+    Success(usize),
+    None,
+}
+
+impl LastSuccess {
+    pub fn update(self, current_success: Option<usize>) -> Self {
+        match (self, current_success) {
+            (LastSuccess::Irrelevant, _) => LastSuccess::Irrelevant,
+            (_, None) => self,
+            (LastSuccess::None, Some(x)) => LastSuccess::Success(x),
+            (LastSuccess::Success(_), Some(x)) => LastSuccess::Success(x),
+        }
+    }
+    pub fn relevant(success: Option<usize>) -> Self {
+        match success {
+            None => LastSuccess::None,
+            Some(x) => LastSuccess::Success(x),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DfaState {
     state_vec: Vector,
-    last_success: Option<usize>,
+    last_success: LastSuccess,
+    unicode: Option<Rc<RegexTree>>,
 }
 
 #[derive(Debug, Clone)]
@@ -230,8 +281,15 @@ fn explore_dfa_node(dfa: &mut DfaTable, state: DfaState, state_id: &mut usize) {
         },
     );
     *state_id += 1;
-
-    if state.state_vec.is_byte_sequence() {
+    if let Some(unicode) = state.unicode.as_ref() {
+        if unicode.is_nullable() {
+            if let Some((_, seq)) = state.state_vec.as_byte_sequence() {
+                if std::str::from_utf8(&seq).is_ok() {
+                    return;
+                }
+            }
+        }
+    } else if state.state_vec.is_byte_sequence() {
         return;
     }
 
@@ -241,12 +299,24 @@ fn explore_dfa_node(dfa: &mut DfaTable, state: DfaState, state_id: &mut usize) {
     for intervals in classes {
         let char = intervals.representative();
         let target = state.state_vec.derivative(char).normalize();
-        let last_success = target.accepting_state().or(state.last_success);
+        let unicode = state
+            .unicode
+            .as_ref()
+            .cloned()
+            .map(|x| derivative(x, char))
+            .map(normalize);
+        let last_success = state.last_success.update(target.accepting_state());
         let next = DfaState {
             state_vec: target,
             last_success,
+            unicode,
         };
-        if !next.state_vec.is_rejecting_state() {
+        if !next.state_vec.is_rejecting_state()
+            && next
+                .unicode
+                .map(|x| !matches!(&*x, RegexTree::Bottom))
+                .unwrap_or(true)
+        {
             transitions.push((intervals, next.clone()));
             if !dfa.contains_key(&next) {
                 explore_dfa_node(dfa, next, state_id)
@@ -257,13 +327,23 @@ fn explore_dfa_node(dfa: &mut DfaTable, state: DfaState, state_id: &mut usize) {
     dfa.get_mut(&state).unwrap().transitions = transitions;
 }
 
-pub fn build_dfa(state: Vector) -> DfaTable {
+pub fn build_dfa(state: Vector, options: &DFAOptions) -> DfaTable {
     let mut state_id = 0;
     let mut dfa = HashMap::new();
-    let last_success = state.accepting_state();
+    let last_success = if options.static_success {
+        LastSuccess::relevant(state.accepting_state())
+    } else {
+        LastSuccess::Irrelevant
+    };
+    let unicode = if options.unicode {
+        Some(utilities::unicode_codepoints())
+    } else {
+        None
+    };
     let state = DfaState {
         state_vec: state,
         last_success,
+        unicode,
     };
     explore_dfa_node(&mut dfa, state, &mut state_id);
     #[cfg(pag_print_dfa)]

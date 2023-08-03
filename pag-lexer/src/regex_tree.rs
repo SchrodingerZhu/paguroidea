@@ -85,6 +85,14 @@ impl RegexTree {
             _ => false,
         }
     }
+    pub fn is_ascii_byte_sequence(&self) -> bool {
+        match self {
+            Set(intervals) => intervals.is_single_byte(),
+            Concat(children) => children.iter().all(|x| x.is_byte_sequence()),
+            Epsilon => true,
+            _ => false,
+        }
+    }
     pub fn as_byte_sequence(&self) -> Option<Vec<u8>> {
         match self {
             Set(intervals) if intervals.is_single_byte() => Some(vec![intervals.representative()]),
