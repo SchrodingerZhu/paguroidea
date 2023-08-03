@@ -156,9 +156,19 @@ impl Vector {
         let leaf_states = extract_leaf_states(&mut dfa);
         let initial_label = format_ident!("S{}", dfa[&initial_state].state_id);
         let dispatch_last_success = if options.static_success {
-            todo!()
+            let success_dispatch = success_actions.iter().enumerate().map(|(idx, action)| {
+                quote!( Some(#idx) => #action )
+            });
+            quote!{
+                let dispatch_last_success = || {
+                  match longest_match {
+                    #(#success_dispatch,)*
+                    None => #failure_action,
+                  }  
+                };
+            }
         } else {
-            None
+            quote!()
         };
         let actions = dbg_sort(&dfa, |(_, info)| info.state_id).map(|(state, info)| {
             let label = format_ident!("S{}", info.state_id);
@@ -181,9 +191,18 @@ impl Vector {
             let lookahead = optimizer.generate_lookahead(&dfa, state);
             let transitions = info.transitions.iter().map(|(interval, target)| {
                 if leaf_states.contains(target) {
-                    let rule_idx = target.last_success.unwrap();
-                    let on_success = &success_actions[rule_idx];
-                    return quote! { Some(#interval) => { cursor = idx + 1; #on_success }, };
+                    match target.last_success {
+                        LastSuccess::None => {
+                            return quote! { Some(#interval) => { cursor = idx + 1; #failure_action }, };
+                        }
+                        LastSuccess::Success(rule_idx) => {
+                            let on_success = &success_actions[rule_idx];
+                            return quote! { Some(#interval) => { cursor = idx + 1; #on_success }, };
+                        }
+                        LastSuccess::Irrelevant => {
+                            return quote! { cursor = idx + 1; dispatch_last_success() };
+                        }
+                    }
                 }
                 let target_id = dfa[target].state_id;
                 #[cfg(not(target_arch = "aarch64"))]
@@ -193,10 +212,14 @@ impl Vector {
                 let target_label = format_ident!("S{}", target_id);
                 quote! { Some(#interval) => state = State::#target_label, }
             });
-            let otherwise = state
-                .last_success
-                .and_then(|x| success_actions.get(x))
-                .unwrap_or(failure_action);
+            let otherwise = match state.last_success {
+                LastSuccess::None => quote! { #failure_action },
+                LastSuccess::Success(rule_idx) => {
+                    let on_success = &success_actions[rule_idx];
+                    quote! { #on_success }
+                }
+                LastSuccess::Irrelevant => quote! { dispatch_last_success() },
+            };
             let advance_cursor = if state.state_vec.accepting_state().is_some() {
                 Some(quote!(cursor = idx;))
             } else {
@@ -314,7 +337,8 @@ fn explore_dfa_node(dfa: &mut DfaTable, state: DfaState, state_id: &mut usize) {
         if !next.state_vec.is_rejecting_state()
             && next
                 .unicode
-                .map(|x| !matches!(&*x, RegexTree::Bottom))
+                .as_ref()
+                .map(|x| !matches!(&**x, RegexTree::Bottom))
                 .unwrap_or(true)
         {
             transitions.push((intervals, next.clone()));
@@ -356,7 +380,8 @@ fn extract_leaf_states(dfa: &mut DfaTable) -> HashSet<DfaState> {
     let leaf_states = dfa
         .iter()
         .filter_map(|(state, info)| {
-            if info.transitions.is_empty() && state.last_success.is_some() {
+            if info.transitions.is_empty()
+            {
                 Some(state.clone())
             } else {
                 None
