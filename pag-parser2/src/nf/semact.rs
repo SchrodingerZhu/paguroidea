@@ -13,7 +13,6 @@ use crate::frontend::CodeBlock;
 /// trait Collector<T> : Default {
 ///     fn collect(&mut self, data: T);
 /// }
-///
 /// ```
 
 // those normal form without SemAct will be treated as plain scanner.
@@ -27,17 +26,16 @@ pub enum SemAct {
     OptSome,
     OptNone,
     /// Specialized for `i*`
-    /// Initialize a `Collector`  (requires `Collector<T>`) and return the result from `Collector::finalize`.
-    ZeroOrMoreFinish,
+    /// Initialize a `Collector`.
     ZeroOrMoreCollect,
+    ZeroOrMoreFinish,
     /// Specialized for `i+` = `i ~ i*`.
-    /// Initialize a `Collector`  (requires `Collector<T>`), pass it to the recursive routine
-    /// and return the result from `Collector::finalize`.
+    /// Initialize a `Collector`, pass it to the recursive routine.
     OneOrMoreToplevel,
     /// Specialized for `i+` = `i ~ i*`.
     /// Accepts a `&mut Collector`
-    OneOrMoreNestedCollect,
-    OneOrMoreNestedFinish,
+    OneOrMoreCollect,
+    OneOrMoreFinish,
     /// Yield a token span,
     Token,
     /// Recognize without generate any data.
@@ -55,8 +53,8 @@ impl std::fmt::Display for SemAct {
             SemAct::ZeroOrMoreCollect => write!(f, "ZeroOrMoreCollect"),
             SemAct::ZeroOrMoreFinish => write!(f, "ZeroOrMoreFinish"),
             SemAct::OneOrMoreToplevel => write!(f, "OneOrMoreToplevel"),
-            SemAct::OneOrMoreNestedCollect => write!(f, "OneOrMoreNestedCollect"),
-            SemAct::OneOrMoreNestedFinish => write!(f, "OneOrMoreNestedFinish"),
+            SemAct::OneOrMoreCollect => write!(f, "OneOrMoreNestedCollect"),
+            SemAct::OneOrMoreFinish => write!(f, "OneOrMoreNestedFinish"),
             SemAct::Token => write!(f, "Token"),
             SemAct::Recognize => write!(f, "Recognize"),
         }

@@ -56,7 +56,7 @@ pub struct ParserDef {
 }
 
 pub struct ParserRule {
-    pub vars: Vec<VarBinding>,
+    pub vars: Vec<VarBinding>, // len > 0
     pub action: Option<CodeBlock>,
 }
 
@@ -82,42 +82,11 @@ pub enum LexerExpr {
 
 // TODO: how to express "select" & "ignore"?
 pub enum ParserExpr {
-    Seq(Vec<Self>),
+    Seq(Vec<Self>), // len > 1
     Star(Box<Self>),
     Plus(Box<Self>),
     Opt(Box<Self>),
     LexerRef(syn::Ident),
     ParserRef(syn::Ident),
     Ignore(Box<Self>),
-}
-
-pub enum SequenceIterator<'a> {
-    End,
-    Singleton(&'a ParserExpr),
-    Multiple(std::slice::Iter<'a, ParserExpr>),
-}
-
-impl<'a> From<&'a ParserExpr> for SequenceIterator<'a> {
-    fn from(value: &'a ParserExpr) -> Self {
-        match value {
-            ParserExpr::Seq(inner) => Self::Multiple(inner.iter()),
-            _ => Self::Singleton(value),
-        }
-    }
-}
-
-impl<'a> Iterator for SequenceIterator<'a> {
-    type Item = &'a ParserExpr;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            SequenceIterator::End => None,
-            SequenceIterator::Singleton(result) => {
-                let result = *result;
-                *self = Self::End;
-                Some(result)
-            }
-            SequenceIterator::Multiple(ref mut iter) => iter.next(),
-        }
-    }
 }

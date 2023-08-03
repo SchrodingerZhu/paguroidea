@@ -101,18 +101,15 @@ impl Parse for ParserDef {
     fn parse(input: ParseStream) -> Result<Self> {
         let ty = Rc::new(match input.parse::<Token![:]>() {
             Ok(_) => input.parse::<syn::Type>()?,
-            Err(_) => parse_quote!(::pag_util::Span<'src>),
+            Err(_) => parse_quote!(::pag_util::Span<'src>), // TODO: avoid duplicate
         });
 
         input.parse::<Token![=]>()?;
 
-        let mut rules = Vec::new();
-        loop {
-            rules.push(input.parse::<ParserRule>()?);
-            if !input.peek(Token![|]) {
-                break;
-            }
+        let mut rules = vec![input.parse::<ParserRule>()?];
+        while input.peek(Token![|]) {
             input.parse::<Token![|]>()?;
+            rules.push(input.parse::<ParserRule>()?)
         }
 
         Ok(Self { ty, rules })
@@ -122,7 +119,7 @@ impl Parse for ParserDef {
 impl Parse for ParserRule {
     // (VarBinding)+ syn::Block?
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut vars = Vec::new();
+        let mut vars = vec![input.parse::<VarBinding>()?];
         while !input.peek(syn::token::Brace) && !input.peek(Token![|]) && !input.peek(Token![;]) {
             vars.push(input.parse::<VarBinding>()?);
         }

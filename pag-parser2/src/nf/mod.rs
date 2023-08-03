@@ -5,6 +5,7 @@
 // license <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
+
 mod normalization;
 mod semact;
 mod translation;
@@ -115,17 +116,18 @@ pub enum AbstractType {
     Collector(Box<Self>),
 }
 
-thread_local! {
-    static UNIT_TYPE: AbstractType = AbstractType::Concrete(Rc::new(syn::parse_quote!(())));
-    static SPAN_TYPE: AbstractType = AbstractType::Concrete(Rc::new(syn::parse_quote!(::pag_util::Span<'src>)));
-}
-
 impl AbstractType {
-    pub fn unit_type() -> Self {
-        UNIT_TYPE.with(Self::clone)
+    thread_local! {
+        static UNIT: AbstractType = AbstractType::Concrete(Rc::new(syn::parse_quote!(())));
+        static SPAN: AbstractType = AbstractType::Concrete(Rc::new(syn::parse_quote!(::pag_util::Span<'src>)));
     }
-    pub fn span_type() -> Self {
-        SPAN_TYPE.with(Self::clone)
+
+    pub fn unit() -> Self {
+        Self::UNIT.with(Self::clone)
+    }
+
+    pub fn span() -> Self {
+        Self::SPAN.with(Self::clone)
     }
 }
 
@@ -291,6 +293,9 @@ impl DerefMut for NFTable {
 #[cfg(feature = "debug")]
 impl std::fmt::Display for NFTable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut kv_vec: Vec<(&Tag, &Vec<NormalForm>)> = Vec::from_iter(self.iter());
+        kv_vec.sort_unstable_by_key(|(k, _)| *k); // for stable output
+
         let width = term_size::dimensions().map(|x| x.0).unwrap_or(0);
         writeln!(f, "┏{}┓", "━".repeat(width.saturating_sub(2)))?;
         writeln!(
@@ -301,7 +306,7 @@ impl std::fmt::Display for NFTable {
             styled!(Style::new().bold(), "[Output]"),
             styled!(Style::new().italic().bold(), "Anonymous"),
         )?;
-        for (tag, forms) in self.iter() {
+        for (tag, forms) in kv_vec {
             writeln!(
                 f,
                 "\t{}\t=\t{}",
