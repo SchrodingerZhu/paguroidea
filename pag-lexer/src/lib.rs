@@ -85,7 +85,8 @@ mod tests {
                 })],
                 &quote!({
                     return None;
-                })
+                }),
+                &Default::default()
             )
         );
     }
@@ -109,6 +110,7 @@ mod tests {
         println!();
         let vectorized = Vector::new([normalized]);
         let mut optimizer = LoopOptimizer::new();
+        let config = Default::default();
         println!(
             "{}",
             vectorized.generate_dfa(
@@ -119,7 +121,8 @@ mod tests {
                 })],
                 &quote!({
                     return None;
-                })
+                }),
+                &config
             )
         );
     }
