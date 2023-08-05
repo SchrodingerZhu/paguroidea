@@ -337,6 +337,7 @@ fn generate_inactive_parser<'src>(
         loop_optimizer,
         &success_actions,
         &failure_action,
+        &Default::default(),
     );
     quote! {
         fn #parser_name<'a>(
@@ -395,6 +396,7 @@ fn generate_active_parser<'src>(
         loop_optimizer,
         &success_actions,
         &failure_action,
+        &Default::default(),
     );
     quote! {
         fn #parser_name(

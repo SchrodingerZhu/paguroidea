@@ -6,8 +6,6 @@ pub use parser::parse;
 use rand::prelude::StdRng;
 use rand::{Rng, SeedableRng};
 
-use crate::parser::ParseTree;
-
 pub fn generate_csv(line: usize, width: usize) -> String {
     let mut random = std::env::var("PAG_RANDOM_SEED")
         .ok()
@@ -36,7 +34,7 @@ fn test_csv() {
     let data = generate_csv(500, 500);
     let parsed = parser::parse(&data);
     assert_eq!(
-        parsed.as_ref().map(ParseTree::len),
+        parsed.as_ref().map(crate::parser::ParseTree::len),
         Ok(data.len()),
         "\n{data}"
     );

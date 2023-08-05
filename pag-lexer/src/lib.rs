@@ -18,7 +18,7 @@ pub mod utilities;
 pub mod vector;
 
 #[derive(Debug, Clone)]
-pub struct DFAConfig {
+pub struct DfaConfig {
     /// Enable static dispatch of longest matches.
     /// This may duplicate DFA states.
     pub static_dispatch: bool,
@@ -30,10 +30,10 @@ pub struct DFAConfig {
     pub lookahead: bool,
     /// SIMD optimization threshold. Setting to zero will stop the lookahead
     /// optimizer generate SIMD code.
-    pub simd_threshold: usize,
+    pub simd_threshold: u32,
 }
 
-impl Default for DFAConfig {
+impl Default for DfaConfig {
     fn default() -> Self {
         Self {
             static_dispatch: true,
@@ -112,8 +112,9 @@ mod tests {
                 })],
                 &quote!({
                     return None;
-                })
-            )
+                }),
+                &Default::default()
+            ),
         );
     }
 
@@ -146,7 +147,8 @@ mod tests {
                 })],
                 &quote!({
                     return None;
-                })
+                }),
+                &Default::default()
             )
         );
     }
