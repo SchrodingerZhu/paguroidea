@@ -8,6 +8,7 @@
 
 use crate::intervals::{byte_char, Interval, Intervals};
 use crate::vector::{DfaState, DfaTable};
+use crate::DfaConfig;
 use proc_macro2::TokenStream;
 use quote::quote;
 use std::collections::hash_map::Entry;
@@ -161,8 +162,16 @@ impl LoopOptimizer {
         })
     }
 
-    pub fn generate_lookahead(&mut self, dfa: &DfaTable, state: &DfaState) -> Option<TokenStream> {
-        let limit = 4;
+    pub fn generate_lookahead(
+        &mut self,
+        dfa: &DfaTable,
+        state: &DfaState,
+        config: &DfaConfig,
+    ) -> Option<TokenStream> {
+        if !config.lookahead {
+            return None;
+        }
+        let limit = config.simd_threshold;
 
         let positives = direct_self_loops(dfa, state)?;
         let negatives = positives.complement()?;

@@ -12,6 +12,7 @@ use crate::intervals::Intervals;
 use crate::normalization::normalize;
 use crate::regex_tree::RegexTree;
 use crate::utilities::dbg_sort;
+use crate::DfaConfig;
 
 use crate::lookahead::LoopOptimizer;
 use proc_macro2::{Literal, TokenStream};
@@ -122,6 +123,7 @@ impl Vector {
         optimizer: &mut LoopOptimizer,
         success_actions: &[TokenStream],
         failure_action: &TokenStream,
+        config: &DfaConfig,
     ) -> TokenStream {
         let initial_state = {
             let initial_state = self.normalize();
@@ -155,7 +157,7 @@ impl Vector {
                     },
                 };
             }
-            let lookahead = optimizer.generate_lookahead(&dfa, state);
+            let lookahead = optimizer.generate_lookahead(&dfa, state, config);
             let transitions = info.transitions.iter().map(|(interval, target)| {
                 if leaf_states.contains(target) {
                     if let Some((rule_idx, seq)) = target.state_vec.as_byte_sequence() {
@@ -184,8 +186,10 @@ impl Vector {
                     return quote! { Some(#interval) => { cursor = idx + 1; #action }, };
                 }
                 let target_id = dfa[target].state_id;
-                #[cfg(not(target_arch = "aarch64"))]
-                if lookahead.is_some() && info.state_id == target_id {
+                if !cfg!(target_arch = "aarch64")
+                    && lookahead.is_some()
+                    && info.state_id == target_id
+                {
                     return quote! {};
                 }
                 let target_label = format_ident!("S{}", target_id);
