@@ -17,6 +17,33 @@ pub mod regex_tree;
 pub mod utilities;
 pub mod vector;
 
+#[derive(Debug, Clone)]
+pub struct DFAConfig {
+    /// Enable static dispatch of longest matches.
+    /// This may duplicate DFA states.
+    pub static_dispatch: bool,
+    /// Enable unicode mode. The DFA will only accept
+    /// an input if it stops at unicode boundaries.
+    pub unicode: bool,
+    /// Enable optimizations for lookahead. This will introduce
+    /// LUT or SIMD optimizations for DFA states that loop into itself.
+    pub lookahead: bool,
+    /// SIMD optimization threshold. Setting to zero will stop the lookahead
+    /// optimizer generate SIMD code.
+    pub simd_threshold: usize,
+}
+
+impl Default for DFAConfig {
+    fn default() -> Self {
+        Self {
+            static_dispatch: true,
+            unicode: false,
+            lookahead: true,
+            simd_threshold: 4,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::congruence::approximate_congruence_class;
