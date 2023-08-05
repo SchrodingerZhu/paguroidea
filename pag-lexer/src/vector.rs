@@ -132,7 +132,7 @@ impl Vector {
             }
         };
         let mut dfa = build_dfa(initial_state.state_vec.clone());
-        let leaf_states = extract_leaf_states(&mut dfa);
+        let leaf_states = extract_leaf_states(&mut dfa, &initial_state);
         let initial_label = format_ident!("S{}", dfa[&initial_state].state_id);
         let actions = dbg_sort(&dfa, |(_, info)| info.state_id).map(|(state, info)| {
             let label = format_ident!("S{}", info.state_id);
@@ -140,14 +140,17 @@ impl Vector {
                 let literal = Literal::byte_string(&seq);
                 let length = seq.len();
                 let on_success = &success_actions[rule_idx];
+                let on_failure = state
+                    .last_success
+                    .and_then(|x| success_actions.get(x))
+                    .unwrap_or(failure_action);
                 return quote! {
                     State::#label => {
-                        unsafe { ::pag_util::assume(idx <= input.len()) };
                         if input[idx..].starts_with(#literal) {
                             cursor = idx + #length;
                             #on_success
                         } else {
-                            #failure_action
+                            #on_failure
                         }
                     },
                 };
@@ -155,9 +158,30 @@ impl Vector {
             let lookahead = optimizer.generate_lookahead(&dfa, state);
             let transitions = info.transitions.iter().map(|(interval, target)| {
                 if leaf_states.contains(target) {
-                    let rule_idx = target.last_success.unwrap();
-                    let on_success = &success_actions[rule_idx];
-                    return quote! { Some(#interval) => { cursor = idx + 1; #on_success }, };
+                    if let Some((rule_idx, seq)) = target.state_vec.as_byte_sequence() {
+                        let literal = Literal::byte_string(&seq);
+                        let length = seq.len();
+                        let on_success = &success_actions[rule_idx];
+                        let on_failure = target
+                            .last_success
+                            .and_then(|x| success_actions.get(x))
+                            .unwrap_or(failure_action);
+                        return quote! {
+                            Some(#interval) => {
+                                if input[idx + 1..].starts_with(#literal) {
+                                    cursor = idx + 1 + #length;
+                                    #on_success
+                                } else {
+                                    #on_failure
+                                }
+                            },
+                        };
+                    }
+                    let action = state
+                        .last_success
+                        .and_then(|x| success_actions.get(x))
+                        .unwrap_or(failure_action);
+                    return quote! { Some(#interval) => { cursor = idx + 1; #action }, };
                 }
                 let target_id = dfa[target].state_id;
                 #[cfg(not(target_arch = "aarch64"))]
@@ -271,12 +295,12 @@ pub fn build_dfa(state: Vector) -> DfaTable {
     dfa
 }
 
-fn extract_leaf_states(dfa: &mut DfaTable) -> HashSet<DfaState> {
+fn extract_leaf_states(dfa: &mut DfaTable, initial_state: &DfaState) -> HashSet<DfaState> {
     // TODO: switch to `drain_filter` (nightly) / `extract_if` (hashbrown)
     let leaf_states = dfa
         .iter()
         .filter_map(|(state, info)| {
-            if info.transitions.is_empty() && state.last_success.is_some() {
+            if info.transitions.is_empty() && state != initial_state {
                 Some(state.clone())
             } else {
                 None
