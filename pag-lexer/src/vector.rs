@@ -40,6 +40,12 @@ impl Display for Vector {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Dispatch {
+    Static(Option<usize>),
+    Dynamic,
+}
+
 impl Vector {
     pub fn new<I>(iter: I) -> Self
     where
@@ -126,12 +132,37 @@ impl Vector {
         failure_action: &TokenStream,
         config: &DfaConfig,
     ) -> TokenStream {
+        let dispatch_prelogue = if !config.static_dispatch {
+            Some(quote!(let mut longest_match : Option<usize> = None;))
+        } else {
+            None
+        };
+        let dispatch_epilogue = if !config.static_dispatch {
+            let success_dispatch = success_actions
+                .iter()
+                .enumerate()
+                .map(|(idx, action)| quote!( Some(#idx) => { #action }));
+            Some(quote! {
+            match longest_match {
+                #(#success_dispatch,)*
+                _ => { #failure_action },
+            }})
+        } else {
+            None
+        };
+        let call_dispatcher = quote!({
+            break 'lexer;
+        });
         let initial_state = {
             let initial_state = self.normalize();
-            let last_success = initial_state.accepting_state();
+            let dispatch = if config.static_dispatch {
+                Dispatch::Static(initial_state.accepting_state())
+            } else {
+                Dispatch::Dynamic
+            };
             DfaState {
                 vector: initial_state,
-                last_success,
+                dispatch,
                 unicode: if config.unicode {
                     Some(UnicodeState::Accept)
                 } else {
@@ -148,10 +179,11 @@ impl Vector {
                 let literal = Literal::byte_string(&seq);
                 let length = seq.len();
                 let on_success = &success_actions[rule_idx];
-                let on_failure = state
-                    .last_success
-                    .and_then(|x| success_actions.get(x))
-                    .unwrap_or(failure_action);
+                let on_failure = match state.dispatch {
+                    Dispatch::Dynamic => &call_dispatcher,
+                    Dispatch::Static(Some(idx)) => &success_actions[idx],
+                    Dispatch::Static(None) => failure_action,
+                };
                 return quote! {
                     State::#label => {
                         if input[idx..].starts_with(#literal) {
@@ -170,10 +202,11 @@ impl Vector {
                         let literal = Literal::byte_string(&seq);
                         let length = seq.len();
                         let on_success = &success_actions[rule_idx];
-                        let on_failure = target
-                            .last_success
-                            .and_then(|x| success_actions.get(x))
-                            .unwrap_or(failure_action);
+                        let on_failure = match state.dispatch {
+                            Dispatch::Dynamic => &call_dispatcher,
+                            Dispatch::Static(Some(idx)) => &success_actions[idx],
+                            Dispatch::Static(None) => failure_action,
+                        };
                         return quote! {
                             Some(#interval) => {
                                 if input[idx + 1..].starts_with(#literal) {
@@ -185,10 +218,11 @@ impl Vector {
                             },
                         };
                     }
-                    let action = state
-                        .last_success
-                        .and_then(|x| success_actions.get(x))
-                        .unwrap_or(failure_action);
+                    let action = match state.dispatch {
+                        Dispatch::Dynamic => &call_dispatcher,
+                        Dispatch::Static(Some(idx)) => &success_actions[idx],
+                        Dispatch::Static(None) => failure_action,
+                    };
                     return quote! { Some(#interval) => { cursor = idx + 1; #action }, };
                 }
                 let target_id = dfa[target].state_id;
@@ -201,12 +235,17 @@ impl Vector {
                 let target_label = format_ident!("S{}", target_id);
                 quote! { Some(#interval) => state = State::#target_label, }
             });
-            let otherwise = state
-                .last_success
-                .and_then(|x| success_actions.get(x))
-                .unwrap_or(failure_action);
-            let advance_cursor = if state.accepting_state().is_some() {
-                Some(quote!(cursor = idx;))
+            let otherwise = match state.dispatch {
+                Dispatch::Dynamic => &call_dispatcher,
+                Dispatch::Static(Some(idx)) => &success_actions[idx],
+                Dispatch::Static(None) => failure_action,
+            };
+            let advance_cursor = if let Some(x) = state.accepting_state() {
+                if matches!(state.dispatch, Dispatch::Dynamic) {
+                    Some(quote! { cursor = idx; longest_match = Some(#x); })
+                } else {
+                    Some(quote!(cursor = idx;))
+                }
             } else {
                 None
             };
@@ -226,17 +265,20 @@ impl Vector {
             .map(|info| format_ident!("S{}", info.state_id));
 
         quote! {
+
             enum State {
                 #(#labels,)*
             }
             let mut idx = #initial_idx;
             let mut state = State::#initial_label;
-            loop {
+            #dispatch_prelogue
+            'lexer: loop {
                 match state {
                     #(#actions)*
                 }
                 idx += 1;
             }
+            #dispatch_epilogue
         }
     }
 }
@@ -244,8 +286,17 @@ impl Vector {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DfaState {
     vector: Vector,
-    last_success: Option<usize>,
+    dispatch: Dispatch,
     unicode: Option<UnicodeState>,
+}
+
+impl Dispatch {
+    pub fn update(&self, current_success: Option<usize>) -> Self {
+        match self {
+            Self::Static(x) => Self::Static(current_success.or(*x)),
+            Self::Dynamic => Self::Dynamic,
+        }
+    }
 }
 
 impl DfaState {
@@ -264,10 +315,10 @@ impl DfaState {
         let unicode = self.unicode.as_ref().map(|x| x.next(byte));
         let mut result = Self {
             vector,
-            last_success: self.last_success,
+            dispatch: self.dispatch.clone(),
             unicode,
         };
-        result.last_success = result.accepting_state().or(result.last_success);
+        result.dispatch = result.dispatch.update(result.accepting_state());
         result
     }
     pub fn accepting_state(&self) -> Option<usize> {

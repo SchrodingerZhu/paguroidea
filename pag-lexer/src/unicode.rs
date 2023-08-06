@@ -37,11 +37,11 @@ impl UnicodeState {
             // 0xE000 - 0xFFFF
             (Accept, 0b1110_1110..=0b1110_1111) => UnicodeTail(2),
             // 0x10000 - 0x3FFFF
-            (Accept, 0b11110_000) => UnicodeMiddle(0b10_000000..=0b10_011111, 2),
+            (Accept, 0b1111_0000) => UnicodeMiddle(0b10_000000..=0b10_011111, 2),
             // 0x40000 - 0xFFFFF
-            (Accept, 0b11110_001..=0b11110_011) => UnicodeTail(3),
+            (Accept, 0b1111_0001..=0b1111_0011) => UnicodeTail(3),
             // 0x100000 - 0x10FFFF
-            (Accept, 0b11110_100) => UnicodeMiddle(0b10_000000..=0b10_001111, 2),
+            (Accept, 0b1111_0100) => UnicodeMiddle(0b10_000000..=0b10_001111, 2),
             (UnicodeTail(1), 0b10_000000..=0b10_111111) => Accept,
             (UnicodeTail(x), 0b10_000000..=0b10_111111) => UnicodeTail(x.wrapping_sub(1)),
             (UnicodeMiddle(range, n), x) if range.contains(&x) => UnicodeTail(*n),
@@ -72,13 +72,13 @@ impl UnicodeState {
                 // => UnicodeMiddle(0b10_000000..=0b10_011111, 1)
                 intervals!((0b1110_1101, 0b1110_1101)),
                 // => UnicodeMiddle(0b10_000000..=0b10_011111, 2)
-                intervals!((0b11110_000, 0b11110_000)),
+                intervals!((0b1111_0000, 0b1111_0000)),
                 // => Tail 3
-                intervals!((0b11110_001, 0b11110_011)),
+                intervals!((0b1111_0001, 0b1111_0011)),
                 // => UnicodeMiddle(0b10_000000..=0b10_001111, 2)
-                intervals!((0b11110_100, 0b11110_100)),
+                intervals!((0b1111_0100, 0b1111_0100)),
                 // => Reject
-                intervals!((0b10_000000, 0b10_111111), (0b11110_101, u8::MAX)),
+                intervals!((0b10_000000, 0b10_111111), (0b1111_0101, u8::MAX)),
             ]
             .into(),
             UnicodeTail(_) => [
