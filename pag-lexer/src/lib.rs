@@ -14,6 +14,7 @@ pub mod intervals;
 pub mod lookahead;
 pub mod normalization;
 pub mod regex_tree;
+pub mod unicode;
 pub mod utilities;
 pub mod vector;
 
