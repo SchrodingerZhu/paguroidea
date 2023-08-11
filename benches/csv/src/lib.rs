@@ -1,6 +1,5 @@
 #![feature(portable_simd)]
-#![feature(core_intrinsics)]
-#![feature(array_chunks)]
+
 mod parser;
 
 pub use parser::parse;
@@ -33,6 +32,10 @@ pub fn generate_csv(line: usize, width: usize) -> String {
 #[test]
 fn test_csv() {
     let data = generate_csv(500, 500);
-    let parsed = parser::parse(&data).unwrap();
-    assert_eq!(parsed.len(), data.len());
+    let parsed = parser::parse(&data);
+    assert_eq!(
+        parsed.as_ref().map(crate::parser::ParseTree::len),
+        Ok(data.len()),
+        "\n{data}"
+    );
 }

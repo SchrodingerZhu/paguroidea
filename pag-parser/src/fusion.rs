@@ -35,14 +35,14 @@ fn generate_tag_enum(parser: &Parser<'_, '_>) -> TokenStream {
 fn generate_parse_tree() -> TokenStream {
     quote! {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct ParserTree<'a> {
+        pub struct ParseTree<'a> {
             tag: Tag,
             src: &'a str,
             span: core::ops::Range<usize>,
             children: alloc::vec::Vec<Self>
         }
 
-        impl <'a> ParserTree<'a> {
+        impl <'a> ParseTree<'a> {
             pub fn new(tag: Tag, src: &'a str) -> Self {
                 Self {
                     tag,
@@ -96,7 +96,7 @@ fn generate_error() -> TokenStream {
                 let expect = match self.expecting {
                     [head] => head.to_string(),
                     [init @ .., last] => format!("{} or {last}", init.join(", ")),
-                    _ => unsafe { std::intrinsics::unreachable() },
+                    _ => unsafe { std::hint::unreachable_unchecked() },
                 };
                 write!(
                     f,
@@ -169,7 +169,7 @@ fn generate_empty_actions(active: bool, symbols: &[Symbol<'_>]) -> Vec<TokenStre
                 format_ident!("parent")
             };
             quote! {{
-                let mut subtree = ParserTree::new(Tag::#tag, src);
+                let mut subtree = ParseTree::new(Tag::#tag, src);
                 subtree.set_span(cursor..cursor);
                 #target.add_child(subtree);
             }}
@@ -199,7 +199,9 @@ fn generate_children<'src>(
         .iter()
         .filter(|x| !matches!(x, NormalForm::Empty(..)))
         .map(|nf| {
-            let NormalForm::Sequence { nonterminals, .. } = nf else { unreachable!() };
+            let NormalForm::Sequence { nonterminals, .. } = nf else {
+                unreachable!()
+            };
 
             let mut add_continue = false;
             let mut actions = Vec::new();
@@ -209,7 +211,7 @@ fn generate_children<'src>(
             if let Some(sym) = next_tree_indices.get(&0) {
                 let tag = format_ident!("{}", sym.name());
                 actions.push(quote! {
-                    let mut subtree = ParserTree::new(Tag::#tag, src);
+                    let mut subtree = ParseTree::new(Tag::#tag, src);
                 });
                 subtree = true;
             }
@@ -303,8 +305,7 @@ fn generate_inactive_parser<'src>(
     rules: &[&NormalForm<'src>],
     loop_optimizer: &mut LoopOptimizer,
 ) -> TokenStream {
-    let tag_name = format!("{tag}");
-    let parser_name = format_ident!("parse_{tag_name}");
+    let parser_name = format_ident!("parse_{tag}");
     let expect = generate_expect(rules);
 
     let success_actions = generate_children(&tag, false, parser, rules)
@@ -336,12 +337,13 @@ fn generate_inactive_parser<'src>(
         loop_optimizer,
         &success_actions,
         &failure_action,
+        &Default::default(),
     );
     quote! {
         fn #parser_name<'a>(
             src: &'a str,
             mut offset: usize,
-            parent: &mut ParserTree<'a>,
+            parent: &mut ParseTree<'a>,
         ) -> Result<usize, Error> {
             #expect
             let mut cursor;
@@ -362,9 +364,8 @@ fn generate_active_parser<'src>(
     rules: &[&NormalForm<'src>],
     loop_optimizer: &mut LoopOptimizer,
 ) -> TokenStream {
-    let tag_name = format!("{tag}");
-    let tag_ident = format_ident!("{tag_name}");
-    let parser_name = format_ident!("parse_{tag_name}");
+    let tag_ident = format_ident!("{}", tag.symbol().name());
+    let parser_name = format_ident!("parse_{tag}");
     let expect = generate_expect(rules);
 
     let success_actions = generate_children(&tag, true, parser, rules)
@@ -395,14 +396,15 @@ fn generate_active_parser<'src>(
         loop_optimizer,
         &success_actions,
         &failure_action,
+        &Default::default(),
     );
     quote! {
         fn #parser_name(
             src: &str,
             mut offset: usize,
-        ) -> Result<ParserTree, Error> {
+        ) -> Result<ParseTree, Error> {
             #expect
-            let mut tree = ParserTree::new(Tag::#tag_ident, src);
+            let mut tree = ParseTree::new(Tag::#tag_ident, src);
             let mut cursor;
             'parser: loop {
                 cursor = offset;

@@ -7,16 +7,7 @@
 # modified, or distributed except according to those terms.
 
 [workspace]
-members = [
-    "pag-lexer",
-    "pag-parser",
-    "pag-compiler",
-    "tests/sexpr-calculator",
-    "tests/arith-expr",
-    "tests/tokenizer",
-    "benches/csv",
-    "benches/json",
-]
+members = ["pag-*", "tests/*", "benches/*"]
 resolver = "2"
 
 [workspace.package]

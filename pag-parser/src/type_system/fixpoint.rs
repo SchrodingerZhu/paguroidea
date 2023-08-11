@@ -39,7 +39,9 @@ fn find_neighbors(
         Term::Fix(_, expr) => find_neighbors(expr, neighbors, sym_to_id),
         Term::ParserRef(symbol) => {
             // unexisted IDs refer to implicit fixpoints
-            let Some(&id) = sym_to_id.get(symbol) else { return };
+            let Some(&id) = sym_to_id.get(symbol) else {
+                return;
+            };
             neighbors.push(id);
         }
         _ => {}

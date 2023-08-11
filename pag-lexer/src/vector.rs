@@ -11,7 +11,9 @@ use crate::derivative::derivative;
 use crate::intervals::Intervals;
 use crate::normalization::normalize;
 use crate::regex_tree::RegexTree;
+use crate::unicode::UnicodeState;
 use crate::utilities::dbg_sort;
+use crate::DfaConfig;
 
 use crate::lookahead::LoopOptimizer;
 use proc_macro2::{Literal, TokenStream};
@@ -36,6 +38,12 @@ impl Display for Vector {
         }
         write!(f, ")")
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Dispatch {
+    Static(Option<usize>),
+    Dynamic,
 }
 
 impl Vector {
@@ -122,51 +130,122 @@ impl Vector {
         optimizer: &mut LoopOptimizer,
         success_actions: &[TokenStream],
         failure_action: &TokenStream,
+        config: &DfaConfig,
     ) -> TokenStream {
+        let dispatch_prelogue = if !config.static_dispatch {
+            Some(quote!(let mut longest_match : Option<usize> = None;))
+        } else {
+            None
+        };
+        let dispatch_epilogue = if !config.static_dispatch {
+            let success_dispatch = success_actions
+                .iter()
+                .enumerate()
+                .map(|(idx, action)| quote!( Some(#idx) => { #action }));
+            Some(quote! {
+            match longest_match {
+                #(#success_dispatch,)*
+                _ => { #failure_action },
+            }})
+        } else {
+            None
+        };
+        let call_dispatcher = quote!({
+            break 'lexer;
+        });
         let initial_state = {
             let initial_state = self.normalize();
-            let last_success = initial_state.accepting_state();
+            let dispatch = if config.static_dispatch {
+                Dispatch::Static(initial_state.accepting_state())
+            } else {
+                Dispatch::Dynamic
+            };
             DfaState {
-                state_vec: initial_state,
-                last_success,
+                vector: initial_state,
+                dispatch,
+                unicode: if config.unicode {
+                    Some(UnicodeState::Accept)
+                } else {
+                    None
+                },
             }
         };
-        let mut dfa = build_dfa(initial_state.state_vec.clone());
-        let leaf_states = extract_leaf_states(&mut dfa);
+        let mut dfa = build_dfa(initial_state.clone());
+        let leaf_states = extract_leaf_states(&mut dfa, &initial_state);
         let initial_label = format_ident!("S{}", dfa[&initial_state].state_id);
         let actions = dbg_sort(&dfa, |(_, info)| info.state_id).map(|(state, info)| {
             let label = format_ident!("S{}", info.state_id);
-            if let Some((rule_idx, seq)) = state.state_vec.as_byte_sequence() {
+            if let Some((rule_idx, seq)) = state.as_byte_sequence() {
                 let literal = Literal::byte_string(&seq);
                 let length = seq.len();
                 let on_success = &success_actions[rule_idx];
+                let on_failure = match state.dispatch {
+                    Dispatch::Dynamic => &call_dispatcher,
+                    Dispatch::Static(Some(idx)) => &success_actions[idx],
+                    Dispatch::Static(None) => failure_action,
+                };
                 return quote! {
                     State::#label => {
                         if input[idx..].starts_with(#literal) {
                             cursor = idx + #length;
                             #on_success
                         } else {
-                            #failure_action
+                            #on_failure
                         }
                     },
                 };
             }
+            let lookahead = optimizer.generate_lookahead(&dfa, state, config);
             let transitions = info.transitions.iter().map(|(interval, target)| {
                 if leaf_states.contains(target) {
-                    let rule_idx = target.last_success.unwrap();
-                    let on_success = &success_actions[rule_idx];
-                    return quote! { Some(#interval) => { cursor = idx + 1; #on_success }, };
+                    if let Some((rule_idx, seq)) = target.as_byte_sequence() {
+                        let literal = Literal::byte_string(&seq);
+                        let length = seq.len();
+                        let on_success = &success_actions[rule_idx];
+                        let on_failure = match state.dispatch {
+                            Dispatch::Dynamic => &call_dispatcher,
+                            Dispatch::Static(Some(idx)) => &success_actions[idx],
+                            Dispatch::Static(None) => failure_action,
+                        };
+                        return quote! {
+                            Some(#interval) => {
+                                if input[idx + 1..].starts_with(#literal) {
+                                    cursor = idx + 1 + #length;
+                                    #on_success
+                                } else {
+                                    #on_failure
+                                }
+                            },
+                        };
+                    }
+                    let action = match state.dispatch {
+                        Dispatch::Dynamic => &call_dispatcher,
+                        Dispatch::Static(Some(idx)) => &success_actions[idx],
+                        Dispatch::Static(None) => failure_action,
+                    };
+                    return quote! { Some(#interval) => { cursor = idx + 1; #action }, };
                 }
-                let target_label = format_ident!("S{}", dfa[target].state_id);
+                let target_id = dfa[target].state_id;
+                if !cfg!(target_arch = "aarch64")
+                    && lookahead.is_some()
+                    && info.state_id == target_id
+                {
+                    return quote! {};
+                }
+                let target_label = format_ident!("S{}", target_id);
                 quote! { Some(#interval) => state = State::#target_label, }
             });
-            let lookahead = optimizer.generate_lookahead(&dfa, state);
-            let otherwise = state
-                .last_success
-                .and_then(|x| success_actions.get(x))
-                .unwrap_or(failure_action);
-            let advance_cursor = if state.state_vec.accepting_state().is_some() {
-                Some(quote!(cursor = idx;))
+            let otherwise = match state.dispatch {
+                Dispatch::Dynamic => &call_dispatcher,
+                Dispatch::Static(Some(idx)) => &success_actions[idx],
+                Dispatch::Static(None) => failure_action,
+            };
+            let advance_cursor = if let Some(x) = state.accepting_state() {
+                if matches!(state.dispatch, Dispatch::Dynamic) {
+                    Some(quote! { cursor = idx; longest_match = Some(#x); })
+                } else {
+                    Some(quote!(cursor = idx;))
+                }
             } else {
                 None
             };
@@ -186,25 +265,104 @@ impl Vector {
             .map(|info| format_ident!("S{}", info.state_id));
 
         quote! {
+
             enum State {
                 #(#labels,)*
             }
             let mut idx = #initial_idx;
             let mut state = State::#initial_label;
-            loop {
+            #dispatch_prelogue
+            'lexer: loop {
                 match state {
                     #(#actions)*
                 }
                 idx += 1;
             }
+            #dispatch_epilogue
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DfaState {
-    state_vec: Vector,
-    last_success: Option<usize>,
+    vector: Vector,
+    dispatch: Dispatch,
+    unicode: Option<UnicodeState>,
+}
+
+impl Dispatch {
+    pub fn update(&self, current_success: Option<usize>) -> Self {
+        match self {
+            Self::Static(x) => Self::Static(current_success.or(*x)),
+            Self::Dynamic => Self::Dynamic,
+        }
+    }
+}
+
+impl DfaState {
+    pub fn approximate_congruence_class(&self) -> Vec<Intervals> {
+        match &self.unicode {
+            None => self.vector.approximate_congruence_class(),
+            Some(state) => {
+                let classes = self.vector.approximate_congruence_class();
+                let unicode_classes = state.congruence_classes();
+                meet(&classes, &unicode_classes)
+            }
+        }
+    }
+    pub fn next(&self, byte: u8) -> Self {
+        let vector = self.vector.derivative(byte).normalize();
+        let unicode = self.unicode.as_ref().map(|x| x.next(byte));
+        let mut result = Self {
+            vector,
+            dispatch: self.dispatch.clone(),
+            unicode,
+        };
+        result.dispatch = result.dispatch.update(result.accepting_state());
+        result
+    }
+    pub fn accepting_state(&self) -> Option<usize> {
+        if self
+            .unicode
+            .as_ref()
+            .map(|x| !x.is_accept())
+            .unwrap_or(false)
+        {
+            return None;
+        }
+        self.vector.accepting_state()
+    }
+    pub fn is_rejecting_state(&self) -> bool {
+        self.unicode
+            .as_ref()
+            .map(|x| x.is_reject())
+            .unwrap_or(false)
+            || self.vector.is_rejecting_state()
+    }
+    pub fn is_byte_sequence(&self) -> bool {
+        match &self.unicode {
+            None => self.vector.is_byte_sequence(),
+            Some(state) => {
+                let Some((_, seq)) = self.vector.as_byte_sequence() else {
+                    return false;
+                };
+                state.accept_sequence(&seq)
+            }
+        }
+    }
+    pub fn as_byte_sequence(&self) -> Option<(usize, Vec<u8>)> {
+        match &self.unicode {
+            None => self.vector.as_byte_sequence(),
+            Some(state) => {
+                let (idx, seq) = self.vector.as_byte_sequence()?;
+                if state.accept_sequence(&seq) {
+                    Some((idx, seq))
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -225,25 +383,20 @@ fn explore_dfa_node(dfa: &mut DfaTable, state: DfaState, state_id: &mut usize) {
     );
     *state_id += 1;
 
-    if state.state_vec.is_byte_sequence() {
+    if state.is_byte_sequence() {
         return;
     }
 
-    let classes = state.state_vec.approximate_congruence_class();
+    let classes = state.approximate_congruence_class();
     let mut transitions = Vec::with_capacity(classes.len());
 
     for intervals in classes {
         let char = intervals.representative();
-        let target = state.state_vec.derivative(char).normalize();
-        let last_success = target.accepting_state().or(state.last_success);
-        let next = DfaState {
-            state_vec: target,
-            last_success,
-        };
-        if !next.state_vec.is_rejecting_state() {
-            transitions.push((intervals, next.clone()));
-            if !dfa.contains_key(&next) {
-                explore_dfa_node(dfa, next, state_id)
+        let target = state.next(char);
+        if !target.is_rejecting_state() {
+            transitions.push((intervals, target.clone()));
+            if !dfa.contains_key(&target) {
+                explore_dfa_node(dfa, target, state_id)
             }
         }
     }
@@ -251,26 +404,21 @@ fn explore_dfa_node(dfa: &mut DfaTable, state: DfaState, state_id: &mut usize) {
     dfa.get_mut(&state).unwrap().transitions = transitions;
 }
 
-pub fn build_dfa(state: Vector) -> DfaTable {
+pub fn build_dfa(state: DfaState) -> DfaTable {
     let mut state_id = 0;
     let mut dfa = HashMap::new();
-    let last_success = state.accepting_state();
-    let state = DfaState {
-        state_vec: state,
-        last_success,
-    };
     explore_dfa_node(&mut dfa, state, &mut state_id);
     #[cfg(pag_print_dfa)]
     print_dfa(&dfa);
     dfa
 }
 
-fn extract_leaf_states(dfa: &mut DfaTable) -> HashSet<DfaState> {
+fn extract_leaf_states(dfa: &mut DfaTable, initial_state: &DfaState) -> HashSet<DfaState> {
     // TODO: switch to `drain_filter` (nightly) / `extract_if` (hashbrown)
     let leaf_states = dfa
         .iter()
         .filter_map(|(state, info)| {
-            if info.transitions.is_empty() && state.last_success.is_some() {
+            if info.transitions.is_empty() && state != initial_state {
                 Some(state.clone())
             } else {
                 None

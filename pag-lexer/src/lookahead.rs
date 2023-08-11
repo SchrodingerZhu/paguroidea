@@ -8,6 +8,7 @@
 
 use crate::intervals::{byte_char, Interval, Intervals};
 use crate::vector::{DfaState, DfaTable};
+use crate::DfaConfig;
 use proc_macro2::TokenStream;
 use quote::quote;
 use std::collections::hash_map::Entry;
@@ -21,62 +22,85 @@ enum Kind {
 fn generate_lut_routine(index: usize) -> TokenStream {
     let table = index / 8;
     let shift = index % 8;
-    let bit = 1u8 << shift;
-    quote! {
-        idx = idx
-            + input[idx..]
-                .iter()
-                .position(|x| GLOBAL_LUT[#table][*x as usize] & #bit > 0)
-                .unwrap_or(input.len() - idx);
-    }
+    quote! { idx = ::pag_util::lookahead_lut(input, idx, &GLOBAL_LUT[#table], #shift); }
 }
 
-fn byte_simd(byte: u8) -> TokenStream {
-    let byte = byte_char(byte);
-    quote! {
-        data.simd_eq(u8x16::splat(#byte))
-    }
-}
-
-fn range_simd(min: u8, max: u8) -> TokenStream {
-    let min = byte_char(min);
-    let max = byte_char(max);
-    quote! {
-        data.simd_ge(u8x16::splat(#min)) & data.simd_le(u8x16::splat(#max))
-    }
-}
-
+#[cfg(not(target_arch = "aarch64"))]
 fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream {
+    let mask = intervals
+        .iter()
+        .map(|&Interval(l, r)| match l == r {
+            true => {
+                let l = byte_char(l);
+                quote! { data.simd_eq(u8x16::splat(#l)) }
+            }
+            false => {
+                let l = byte_char(l);
+                let r = byte_char(r);
+                quote! { data.simd_ge(u8x16::splat(#l)) & data.simd_le(u8x16::splat(#r)) }
+            }
+        })
+        .reduce(|acc, x| quote! { #acc | #x })
+        .unwrap();
     let count_act = match kind {
         Kind::Positive => quote! { trailing_ones },
         Kind::Negative => quote! { trailing_zeros },
     };
-    let idx_offset = intervals
-        .iter()
-        .map(|&Interval(l, r)| match l == r {
-            true => byte_simd(l),
-            false => range_simd(l, r),
-        })
-        .reduce(|acc, x| quote! { #acc | #x })
-        .map(|x| {
-            if cfg!(target_arch = "aarch64") {
-                quote! {{
-                    let mask : u128 = unsafe { core::mem::transmute(#x) };
-                    mask.#count_act() / 8
-                }}
-            } else {
-                quote! {
-                    (#x).to_bitmask().#count_act()
+    let tail_match = match kind {
+        Kind::Positive => quote! { matches!(input.get(idx), Some(#intervals)) },
+        Kind::Negative => quote! { !matches!(input.get(idx), Some(#intervals) | None) },
+    };
+    quote! {
+        'lookahead: {
+            unsafe { ::pag_util::assume(idx <= input.len()) };
+            for chunk in input[idx..].chunks_exact(16) {
+                use core::simd::*;
+                let data = u8x16::from_slice(chunk);
+                let mask = #mask;
+                let idx_offset = mask.to_bitmask().#count_act();
+                idx += idx_offset as usize;
+                if idx_offset != 16 {
+                    break 'lookahead;
                 }
             }
-        });
+            while #tail_match {
+                idx += 1;
+            }
+        }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream {
+    let mask = intervals
+        .iter()
+        .map(|&Interval(l, r)| match l == r {
+            true => {
+                let l = byte_char(l);
+                quote! { data.simd_eq(u8x16::splat(#l)) }
+            }
+            false => {
+                let l = byte_char(l);
+                let r = byte_char(r);
+                quote! { data.simd_ge(u8x16::splat(#l)) & data.simd_le(u8x16::splat(#r)) }
+            }
+        })
+        .reduce(|acc, x| quote! { #acc | #x })
+        .unwrap();
+    let count_act = match kind {
+        Kind::Positive => quote! { trailing_ones },
+        Kind::Negative => quote! { trailing_zeros },
+    };
     quote! {
-        for i in input[idx..].array_chunks::<16>() {
+        unsafe { ::pag_util::assume(idx <= input.len()) };
+        for chunk in input[idx..].chunks_exact(16) {
             use core::simd::*;
-            let data = u8x16::from_slice(i);
-            let idx_offset = #idx_offset;
+            let data = u8x16::from_slice(chunk);
+            let mask = #mask;
+            let mask = unsafe { core::mem::transmute::<_, u128>(mask) };
+            let idx_offset = mask.#count_act() / 8;
             idx += idx_offset as usize;
-            if core::intrinsics::unlikely(idx_offset != 16) {
+            if idx_offset != 16 {
                 break;
             }
         }
@@ -86,7 +110,7 @@ fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream 
 fn estimated_cost(intervals: &Intervals) -> u32 {
     intervals
         .iter()
-        .map(|Interval(l, r)| if l == r { 1 } else { 2 })
+        .map(|Interval(l, r)| 1 + (l != r) as u32)
         .sum()
 }
 
@@ -134,25 +158,35 @@ impl LoopOptimizer {
         let table_size = self.global_lut.len();
         let table = self.global_lut.iter().map(|x| quote!([#(#x,)*]));
         Some(quote! {
-            const GLOBAL_LUT : [[u8; 256]; #table_size] = [ #(#table,)* ];
+            const GLOBAL_LUT: [[u8; 256]; #table_size] = [ #(#table,)* ];
         })
     }
 
-    pub fn generate_lookahead(&mut self, dfa: &DfaTable, state: &DfaState) -> Option<TokenStream> {
-        let limit = 4;
+    pub fn generate_lookahead(
+        &mut self,
+        dfa: &DfaTable,
+        state: &DfaState,
+        config: &DfaConfig,
+    ) -> Option<TokenStream> {
+        if !config.lookahead {
+            return None;
+        }
+        let limit = config.simd_threshold;
 
         let positives = direct_self_loops(dfa, state)?;
-        if estimated_cost(&positives) <= limit {
-            return Some(generate_lookahead_routine(&positives, Kind::Positive));
-        }
-
         let negatives = positives.complement()?;
-        if estimated_cost(&negatives) <= limit {
-            return Some(generate_lookahead_routine(&negatives, Kind::Negative));
-        }
+        let pos_cost = estimated_cost(&positives);
+        let neg_cost = estimated_cost(&negatives);
 
-        let index = self.assign_table(&negatives);
-        Some(generate_lut_routine(index))
+        if pos_cost.min(neg_cost) > limit {
+            let index = self.assign_table(&negatives);
+            return Some(generate_lut_routine(index));
+        }
+        if pos_cost < neg_cost {
+            Some(generate_lookahead_routine(&positives, Kind::Positive))
+        } else {
+            Some(generate_lookahead_routine(&negatives, Kind::Negative))
+        }
     }
 }
 
@@ -174,7 +208,9 @@ mod test {
     fn test_lookahead_codegen() {
         use crate::intervals;
         let positives = intervals!((b'0', b'9'), (b'0', b'9'), (b'A', b'F'));
-        syn::parse2::<syn::Expr>(generate_lookahead_routine(&positives, Kind::Positive)).unwrap();
-        syn::parse2::<syn::Expr>(generate_lookahead_routine(&positives, Kind::Negative)).unwrap();
+        let positive = generate_lookahead_routine(&positives, Kind::Positive);
+        let _: syn::Expr = syn::parse_quote! { { #positive } };
+        let negative = generate_lookahead_routine(&positives, Kind::Negative);
+        let _: syn::Expr = syn::parse_quote! { { #negative } };
     }
 }

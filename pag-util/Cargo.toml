@@ -1,0 +1,23 @@
+# Copyright (c) 2023 Paguroidea Developers
+#
+# Licensed under the Apache License, Version 2.0
+# <LICENSE-APACHE or http://www.apache.org/licenses/LICENSE-2.0> or the MIT
+# license <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+# option. All files in the project carrying such notice may not be copied,
+# modified, or distributed except according to those terms.
+
+[package]
+name = "pag-util"
+keywords = ["parser", "cfg", "grammar"]
+description = "Parser-lexer fusion generator (utilities)"
+documentation = "https://docs.rs/pag-util/"
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+exclude.workspace = true
+categories.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+readme.workspace = true

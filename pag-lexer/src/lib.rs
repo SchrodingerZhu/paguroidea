@@ -5,9 +5,8 @@
 // license <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
+
 #![feature(portable_simd)]
-#![feature(core_intrinsics)]
-#![feature(array_chunks)]
 
 pub mod congruence;
 pub mod derivative;
@@ -15,8 +14,36 @@ pub mod intervals;
 pub mod lookahead;
 pub mod normalization;
 pub mod regex_tree;
+pub mod unicode;
 pub mod utilities;
 pub mod vector;
+
+#[derive(Debug, Clone)]
+pub struct DfaConfig {
+    /// Enable static dispatch of longest matches.
+    /// This may duplicate DFA states.
+    pub static_dispatch: bool,
+    /// Enable unicode mode. The DFA will only accept
+    /// an input if it stops at unicode boundaries.
+    pub unicode: bool,
+    /// Enable optimizations for lookahead. This will introduce
+    /// LUT or SIMD optimizations for DFA states that loop into itself.
+    pub lookahead: bool,
+    /// SIMD optimization threshold. Setting to zero will stop the lookahead
+    /// optimizer generate SIMD code.
+    pub simd_threshold: u32,
+}
+
+impl Default for DfaConfig {
+    fn default() -> Self {
+        Self {
+            static_dispatch: true,
+            unicode: false,
+            lookahead: true,
+            simd_threshold: 4,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -86,8 +113,9 @@ mod tests {
                 })],
                 &quote!({
                     return None;
-                })
-            )
+                }),
+                &Default::default()
+            ),
         );
     }
 
@@ -120,7 +148,8 @@ mod tests {
                 })],
                 &quote!({
                     return None;
-                })
+                }),
+                &Default::default()
             )
         );
     }

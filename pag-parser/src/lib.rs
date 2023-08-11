@@ -80,7 +80,7 @@ impl<'src> Error<'src> {
                         Report::build(ReportKind::Error, input_name, span.start)
                             .with_message("Syntax error in grammar definition")
                             .with_label(Label::new((input_name, span))
-                                .with_message(format!("{}", x.variant.message()))
+                                .with_message(x.variant.message())
                                 .with_color(Color::Red))
                             .finish()
                     },
@@ -88,7 +88,7 @@ impl<'src> Error<'src> {
                         Report::build(ReportKind::Error, input_name, span.start())
                             .with_message("Format error in grammar definition")
                             .with_label(Label::new((input_name, span.start()..span.end()))
-                                .with_message(format!("{}", message))
+                                .with_message(message)
                                 .with_color(Color::Red))
                             .finish()
                     },
@@ -268,7 +268,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
     merge_inactive_rules(&mut nfs, &parser, &nf_arena);
     remove_unreachable_rules(&mut nfs, &parser);
     let parser_routines = fusion_parser(&nfs, &parser);
-    let entrypoint = format_ident!("parse_{}", parser.entrypoint.name());
+    let entrypoint = format_ident!("parse_{}_0", parser.entrypoint.name());
     Ok(quote::quote! {
         #![allow(
             dead_code,
@@ -282,7 +282,7 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
             clippy::match_single_binding,
         )]
         #parser_routines
-        pub fn parse(input: &str) -> Result<ParserTree, Error> {
+        pub fn parse(input: &str) -> Result<ParseTree, Error> {
             #entrypoint(input, 0)
         }
     })

@@ -1,12 +1,11 @@
 #![feature(portable_simd)]
-#![feature(core_intrinsics)]
-#![feature(array_chunks)]
+
 use std::num::Wrapping;
 
 mod parser;
 
 #[allow(dead_code)]
-fn eval(tree: &parser::ParserTree) -> Wrapping<usize> {
+fn eval(tree: &parser::ParseTree) -> Wrapping<usize> {
     match tree.tag() {
         parser::Tag::expr => tree.children()[..].iter().map(eval).sum(),
         parser::Tag::mult => tree.children()[..].iter().map(eval).product(),

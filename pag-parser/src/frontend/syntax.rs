@@ -71,7 +71,7 @@ pub fn construct_parser<'src, 'arena>(
     };
     let mut errs = Vec::new();
     for rule in rules {
-        let ParserRuleDef { active, name, expr, } = &rule.node else {
+        let ParserRuleDef { active, name, expr } = &rule.node else {
             unreachable_branch!("parser should only contain rule definitions")
         };
         match construct_core_syntax_tree(&parser, expr) {
