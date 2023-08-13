@@ -7,6 +7,10 @@
 // modified, or distributed except according to those terms.
 
 use std::collections::HashMap;
+use std::ptr;
+use super::SpanBox;
+use std::hash::{Hash, Hasher};
+
 
 pub struct Ast {
     pub entry: syn::Ident,
@@ -31,7 +35,7 @@ pub struct ParserRule {
 }
 
 pub struct VarBinding {
-    pub expr: ParserExpr,
+    pub expr: SpanBox<ParserExpr>,
     pub name: Option<syn::Ident>,
     pub ty: Option<syn::Type>,
 }
@@ -52,11 +56,12 @@ pub enum LexerExpr {
 
 // TODO: how to express "select" & "ignore"?
 pub enum ParserExpr {
-    Seq(Box<Self>, Box<Self>),
-    Star(Box<Self>),
-    Plus(Box<Self>),
-    Opt(Box<Self>),
+    Seq(SpanBox<Self>, SpanBox<Self>),
+    Star(SpanBox<Self>),
+    Plus(SpanBox<Self>),
+    Opt(SpanBox<Self>),
     LexerRef(syn::Ident),
     ParserRef(syn::Ident),
-    Ignore(Box<Self>),
+    Ignore(SpanBox<Self>),
 }
+

@@ -10,3 +10,5 @@
 mod debug;
 mod frontend;
 mod nf;
+mod tyck;
+
