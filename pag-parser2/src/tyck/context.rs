@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Uid {
     Id(syn::Ident),
     Pt(*const ParserExpr) 
@@ -47,7 +47,7 @@ impl TypeContext {
     where
         F: FnOnce(&mut Self) -> R,
     {
-        let backup = self.gamma.insert(sym, r#type);
+        let backup = self.gamma.insert(sym.clone(), r#type);
         let result = f(self);
         if let Some(backup) = backup {
             self.gamma.insert(sym, backup);

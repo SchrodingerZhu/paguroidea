@@ -302,8 +302,8 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<SpanBox<ParserEx
         if input.peek(syn::Ident) {
             let ident = input.parse::<syn::Ident>()?.unraw();
             match ident_kind(&ident) {
-                IdentKind::LexerName => break 'lhs Box::new(WithSpan{node: ParserExpr::LexerRef(ident), span: ident.span()}),
-                IdentKind::ParserName => break 'lhs Box::new(WithSpan{node: ParserExpr::ParserRef(ident), span: ident.span()}),
+                IdentKind::LexerName => break 'lhs Box::new(WithSpan{node: ParserExpr::LexerRef(ident.clone()), span: ident.span()}),
+                IdentKind::ParserName => break 'lhs Box::new(WithSpan{node: ParserExpr::ParserRef(ident.clone()), span: ident.span()}),
                 _ => return Err(Error::new(ident.span(), "invalid ident")),
             }
         }
@@ -316,7 +316,8 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<SpanBox<ParserEx
             let pound = input.parse::<Token![#]>()?;
             let r_bp = 60;
             let rhs = parse_parser_expr(input, r_bp)?;
-            break 'lhs Box::new(WithSpan{node: ParserExpr::Ignore(rhs), span: pound.span.join(rhs.span).unwrap()});
+            let rspan = rhs.span;
+            break 'lhs Box::new(WithSpan{node: ParserExpr::Ignore(rhs), span: pound.span.join(rspan).unwrap()});
         }
         return Err(input.error("expected parser expression"));
     };
@@ -328,7 +329,9 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<SpanBox<ParserEx
                 break;
             }
             let rhs = parse_parser_expr(input, r_bp)?;
-            lhs = Box::new(WithSpan{node: ParserExpr::Seq(lhs, rhs), span: lhs.span.join(rhs.span).unwrap()});
+            let lspan = lhs.span;
+            let rspan = rhs.span;
+            lhs = Box::new(WithSpan{node: ParserExpr::Seq(lhs, rhs), span: lspan.join(rspan).unwrap()});
             continue;
         }
         if input.peek(Token![*]) {
@@ -337,7 +340,8 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<SpanBox<ParserEx
                 break;
             }
             let star = input.parse::<Token![*]>()?;
-            lhs = Box::new(WithSpan{node: ParserExpr::Star(lhs), span: lhs.span.join(star.span).unwrap()});
+            let lspan = lhs.span;
+            lhs = Box::new(WithSpan{node: ParserExpr::Star(lhs), span: lspan.join(star.span).unwrap()});
             continue;
         }
         if input.peek(Token![+]) {
@@ -346,7 +350,8 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<SpanBox<ParserEx
                 break;
             }
             let plus = input.parse::<Token![+]>()?;
-            lhs = Box::new(WithSpan{node: ParserExpr::Plus(lhs), span: lhs.span.join(plus.span).unwrap()});
+            let lspan = lhs.span;
+            lhs = Box::new(WithSpan{node: ParserExpr::Plus(lhs), span: lspan.join(plus.span).unwrap()});
             continue;
         }
         if input.peek(Token![?]) {
@@ -355,7 +360,8 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<SpanBox<ParserEx
                 break;
             }
             let question = input.parse::<Token![?]>()?;
-            lhs = Box::new(WithSpan{node: ParserExpr::Opt(lhs), span: lhs.span.join(question.span).unwrap()});
+            let lspan = lhs.span;
+            lhs = Box::new(WithSpan{node: ParserExpr::Opt(lhs), span: lspan.join(question.span).unwrap()});
             continue;
         }
         break;
@@ -367,7 +373,7 @@ fn parse_parser_expr(input: ParseStream, min_bp: u32) -> Result<SpanBox<ParserEx
 impl Ast {
     pub fn type_check(&self) -> Vec<Error> {
         let target = self.entry.clone();
-        type_check(target, &self.parser_map)
+        type_check(target, &self.parser_map, &self.lexer_map)
     }
 
 }
@@ -433,7 +439,7 @@ mod test {
             "#,
         )
         .unwrap();
-        //parsed_ast.type_check();
+        parsed_ast.type_check();
 
     }
 }

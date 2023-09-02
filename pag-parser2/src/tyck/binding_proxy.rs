@@ -16,11 +16,11 @@ impl<'a> BindingProxy<'a> {
             hiding: HashSet::new(),
         }
     }
-    pub fn lookup(&self, sym: &Ident) -> Option<&Vec<ParserRule>> {
+    pub fn lookup(&self, sym: &Ident) -> Option<&ParserDef> {
         if self.hiding.contains(sym) {
             return None;
         }
-        self.binding.get(sym).map(|x| &x.rules)
+        self.binding.get(sym)
     }
     pub fn with_hiding<F, R>(&mut self, sym: Ident, f: F) -> R
     where
