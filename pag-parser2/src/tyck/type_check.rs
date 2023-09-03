@@ -4,7 +4,7 @@ use crate::{
         ParserDef,
         ParserExpr::{self, *},
         SpanBox,
-        WithSpan, LexerDef,
+        LexerDef,
     },
     tyck::BindingProxy,
 };
@@ -308,7 +308,6 @@ fn tyck_parserexpr(
                     term.span,
                 )
             }
-
         }
         // plus = \x . i ~ ( eps | x )
         Plus(x) => {
@@ -328,9 +327,9 @@ fn tyck_parserexpr(
                     };
 
                     let (l_type, l_err, l_span) = tyck_parserexpr(ctx, binding_ctx, lexer_map, x);
-                    let (r#type, err, span) = match Type::sequence(&l_type, &r_type, l_span, r_span) {
-                        Ok(r#type) => (r#type, None, l_span.join(r_span).unwrap()),
-                        Err(err) => (Type::bottom(), Some(err), l_span.join(r_span).unwrap()),
+                    let (r#type, err) = match Type::sequence(&l_type, &r_type, l_span, r_span) {
+                        Ok(r#type) => (r#type, None),
+                        Err(err) => (Type::bottom(), Some(err)),
                     };
                     (
                         r#type,
@@ -359,9 +358,9 @@ fn tyck_parserexpr(
                     };
 
                     let (l_type, l_err, l_span) = tyck_parserexpr(ctx, binding_ctx, lexer_map, x);
-                    let (r#type, err, span) = match Type::sequence(&l_type, &r_type, l_span, r_span) {
-                        Ok(r#type) => (r#type, None, l_span.join(r_span).unwrap()),
-                        Err(err) => (Type::bottom(), Some(err), l_span.join(r_span).unwrap()),
+                    let (r#type, err) = match Type::sequence(&l_type, &r_type, l_span, r_span) {
+                        Ok(r#type) => (r#type, None),
+                        Err(err) => (Type::bottom(), Some(err)),
                     };
                     (
                         r#type,
