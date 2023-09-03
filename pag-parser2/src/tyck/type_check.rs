@@ -216,8 +216,9 @@ fn tyck_parserexpr(
     lexer_map: &HashMap<syn::Ident, LexerDef>,
     term: &SpanBox<ParserExpr>,
 ) -> (Type, Vec<Error>, Span) {
-    match term.node {
+    match &term.node {
         Seq(x, y) => {
+
             let (x_type, x_errors, x_span) = tyck_parserexpr(typing_ctx, binding_ctx, lexer_map, &x);
             let (y_type, y_errors, y_span) = typing_ctx.guarded(|ctx| tyck_parserexpr(ctx, binding_ctx, lexer_map, &y));
             let (r#type, err) = match Type::sequence(&x_type, &y_type, x_span, y_span) {
@@ -241,7 +242,6 @@ fn tyck_parserexpr(
             //let sequence = Seq(*x, Box::new(*term));
             //let body = spanned(Term::Alternative(sequence, spanned(Term::Epsilon)));
             // TODO: Check Correctness
-           
             if let Some(ty) = typing_ctx.lookup(Uid::Pt(&term.node)) {
                 return (ty.as_ref().clone(), vec![], term.span);
             }
@@ -278,8 +278,8 @@ fn tyck_parserexpr(
             }
             if r#type.guarded {
                 typing_ctx.with(Uid::Pt(&term.node), r#type.clone(), |ctx| {
-                    let (x_type, x_errors, x_span) = tyck_parserexpr(ctx, binding_ctx, lexer_map, &x);
-                    let (y_type, y_errors, y_span) = tyck_parserexpr(ctx, binding_ctx, lexer_map, term);
+                    let (x_type, x_err, x_span) = tyck_parserexpr(ctx, binding_ctx, lexer_map, &x);
+                    let (y_type, y_err, y_span) = tyck_parserexpr(ctx, binding_ctx, lexer_map, term);
                     let (l_type, l_err, l_span) = match Type::sequence(&x_type, &y_type, x_span, y_span) {
                         Ok(r#type) => (r#type, None, x_span.join(y_span).unwrap()),
                         Err(err) => (Type::bottom(), Some(err), x_span.join(y_span).unwrap()),
@@ -291,9 +291,9 @@ fn tyck_parserexpr(
                     };
                     (
                         r#type,
-                        x_errors
+                        x_err
                             .into_iter()
-                            .chain(y_errors)
+                            .chain(y_err)
                             .chain(l_err.map(|e| *e))
                             .chain(r_err)
                             .chain(err.map(|e| *e))
@@ -310,30 +310,79 @@ fn tyck_parserexpr(
             }
 
         }
-        // plus = x ~ star
+        // plus = \x . i ~ ( eps | x )
         Plus(x) => {
-            let (x_type, x_errors, x_span) = tyck_parserexpr(typing_ctx, binding_ctx, lexer_map, &x);
-            let (y_type, y_errors, y_span) = typing_ctx.guarded(|ctx| tyck_parserexpr(ctx, binding_ctx, lexer_map, term));
-            let (l_type, l_err, l_span) = match Type::sequence(&x_type, &y_type, x_span, y_span) {
-                Ok(r#type) => (r#type, None, x_span.join(y_span).unwrap()),
-                Err(err) => (Type::bottom(), Some(err), x_span.join(y_span).unwrap()),
-            };
-            let (r_type, r_err, r_span) = tyck_parserexpr(typing_ctx, binding_ctx, lexer_map, &x);
-            let (r#type, err) = match Type::alternative(&l_type, &r_type, l_span, r_span) {
-                Ok(r#type) => (r#type, None),
-                Err(err) => (Type::bottom(), Some(err)),
-            };
-            (
-                r#type,
-                x_errors
-                    .into_iter()
-                    .chain(y_errors)
-                    .chain(l_err.map(|e| *e))
-                    .chain(r_err)
-                    .chain(err.map(|e| *e))
-                    .collect(),
-                term.span
-            )
+            if let Some(ty) = typing_ctx.lookup(Uid::Pt(&term.node)) {
+                return (ty.as_ref().clone(), vec![], term.span);
+            }
+
+            let (r#type, errs) = Type::fixpoint(|ty| {
+                typing_ctx.with(Uid::Pt(&term.node), ty.clone(), |ctx| { 
+                    //let seq = tyck_parserexpr(typing_ctx, binding_ctx, Box::new( WithSpan{span: x.span.join(term.span).unwrap(), node: Seq(x, term)}  ));
+
+                    let (x_type, x_err, x_span) = tyck_parserexpr(ctx, binding_ctx, lexer_map, &x);
+                    let (y_type, y_err, y_span) = (Type::epsilon(), vec![], Span::call_site());
+                    let (r_type, r_err, r_span) = match Type::alternative(&x_type, &y_type, x_span, y_span) {
+                        Ok(r#type) => (r#type, None, x_span.join(y_span).unwrap()),
+                        Err(err) => (Type::bottom(), Some(err), x_span.join(y_span).unwrap()),
+                    };
+
+                    let (l_type, l_err, l_span) = tyck_parserexpr(ctx, binding_ctx, lexer_map, x);
+                    let (r#type, err, span) = match Type::sequence(&l_type, &r_type, l_span, r_span) {
+                        Ok(r#type) => (r#type, None, l_span.join(r_span).unwrap()),
+                        Err(err) => (Type::bottom(), Some(err), l_span.join(r_span).unwrap()),
+                    };
+                    (
+                        r#type,
+                        x_err
+                            .into_iter()
+                            .chain(y_err)
+                            .chain(l_err)
+                            .chain(r_err.map(|e| *e))
+                            .chain(err.map(|e| *e))
+                            .collect(),
+                    )
+                })
+            });
+
+            if !errs.is_empty() {
+                return (r#type, errs, term.span);
+            }
+
+            if r#type.guarded {
+                typing_ctx.with(Uid::Pt(&term.node), r#type.clone(), |ctx| {
+                    let (x_type, x_err, x_span) = tyck_parserexpr(ctx, binding_ctx, lexer_map, &x);
+                    let (y_type, y_err, y_span) = (Type::epsilon(), vec![], Span::call_site());
+                    let (r_type, r_err, r_span) = match Type::alternative(&x_type, &y_type, x_span, y_span) {
+                        Ok(r#type) => (r#type, None, x_span.join(y_span).unwrap()),
+                        Err(err) => (Type::bottom(), Some(err), x_span.join(y_span).unwrap()),
+                    };
+
+                    let (l_type, l_err, l_span) = tyck_parserexpr(ctx, binding_ctx, lexer_map, x);
+                    let (r#type, err, span) = match Type::sequence(&l_type, &r_type, l_span, r_span) {
+                        Ok(r#type) => (r#type, None, l_span.join(r_span).unwrap()),
+                        Err(err) => (Type::bottom(), Some(err), l_span.join(r_span).unwrap()),
+                    };
+                    (
+                        r#type,
+                        x_err
+                            .into_iter()
+                            .chain(y_err)
+                            .chain(l_err)
+                            .chain(r_err.map(|e| *e))
+                            .chain(err.map(|e| *e))
+                            .collect(),
+                            term.span
+                    ) 
+                })
+            } else {
+                (
+                    Type::bottom(),
+                    vec![Error::new(term.span, "unreachable fixpoint")],
+                    term.span,
+                )
+            }
+            
         }
 
         Opt(x) => {
@@ -355,7 +404,7 @@ fn tyck_parserexpr(
         LexerRef(name) => {
             let lexer = lexer_map.get(&name);
             match lexer {
-                Some(_) => (Type::token(name), vec![], term.span),
+                Some(_) => (Type::token(name.clone()), vec![], term.span),
                 None => (Type::bottom(), vec![Error::new(term.span, "unresolved lexer reference")], term.span),
             }
         }
@@ -368,7 +417,7 @@ fn tyck_parserexpr(
             if binding_ctx.lookup(&name.clone()).is_some() {
                 // we should not cache the result, since it can be recursive and changed during the calculation of the fixpoint.
                 let (r#type, errors) = binding_ctx.with_hiding(name.clone(), |binding_ctx| {
-                    tyck_ident(typing_ctx, binding_ctx, lexer_map, name)
+                    tyck_ident(typing_ctx, binding_ctx, lexer_map, name.clone())
                 });
                 (r#type, errors, term.span)
             } else {
@@ -384,8 +433,6 @@ fn tyck_parserexpr(
             let (x_type, x_errors, x_span) = tyck_parserexpr(typing_ctx, binding_ctx, lexer_map, &x);
             (x_type, x_errors, x_span)
         }
-
-
 
     }
 }
