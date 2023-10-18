@@ -25,6 +25,7 @@ mod pest_json {
 fn criterion_benchmark(c: &mut Criterion) {
     let mut g = c.benchmark_group("random-json");
     let data = generate_random_json(10);
+    let mut buffer = data.clone().into_bytes();
     g.throughput(criterion::Throughput::Bytes(data.bytes().len() as u64));
     g.bench_function("pag", |b| {
         b.iter(|| {
@@ -54,7 +55,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
     g.bench_function("simd-json", |b| {
         b.iter(|| {
-            let mut buffer = data.clone().into_bytes();
+            data.as_bytes().clone_into(&mut buffer);
             simd_json::from_slice::<Value>(&mut buffer).unwrap();
         })
     });
@@ -62,6 +63,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let mut g = c.benchmark_group("twitter-json");
     let data = include_str!("twitter.json");
+    let mut buffer = data.to_string().into_bytes();
     g.throughput(criterion::Throughput::Bytes(data.bytes().len() as u64));
     g.bench_function("pag", |b| {
         b.iter(|| {
@@ -91,7 +93,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
     g.bench_function("simd-json", |b| {
         b.iter(|| {
-            let mut buffer = data.to_string().into_bytes();
+            data.as_bytes().clone_into(&mut buffer);
             simd_json::from_slice::<Value>(&mut buffer).unwrap();
         })
     });
