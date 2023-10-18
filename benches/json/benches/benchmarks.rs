@@ -52,6 +52,12 @@ fn criterion_benchmark(c: &mut Criterion) {
             lalrpop_logos_json::JsonParser::new().parse(lexer).unwrap();
         })
     });
+    g.bench_function("simd-json", |b| {
+        b.iter(|| {
+            let mut buffer = data.clone().into_bytes();
+            simd_json::from_slice::<Value>(&mut buffer).unwrap();
+        })
+    });
     g.finish();
 
     let mut g = c.benchmark_group("twitter-json");
@@ -81,6 +87,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| {
             let lexer = Token::lalrpop_lexer(data);
             lalrpop_logos_json::JsonParser::new().parse(lexer).unwrap();
+        })
+    });
+    g.bench_function("simd-json", |b| {
+        b.iter(|| {
+            let mut buffer = data.to_string().into_bytes();
+            simd_json::from_slice::<Value>(&mut buffer).unwrap();
         })
     });
     g.finish();

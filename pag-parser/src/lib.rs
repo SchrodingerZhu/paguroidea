@@ -273,10 +273,8 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
         #![allow(
             dead_code,
             non_camel_case_types,
-            unused_variables,
-            unused_mut,
+            unused,
             unreachable_code,
-            unused_assignments,
             clippy::single_match,
             clippy::never_loop,
             clippy::match_single_binding,
