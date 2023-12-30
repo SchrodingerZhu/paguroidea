@@ -89,7 +89,7 @@ impl RegexTree {
         match self {
             Set(intervals) if intervals.is_single_byte() => Some(vec![intervals.representative()]),
             Concat(children) => {
-                let init = if let Some(x) = children.get(0) {
+                let init = if let Some(x) = children.first() {
                     x.as_byte_sequence()
                 } else {
                     return Some(Vec::new());

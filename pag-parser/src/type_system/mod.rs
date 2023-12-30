@@ -12,4 +12,4 @@ mod fixpoint;
 mod type_check;
 
 pub use fixpoint::infer_fixpoints;
-pub use type_check::{type_check, Type, TypeError};
+pub use type_check::{type_check, TypeError};

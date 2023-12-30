@@ -277,10 +277,15 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
             unused_mut,
             unreachable_code,
             unused_assignments,
+            unused_labels,
+            unused_imports,
             clippy::single_match,
             clippy::never_loop,
             clippy::match_single_binding,
+            clippy::identity_op,
         )]
+        use core::simd::cmp::SimdPartialOrd;
+        use core::simd::cmp::SimdPartialEq;
         #parser_routines
         pub fn parse(input: &str) -> Result<ParseTree, Error> {
             #entrypoint(input, 0)
