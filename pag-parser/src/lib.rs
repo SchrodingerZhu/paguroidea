@@ -275,9 +275,13 @@ pub fn generate_parser(input: &str) -> Result<TokenStream, Error> {
             non_camel_case_types,
             unused,
             unreachable_code,
+            unused_assignments,
+            unused_labels,
+            unused_imports,
             clippy::single_match,
             clippy::never_loop,
             clippy::match_single_binding,
+            clippy::identity_op,
         )]
         #parser_routines
         pub fn parse(input: &str) -> Result<ParseTree, Error> {
