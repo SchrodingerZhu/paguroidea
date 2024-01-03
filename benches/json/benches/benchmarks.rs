@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use lalrpop_util::lalrpop_mod;
-use pag_json::{generate_random_json, parse};
+use pag_json::{generate_random_json, parse, scan};
 use pest::Parser;
 use pest_json::Rule;
 use serde_json::Value;
@@ -30,6 +30,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     g.bench_function("pag", |b| {
         b.iter(|| {
             parse(&data).unwrap();
+        })
+    });
+    g.bench_function("pag-scan", |b| {
+        b.iter(|| {
+            scan(&data).unwrap();
         })
     });
     g.bench_function("serde", |b| {
@@ -68,6 +73,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     g.bench_function("pag", |b| {
         b.iter(|| {
             parse(data).unwrap();
+        })
+    });
+    g.bench_function("pag-scan", |b| {
+        b.iter(|| {
+            scan(&data).unwrap();
         })
     });
     g.bench_function("serde", |b| {

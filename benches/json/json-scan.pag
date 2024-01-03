@@ -1,0 +1,41 @@
+lexer {
+    DIGIT     = '0'..'9';
+    NONZERO   = '1'..'9';
+    HEX_DIGIT = '0' .. '9' | 'a' .. 'f' | 'A' .. 'F';
+    ESCAPED   = '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't';
+
+    LBRACKET = '{';
+    RBRACKET = '}';
+    COMMA    = ',';
+    COLON    = ':';
+    LSQUARE  = '[';
+    RSQUARE  = ']';
+    TRUE     = "true";
+    FALSE    = "false";
+    NULL     = "null";
+    STRING   = '"' ~ ( !('\\' | '"') | '\\' ~ (ESCAPED | 'u' ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT ~ HEX_DIGIT) )* ~ '"';
+    NUMBER   = '-'? ~ ('0' | NONZERO ~ DIGIT*) ~ ('.' ~ DIGIT+)? ~ (('e' | 'E') ~ ('+' | '-')? ~ DIGIT+)?;
+
+    skip = ('\n' | '\r' | '\t' | ' ')+;
+}
+
+parser json {
+    silent attribute =
+        string ~ COLON ~ value;
+
+    silent string = STRING;
+    silent number = NUMBER;
+    silent lit_true = TRUE;
+    silent lit_false = FALSE;
+    silent lit_null = NULL;
+
+    silent object =
+        LBRACKET ~ (attribute ~ (COMMA ~ attribute)*)? ~ RBRACKET;
+
+    silent array =
+        LSQUARE ~ (value ~ (COMMA ~ value)*)? ~ RSQUARE;
+
+    silent value = string | number | array | object | lit_true | lit_false | lit_null;
+
+    active json = value;
+}

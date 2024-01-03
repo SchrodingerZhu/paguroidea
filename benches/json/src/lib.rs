@@ -1,10 +1,12 @@
 #![feature(portable_simd)]
 
 mod parser;
+mod scanner;
 
 pub use parser::parse;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
+pub use scanner::parse as scan;
 use serde_json::Value;
 
 fn generate_json_value<G: Rng>(depth: usize, gen: &mut G) -> Value {
@@ -64,6 +66,8 @@ mod test {
     }
     #[test]
     fn test_random() {
+        let json = generate_random_json(10);
+        eprintln!("{}", json);
         for _ in 0..10 {
             let json = generate_random_json(10);
             let parsed = parser::parse(&json).unwrap();
