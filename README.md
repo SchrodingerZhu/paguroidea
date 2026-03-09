@@ -122,7 +122,6 @@ should be annotated with
 ```rust
 #![feature(portable_simd)]
 #![feature(core_intrinsics)]
-#![feature(array_chunks)]
 ```
 </details>
 

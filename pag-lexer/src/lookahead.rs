@@ -72,7 +72,7 @@ fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream 
             }
         });
     quote! {
-        for i in input[idx..].array_chunks::<16>() {
+        for i in input[idx..].as_chunks::<16>().0 {
             use core::simd::prelude::*;
             let data = u8x16::from_slice(i);
             let idx_offset = #idx_offset;
