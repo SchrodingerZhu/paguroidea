@@ -7,7 +7,6 @@
 // modified, or distributed except according to those terms.
 #![feature(portable_simd)]
 #![feature(core_intrinsics)]
-#![feature(array_chunks)]
 
 pub mod congruence;
 pub mod derivative;

@@ -1,7 +1,1 @@
-ignore = [
-  "/tests/arith-expr/src/parser.rs",
-  "/tests/sexpr-calculator/src/parser.rs",
-  "/tests/tokenizer/src/generated/*.rs",
-  "/benches/csv/src/parser.rs",  
-  "/benches/json/src/parser.rs",
-]
+format_generated_files = false

@@ -65,14 +65,15 @@ fn generate_lookahead_routine(intervals: &Intervals, kind: Kind) -> TokenStream 
                     mask.#count_act() / 8
                 }}
             } else {
-                quote! {
-                    (#x).to_bitmask().#count_act()
-                }
+                quote! {{
+                    let mask = (#x).to_bitmask() as u16;
+                    mask.#count_act()
+                }}
             }
         });
     quote! {
-        for i in input[idx..].array_chunks::<16>() {
-            use core::simd::*;
+        for i in input[idx..].as_chunks::<16>().0 {
+            use core::simd::prelude::*;
             let data = u8x16::from_slice(i);
             let idx_offset = #idx_offset;
             idx += idx_offset as usize;
